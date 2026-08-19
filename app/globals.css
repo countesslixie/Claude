@@ -1,0 +1,61 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f8fafc;
+  --foreground: #0f172a;
+
+  /* Status colours — must stay legible at a glance (SPEC.md section 11). */
+  --status-pending-bg: #f1f5f9;
+  --status-pending-fg: #475569;
+  --status-progress-bg: #dbeafe;
+  --status-progress-fg: #1d4ed8;
+  --status-waiting-bg: #fef3c7;
+  --status-waiting-fg: #92400e;
+  --status-overdue-bg: #fee2e2;
+  --status-overdue-fg: #b91c1c;
+  --status-done-bg: #dcfce7;
+  --status-done-fg: #15803d;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+    Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+}
+
+/* Dense, working-tool tables. */
+table.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+table.data-table th {
+  text-align: left;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  font-size: 0.6875rem;
+  letter-spacing: 0.03em;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid #e2e8f0;
+  white-space: nowrap;
+}
+
+table.data-table td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid #f1f5f9;
+  vertical-align: middle;
+}
+
+table.data-table tbody tr:hover {
+  background: #f8fafc;
+}
