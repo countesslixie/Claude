@@ -13,16 +13,28 @@
  * - A sparse, unverified AtcCode table (SPEC.md 3.5) — do not add codes
  *   here without confirming them against the current BIR ATC list.
  * - A minimal ChartOfAccounts (SPEC.md 9).
- * - The 16-step WorkflowStepTemplate (SPEC.md 7.1). Filing/WorkflowStep
- *   instantiation is Phase 3 work and is intentionally NOT seeded here.
+ * - The 16-step WorkflowStepTemplate (SPEC.md 7.1).
  * - Three fictitious clients spanning the full 2025 cycle (SPEC.md 14):
  *   one purely self-employed with 2307s (figures match SPEC.md Example A
  *   exactly), one purely self-employed without 2307s, and one mixed income.
+ * - A TY2026 Filing/WorkflowStep cycle for all three clients, positioned
+ *   relative to today so the dashboard has something to show on first
+ *   run: Q1 filed and COMPLETE, Q2 past its adjusted due date and not
+ *   complete (two clients stuck waiting on BIR at different steps, one
+ *   stalled with no external wait), Q3 NOT_STARTED with an upcoming due
+ *   date. All tax figures are fixed and deterministic; only the waiting
+ *   clocks (waitingSince, followUpCount) are computed relative to now,
+ *   so the demo stays useful as real time passes. Document rows are NOT
+ *   seeded here — the document vault is Phase 3 scope; WorkflowStep
+ *   status is set directly rather than earned through upload, which a
+ *   real workflow-engine action would enforce.
  */
 
 import { PrismaClient } from "@prisma/client";
+import { DateTime } from "luxon";
 
 const prisma = new PrismaClient();
+const MANILA_ZONE = "Asia/Manila";
 
 const CENTS = (pesos: number) => Math.round(pesos * 100);
 
@@ -609,6 +621,486 @@ async function seedClientC(actorId: string) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// TY2026 Filing/WorkflowStep cycle — dashboard-ready demo state
+// ---------------------------------------------------------------------------
+
+/**
+ * Hand-builds a frozen computationSnapshot JSON matching the shape
+ * lib/tax/compute.ts's FilingComputationResult will produce (Phase 2).
+ * Values are computed here by the same SPEC.md 3.2 formula, by hand,
+ * since the real engine doesn't exist yet as of this seed revision.
+ */
+function buildSnapshot(params: {
+  formType: string;
+  cumulativeGrossSalesCents: number;
+  cumulativeNonOperatingCents: number;
+  allowableDeductionCents: number;
+  incomeTaxRateBps: number;
+  cumulativeCwtCents: number;
+  priorPeriodPaymentsCents: number;
+  priorYearExcessCreditCents: number;
+}) {
+  const cumulativeGrossCents = params.cumulativeGrossSalesCents + params.cumulativeNonOperatingCents;
+  const taxableBaseCents = Math.max(0, cumulativeGrossCents - params.allowableDeductionCents);
+  const incomeTaxDueCents = Math.round((taxableBaseCents * params.incomeTaxRateBps) / 10000);
+  const rawPayable =
+    incomeTaxDueCents -
+    params.cumulativeCwtCents -
+    params.priorPeriodPaymentsCents -
+    params.priorYearExcessCreditCents;
+  const taxPayableCents = Math.max(0, rawPayable);
+  const overpaymentCents = rawPayable < 0 ? -rawPayable : 0;
+
+  return {
+    formType: params.formType,
+    cumulativeGrossSalesCents: params.cumulativeGrossSalesCents,
+    cumulativeNonOperatingCents: params.cumulativeNonOperatingCents,
+    cumulativeGrossCents,
+    allowableDeductionCents: params.allowableDeductionCents,
+    taxableBaseCents,
+    incomeTaxDueCents,
+    cumulativeCwtCents: params.cumulativeCwtCents,
+    priorPeriodPaymentsCents: params.priorPeriodPaymentsCents,
+    priorYearExcessCreditCents: params.priorYearExcessCreditCents,
+    taxPayableCents,
+    isOverpayment: overpaymentCents > 0,
+    overpaymentCents,
+    breakdown: [
+      { label: "Cumulative gross sales/receipts", amountCents: params.cumulativeGrossSalesCents, sourceNote: "YTD operating income" },
+      { label: "Cumulative non-operating income", amountCents: params.cumulativeNonOperatingCents, sourceNote: "YTD non-operating income" },
+      { label: "Cumulative gross", amountCents: cumulativeGrossCents, sourceNote: "Sum of the above" },
+      {
+        label: "Less: allowable deduction",
+        amountCents: -params.allowableDeductionCents,
+        sourceNote:
+          params.allowableDeductionCents > 0
+            ? "PHP 250,000, purely self-employed, applied in full from Q1"
+            : "None — mixed income earner (SPEC.md 3.2)",
+      },
+      { label: "Taxable base", amountCents: taxableBaseCents, sourceNote: "MAX(0, cumulative gross - deduction)" },
+      {
+        label: "Income tax due",
+        amountCents: incomeTaxDueCents,
+        sourceNote: `${(params.incomeTaxRateBps / 100).toFixed(2)}% of taxable base`,
+      },
+      {
+        label: "Less: cumulative creditable withholding tax",
+        amountCents: -params.cumulativeCwtCents,
+        sourceNote: "Sum of Form 2307 certificates, status Recorded/Claimed, year-to-date",
+      },
+      {
+        label: "Less: prior-period payments",
+        amountCents: -params.priorPeriodPaymentsCents,
+        sourceNote: "Amounts actually remitted on earlier returns this taxable year",
+      },
+      {
+        label: "Less: prior-year excess credit",
+        amountCents: -params.priorYearExcessCreditCents,
+        sourceNote: "Carried over from the prior taxable year's election, if any",
+      },
+      {
+        label: overpaymentCents > 0 ? "Overpayment" : "Tax payable",
+        amountCents: overpaymentCents > 0 ? overpaymentCents : taxPayableCents,
+        sourceNote: "This is a preparation aid. The filed return and BIR's own assessment govern (SPEC.md 17.7).",
+      },
+    ],
+  };
+}
+
+async function instantiateWorkflowSteps(
+  filingId: string,
+  opts: {
+    requiresSawt: boolean;
+    doneThroughSequence: number;
+    waitingAtStepCode?: string;
+    waitingSince?: Date;
+    followUpCount?: number;
+  },
+) {
+  for (const step of WORKFLOW_STEP_TEMPLATE) {
+    const isSawtStep = step.isConditional === true;
+    let status: "PENDING" | "DONE" | "WAITING_EXTERNAL" | "SKIPPED" | "NA" = "PENDING";
+    let skippedReason: string | null = null;
+    let waitingSince: Date | null = null;
+    let followUpCount = 0;
+
+    if (isSawtStep && !opts.requiresSawt) {
+      status = "NA";
+    } else if (
+      step.stepCode === "RECEIVE_2307" &&
+      !opts.requiresSawt &&
+      step.sequence <= opts.doneThroughSequence
+    ) {
+      status = "SKIPPED";
+      skippedReason = "No withholding agents / no Form 2307 expected for this client this period.";
+    } else if (opts.waitingAtStepCode === step.stepCode) {
+      status = "WAITING_EXTERNAL";
+      waitingSince = opts.waitingSince ?? null;
+      followUpCount = opts.followUpCount ?? 0;
+    } else if (step.sequence <= opts.doneThroughSequence) {
+      status = "DONE";
+    }
+
+    await prisma.workflowStep.create({
+      data: {
+        filingId,
+        stepCode: step.stepCode,
+        sequence: step.sequence,
+        title: step.title,
+        description: step.description,
+        category: step.category,
+        status,
+        isConditional: step.isConditional ?? false,
+        conditionExpression: step.conditionExpression,
+        isWaitingState: step.isWaitingState ?? false,
+        expectedResponseDays: step.expectedResponseDays,
+        waitingSince,
+        followUpCount,
+        requiredDocSlots: JSON.stringify(step.requiredDocSlots),
+        skippedReason,
+      },
+    });
+  }
+}
+
+async function seedTY2026Cycle(actorId: string) {
+  const nowManila = DateTime.now().setZone(MANILA_ZONE);
+
+  // Statutory due dates from the seeded TY2026 TaxRuleSet (04-15/08-15/11-15),
+  // business-day-shifted by hand against the seeded Holiday table — never
+  // computed algorithmically (SPEC.md 3.6). Verified for TY2026:
+  //   Apr 15, 2026 = Wednesday -> no shift
+  //   Aug 15, 2026 = Saturday  -> shifts to Mon Aug 17, 2026
+  //   Nov 15, 2026 = Sunday    -> shifts to Mon Nov 16, 2026
+  const DUE = {
+    Q1: { statutory: "2026-04-15", adjusted: "2026-04-15" },
+    Q2: { statutory: "2026-08-15", adjusted: "2026-08-17" },
+    Q3: { statutory: "2026-11-15", adjusted: "2026-11-16" },
+  };
+
+  type ClientCycleConfig = {
+    clientCode: string;
+    taxpayerType: "PURELY_SELF_EMPLOYED" | "MIXED_INCOME";
+    requiresSawt: boolean;
+    payorName: string;
+    payorTin: string;
+    atcCode: string;
+    whtRateBps: number;
+    q1GrossPesos: number;
+    q2GrossPesos: number;
+    q2: {
+      // How far Q2's workflow progressed before getting stuck / staying idle.
+      doneThroughSequence: number;
+      waitingAtStepCode?: string;
+      waitingDaysAgo?: number;
+      followUpCount?: number;
+      filed: boolean; // whether FILE_RETURN (and payment, if any) already happened
+    };
+  };
+
+  const clients: ClientCycleConfig[] = [
+    {
+      // Matches SPEC.md Example A exactly (5% CWT), so Q2's ₱11,500 payable
+      // can be eyeballed directly against the spec table.
+      clientCode: "dela-cruz-j",
+      taxpayerType: "PURELY_SELF_EMPLOYED",
+      requiresSawt: true,
+      payorName: "Acme Publishing Corp.",
+      payorTin: "987654321",
+      atcCode: "WI010",
+      whtRateBps: 500,
+      q1GrossPesos: 450_000,
+      q2GrossPesos: 600_000,
+      q2: {
+        doneThroughSequence: 9, // filed, paid; waiting on BIR's TRRC (step 10)
+        waitingAtStepCode: "RECEIVE_TRRC",
+        waitingDaysAgo: 12,
+        followUpCount: 1,
+        filed: true,
+      },
+    },
+    {
+      clientCode: "santos-m",
+      taxpayerType: "PURELY_SELF_EMPLOYED",
+      requiresSawt: false,
+      payorName: "",
+      payorTin: "",
+      atcCode: "",
+      whtRateBps: 0,
+      q1GrossPesos: 150_000,
+      q2GrossPesos: 180_000,
+      q2: {
+        doneThroughSequence: 3, // computation prepared, but never filed — stalled, no one to follow up with
+        filed: false,
+      },
+    },
+    {
+      clientCode: "reyes-p",
+      taxpayerType: "MIXED_INCOME",
+      requiresSawt: true,
+      payorName: "Northgate Solutions Inc.",
+      payorTin: "456789123",
+      atcCode: "WI011",
+      whtRateBps: 1000,
+      q1GrossPesos: 220_000,
+      q2GrossPesos: 260_000,
+      q2: {
+        doneThroughSequence: 13, // filed; TRRC and SAWT ack received; waiting on SAWT validation (step 14)
+        waitingAtStepCode: "SAWT_VALIDATION",
+        waitingDaysAgo: 21,
+        followUpCount: 2,
+        filed: true,
+      },
+    },
+  ];
+
+  for (const cfg of clients) {
+    const client = await prisma.client.findUniqueOrThrow({ where: { code: cfg.clientCode } });
+
+    await prisma.clientTaxYear.upsert({
+      where: { clientId_taxableYear: { clientId: client.id, taxableYear: 2026 } },
+      update: {},
+      create: {
+        clientId: client.id,
+        taxableYear: 2026,
+        regime: "RATE_8_PERCENT",
+        electionStatus: "ELECTED",
+        actorId,
+      },
+    });
+
+    const allowableDeductionCents = cfg.taxpayerType === "PURELY_SELF_EMPLOYED" ? CENTS(250_000) : 0;
+
+    // --- Q1: closed quarter, filed and COMPLETE ---
+    const existingQ1 = await prisma.filing.findUnique({
+      where: { clientId_taxableYear_period: { clientId: client.id, taxableYear: 2026, period: "Q1" } },
+    });
+    if (!existingQ1) {
+      const q1GrossCents = CENTS(cfg.q1GrossPesos);
+      const q1WhtCents = cfg.whtRateBps > 0 ? Math.round((q1GrossCents * cfg.whtRateBps) / 10000) : 0;
+
+      let q1Form2307Id: string | undefined;
+      if (cfg.requiresSawt) {
+        const form2307 = await prisma.form2307.create({
+          data: {
+            clientId: client.id,
+            taxableYear: 2026,
+            payorName: cfg.payorName,
+            payorTin: cfg.payorTin,
+            periodFrom: new Date("2026-01-01T00:00:00.000Z"),
+            periodTo: new Date("2026-03-15T00:00:00.000Z"),
+            quarterCovered: 1,
+            atcCode: cfg.atcCode,
+            incomePaymentCents: q1GrossCents,
+            taxWithheldCents: q1WhtCents,
+            withholdingRateBps: cfg.whtRateBps,
+            dateReceived: new Date("2026-03-15T00:00:00.000Z"),
+            status: "CLAIMED_ON_RETURN",
+            actorId,
+          },
+        });
+        q1Form2307Id = form2307.id;
+      }
+
+      await prisma.salesTransaction.create({
+        data: {
+          clientId: client.id,
+          transactionDate: new Date("2026-03-15T00:00:00.000Z"),
+          taxableYear: 2026,
+          quarter: 1,
+          orNumber: `OR-2026-Q1-${cfg.clientCode}`,
+          payorName: cfg.requiresSawt ? cfg.payorName : "Various direct clients",
+          payorTin: cfg.requiresSawt ? cfg.payorTin : undefined,
+          grossAmountCents: q1GrossCents,
+          withholdingTaxCents: q1WhtCents,
+          withholdingRateBps: cfg.whtRateBps,
+          netReceivedCents: q1GrossCents - q1WhtCents,
+          incomeType: "OPERATING",
+          description: "TY2026 Q1",
+          form2307Id: q1Form2307Id,
+          actorId,
+        },
+      });
+
+      const q1Snapshot = buildSnapshot({
+        formType: "F1701Q",
+        cumulativeGrossSalesCents: q1GrossCents,
+        cumulativeNonOperatingCents: 0,
+        allowableDeductionCents,
+        incomeTaxRateBps: 800,
+        cumulativeCwtCents: q1WhtCents,
+        priorPeriodPaymentsCents: 0,
+        priorYearExcessCreditCents: 0,
+      });
+
+      const q1Filing = await prisma.filing.create({
+        data: {
+          clientId: client.id,
+          taxableYear: 2026,
+          period: "Q1",
+          formType: "F1701Q",
+          statutoryDueDate: new Date(`${DUE.Q1.statutory}T00:00:00.000Z`),
+          adjustedDueDate: new Date(`${DUE.Q1.adjusted}T00:00:00.000Z`),
+          status: "COMPLETE",
+          requiresSawt: cfg.requiresSawt,
+          computationSnapshot: JSON.stringify(q1Snapshot),
+          filedAt: new Date(`${DUE.Q1.adjusted}T00:00:00.000Z`),
+          filingReferenceNumber: `EBIR-2026Q1-${cfg.clientCode.toUpperCase()}`,
+          amountPaidCents: q1Snapshot.taxPayableCents,
+          paymentDate: q1Snapshot.taxPayableCents > 0 ? new Date(`${DUE.Q1.adjusted}T00:00:00.000Z`) : null,
+          paymentChannel: q1Snapshot.taxPayableCents > 0 ? "GCash" : null,
+          actorId,
+        },
+      });
+
+      await instantiateWorkflowSteps(q1Filing.id, {
+        requiresSawt: cfg.requiresSawt,
+        doneThroughSequence: 16,
+      });
+    }
+
+    // --- Q2: closed quarter, past its adjusted due date, NOT complete ---
+    const existingQ2 = await prisma.filing.findUnique({
+      where: { clientId_taxableYear_period: { clientId: client.id, taxableYear: 2026, period: "Q2" } },
+    });
+    if (!existingQ2) {
+      const q1GrossCents = CENTS(cfg.q1GrossPesos);
+      const q2GrossCents = CENTS(cfg.q2GrossPesos);
+      const q2WhtCents = cfg.whtRateBps > 0 ? Math.round((q2GrossCents * cfg.whtRateBps) / 10000) : 0;
+      const q1WhtCents = cfg.whtRateBps > 0 ? Math.round((q1GrossCents * cfg.whtRateBps) / 10000) : 0;
+      const cumGrossQ2 = q1GrossCents + q2GrossCents;
+      const cumCwtQ2 = q1WhtCents + q2WhtCents;
+
+      let q2Form2307Id: string | undefined;
+      if (cfg.requiresSawt) {
+        const form2307 = await prisma.form2307.create({
+          data: {
+            clientId: client.id,
+            taxableYear: 2026,
+            payorName: cfg.payorName,
+            payorTin: cfg.payorTin,
+            periodFrom: new Date("2026-04-01T00:00:00.000Z"),
+            periodTo: new Date("2026-06-15T00:00:00.000Z"),
+            quarterCovered: 2,
+            atcCode: cfg.atcCode,
+            incomePaymentCents: q2GrossCents,
+            taxWithheldCents: q2WhtCents,
+            withholdingRateBps: cfg.whtRateBps,
+            dateReceived: new Date("2026-06-15T00:00:00.000Z"),
+            status: cfg.q2.filed ? "CLAIMED_ON_RETURN" : "RECORDED",
+            actorId,
+          },
+        });
+        q2Form2307Id = form2307.id;
+      }
+
+      await prisma.salesTransaction.create({
+        data: {
+          clientId: client.id,
+          transactionDate: new Date("2026-06-15T00:00:00.000Z"),
+          taxableYear: 2026,
+          quarter: 2,
+          orNumber: `OR-2026-Q2-${cfg.clientCode}`,
+          payorName: cfg.requiresSawt ? cfg.payorName : "Various direct clients",
+          payorTin: cfg.requiresSawt ? cfg.payorTin : undefined,
+          grossAmountCents: q2GrossCents,
+          withholdingTaxCents: q2WhtCents,
+          withholdingRateBps: cfg.whtRateBps,
+          netReceivedCents: q2GrossCents - q2WhtCents,
+          incomeType: "OPERATING",
+          description: "TY2026 Q2",
+          form2307Id: q2Form2307Id,
+          actorId,
+        },
+      });
+
+      // Q1's actual payment (0 if it was an overpayment) becomes Q2's priorPeriodPayments.
+      const q1Snapshot = buildSnapshot({
+        formType: "F1701Q",
+        cumulativeGrossSalesCents: q1GrossCents,
+        cumulativeNonOperatingCents: 0,
+        allowableDeductionCents,
+        incomeTaxRateBps: 800,
+        cumulativeCwtCents: q1WhtCents,
+        priorPeriodPaymentsCents: 0,
+        priorYearExcessCreditCents: 0,
+      });
+
+      const q2Snapshot = buildSnapshot({
+        formType: "F1701Q",
+        cumulativeGrossSalesCents: cumGrossQ2,
+        cumulativeNonOperatingCents: 0,
+        allowableDeductionCents,
+        incomeTaxRateBps: 800,
+        cumulativeCwtCents: cumCwtQ2,
+        priorPeriodPaymentsCents: q1Snapshot.taxPayableCents,
+        priorYearExcessCreditCents: 0,
+      });
+
+      const waitingSinceDate = cfg.q2.waitingDaysAgo
+        ? nowManila.minus({ days: cfg.q2.waitingDaysAgo }).toJSDate()
+        : undefined;
+
+      const q2Filing = await prisma.filing.create({
+        data: {
+          clientId: client.id,
+          taxableYear: 2026,
+          period: "Q2",
+          formType: "F1701Q",
+          statutoryDueDate: new Date(`${DUE.Q2.statutory}T00:00:00.000Z`),
+          adjustedDueDate: new Date(`${DUE.Q2.adjusted}T00:00:00.000Z`),
+          status: cfg.q2.waitingAtStepCode ? "WAITING_BIR" : "BLOCKED",
+          requiresSawt: cfg.requiresSawt,
+          computationSnapshot: cfg.q2.filed ? JSON.stringify(q2Snapshot) : undefined,
+          filedAt: cfg.q2.filed ? new Date(`${DUE.Q2.adjusted}T00:00:00.000Z`) : null,
+          filingReferenceNumber: cfg.q2.filed ? `EBIR-2026Q2-${cfg.clientCode.toUpperCase()}` : null,
+          amountPaidCents: cfg.q2.filed ? q2Snapshot.taxPayableCents : null,
+          paymentDate:
+            cfg.q2.filed && q2Snapshot.taxPayableCents > 0
+              ? new Date(`${DUE.Q2.adjusted}T00:00:00.000Z`)
+              : null,
+          paymentChannel: cfg.q2.filed && q2Snapshot.taxPayableCents > 0 ? "GCash" : null,
+          actorId,
+        },
+      });
+
+      await instantiateWorkflowSteps(q2Filing.id, {
+        requiresSawt: cfg.requiresSawt,
+        doneThroughSequence: cfg.q2.doneThroughSequence,
+        waitingAtStepCode: cfg.q2.waitingAtStepCode,
+        waitingSince: waitingSinceDate,
+        followUpCount: cfg.q2.followUpCount,
+      });
+    }
+
+    // --- Q3: period not yet closed as of today — no transactions yet, filing shell NOT_STARTED ---
+    const existingQ3 = await prisma.filing.findUnique({
+      where: { clientId_taxableYear_period: { clientId: client.id, taxableYear: 2026, period: "Q3" } },
+    });
+    if (!existingQ3) {
+      const q3Filing = await prisma.filing.create({
+        data: {
+          clientId: client.id,
+          taxableYear: 2026,
+          period: "Q3",
+          formType: "F1701Q",
+          statutoryDueDate: new Date(`${DUE.Q3.statutory}T00:00:00.000Z`),
+          adjustedDueDate: new Date(`${DUE.Q3.adjusted}T00:00:00.000Z`),
+          status: "NOT_STARTED",
+          requiresSawt: cfg.requiresSawt,
+          actorId,
+        },
+      });
+
+      await instantiateWorkflowSteps(q3Filing.id, {
+        requiresSawt: cfg.requiresSawt,
+        doneThroughSequence: 0,
+      });
+    }
+  }
+}
+
 async function main() {
   const user = await seedUser();
   await seedTaxRuleSets(user.id);
@@ -619,6 +1111,7 @@ async function main() {
   await seedClientA(user.id);
   await seedClientB(user.id);
   await seedClientC(user.id);
+  await seedTY2026Cycle(user.id);
   console.log("Seed complete.");
 }
 
