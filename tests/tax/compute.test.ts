@@ -31,6 +31,10 @@ function baseInput(overrides: Partial<FilingComputationInput>): FilingComputatio
     cumulativeCwtCents: 0,
     priorPeriodPaymentsCents: 0,
     priorYearExcessCreditCents: 0,
+    // P5: pass-through metadata, not exercised by these compute-math tests —
+    // see tests/tax/cwt.test.ts for resolveCertificateCutoffDate coverage.
+    certificateCutoffDate: new Date("2026-12-31"),
+    certificateCutoffSource: "TODAY",
     ...overrides,
   };
 }

@@ -8,6 +8,13 @@ export type Period = "Q1" | "Q2" | "Q3" | "ANNUAL";
 export type TaxpayerType = "PURELY_SELF_EMPLOYED" | "MIXED_INCOME";
 export type FormType = "F1701Q" | "F1701A" | "F1701";
 
+/**
+ * Which rule resolved a filing's certificate cutoff date (SPEC.md 3.5,
+ * Phase 2b P5). Priority when resolving, highest first: MANUAL_OVERRIDE,
+ * then FILED_AT, then TODAY.
+ */
+export type CertificateCutoffSource = "MANUAL_OVERRIDE" | "FILED_AT" | "TODAY";
+
 export interface TaxRuleSetForCompute {
   /** Basis points, e.g. 800 = 8.00%. */
   incomeTaxRateBps: number;
@@ -30,6 +37,13 @@ export interface FilingComputationInput {
   priorPeriodPaymentsCents: number;
   /** Excess credit carried over from the prior taxable year's election. */
   priorYearExcessCreditCents: number;
+  /**
+   * The cutoff date used to decide which certificates fed cumulativeCwtCents
+   * (SPEC.md 3.5) — NOT the same as the period end date used for gross
+   * sales. Pass-through only; computeFiling() does no date math with it.
+   */
+  certificateCutoffDate: Date;
+  certificateCutoffSource: CertificateCutoffSource;
 }
 
 export interface BreakdownLine {
@@ -54,4 +68,7 @@ export interface FilingComputationResult {
   isOverpayment: boolean;
   overpaymentCents: number;
   breakdown: BreakdownLine[];
+  /** Recorded so a frozen filing's snapshot shows which certificates it claimed and why (SPEC.md 3.5). */
+  certificateCutoffDate: Date;
+  certificateCutoffSource: CertificateCutoffSource;
 }

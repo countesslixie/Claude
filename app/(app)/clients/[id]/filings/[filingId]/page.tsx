@@ -2,14 +2,21 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { assembleAndComputeFiling } from "@/lib/filingComputation";
-import { acknowledgeReceiptsComplete } from "@/lib/actions/filings";
+import { acknowledgeReceiptsComplete, setCertificateCutoffOverride } from "@/lib/actions/filings";
 import { StatusBadge } from "@/components/status-badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { centsToPesos } from "@/lib/money";
-import { formatManilaDate } from "@/lib/dates";
+import { formatManilaDate, toManilaDateInputValue } from "@/lib/dates";
 import type { FilingComputationResult } from "@/lib/tax/types";
+
+const CUTOFF_SOURCE_LABEL: Record<string, string> = {
+  MANUAL_OVERRIDE: "manual override",
+  FILED_AT: "filed date",
+  TODAY: "today — live preview, not yet filed",
+};
 
 const STATUS_TONE: Record<string, "pending" | "progress" | "waiting" | "overdue" | "done"> = {
   NOT_STARTED: "pending",
@@ -42,6 +49,17 @@ export default async function FilingDetailPage({
     "use server";
     const note = String(formData.get("note") ?? "");
     await acknowledgeReceiptsComplete(filingId, note);
+  }
+
+  async function submitCutoffOverride(formData: FormData) {
+    "use server";
+    const date = String(formData.get("cutoffOverride") ?? "");
+    await setCertificateCutoffOverride(filingId, date);
+  }
+
+  async function clearCutoffOverride() {
+    "use server";
+    await setCertificateCutoffOverride(filingId, "");
   }
 
   return (
@@ -94,6 +112,51 @@ export default async function FilingDetailPage({
             {" — "}Form {sheet.formType}. This is a preparation aid; the filed return and BIR&apos;s own
             assessment govern.
           </p>
+        </CardBody>
+      </Card>
+
+      <Card className="mt-4">
+        <CardHeader>
+          <h2 className="text-sm font-semibold text-slate-900">Certificate cutoff</h2>
+        </CardHeader>
+        <CardBody>
+          <p className="text-sm text-slate-700">
+            Certificates received on or before{" "}
+            <span className="font-medium">
+              {sheet.certificateCutoffDate ? formatManilaDate(sheet.certificateCutoffDate) : "—"}
+            </span>{" "}
+            are claimed on this filing ({sheet.certificateCutoffSource
+              ? CUTOFF_SOURCE_LABEL[sheet.certificateCutoffSource]
+              : "unknown — frozen before this field existed"}
+            ).
+          </p>
+          <p className="mt-1 text-xs text-slate-400">
+            A certificate is claimed in the period whose cutoff it falls within — the bookkeeper does not
+            file amended returns when one arrives late (SPEC.md 3.5).
+          </p>
+          <form action={submitCutoffOverride} className="mt-3 flex items-end gap-2">
+            <div>
+              <label className="text-xs font-medium uppercase tracking-wide text-slate-400" htmlFor="cutoffOverride">
+                Manual override
+              </label>
+              <Input
+                id="cutoffOverride"
+                name="cutoffOverride"
+                type="date"
+                defaultValue={toManilaDateInputValue(filing.certificateCutoffOverride)}
+              />
+            </div>
+            <Button type="submit" size="sm" variant="secondary">
+              Set override
+            </Button>
+          </form>
+          {filing.certificateCutoffOverride && (
+            <form action={clearCutoffOverride} className="mt-2">
+              <Button type="submit" size="sm" variant="secondary">
+                Clear override
+              </Button>
+            </form>
+          )}
         </CardBody>
       </Card>
 

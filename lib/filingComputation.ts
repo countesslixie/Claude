@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { computeFiling } from "@/lib/tax/compute";
-import { sumCwtThroughPeriod } from "@/lib/tax/cwt";
+import { sumCwtThroughPeriod, resolveCertificateCutoffDate } from "@/lib/tax/cwt";
 import { periodEndDate, priorPeriodsOf } from "@/lib/tax/periods";
+import { nowManila } from "@/lib/dates";
 import type { FilingComputationResult, Period } from "@/lib/tax/types";
 
 /**
@@ -20,11 +21,17 @@ export async function assembleAndComputeFiling(
   const clientTaxYear = await prisma.clientTaxYear.findUnique({
     where: { clientId_taxableYear: { clientId, taxableYear } },
   });
+  const filing = await prisma.filing.findUnique({
+    where: { clientId_taxableYear_period: { clientId, taxableYear, period } },
+  });
 
-  const cutoff = periodEndDate(taxableYear, period);
+  // Transactions belong to their actual period, so gross sales stays keyed
+  // to the period's own end date. The CWT cutoff is a separate concern
+  // (SPEC.md 3.5) — see resolveCertificateCutoffDate.
+  const periodCutoff = periodEndDate(taxableYear, period);
 
   const transactions = await prisma.salesTransaction.findMany({
-    where: { clientId, taxableYear, transactionDate: { lte: cutoff }, deletedAt: null },
+    where: { clientId, taxableYear, transactionDate: { lte: periodCutoff }, deletedAt: null },
   });
   const cumulativeGrossSalesCents = transactions
     .filter((t) => t.incomeType === "OPERATING")
@@ -32,6 +39,12 @@ export async function assembleAndComputeFiling(
   const cumulativeNonOperatingCents = transactions
     .filter((t) => t.incomeType === "NON_OPERATING")
     .reduce((sum, t) => sum + t.grossAmountCents, 0);
+
+  const certificateCutoff = resolveCertificateCutoffDate({
+    filedAt: filing?.filedAt ?? null,
+    manualOverride: filing?.certificateCutoffOverride ?? null,
+    today: nowManila().startOf("day").toJSDate(),
+  });
 
   const certificates = await prisma.form2307.findMany({
     where: { clientId, taxableYear, deletedAt: null },
@@ -44,7 +57,7 @@ export async function assembleAndComputeFiling(
       status: c.status,
       claimedOnFilingId: c.claimedOnFilingId,
     })),
-    cutoff,
+    certificateCutoff.date,
   );
 
   const priorPeriods = priorPeriodsOf(period);
@@ -71,5 +84,7 @@ export async function assembleAndComputeFiling(
     cumulativeCwtCents,
     priorPeriodPaymentsCents,
     priorYearExcessCreditCents,
+    certificateCutoffDate: certificateCutoff.date,
+    certificateCutoffSource: certificateCutoff.source,
   });
 }

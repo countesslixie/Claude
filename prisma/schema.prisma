@@ -369,6 +369,13 @@ model Filing {
 
   computationSnapshot Json? // FROZEN once filedAt is set; never rewritten silently
 
+  // Manual correction to which certificates this filing claims (SPEC.md
+  // 3.5 CWT cutoff rule, Phase 2b P5). Always editable, even on a frozen
+  // filing — it does not itself freeze anything; it only feeds
+  // resolveCertificateCutoffDate(), which always prefers it over filedAt
+  // or "today" when set.
+  certificateCutoffOverride DateTime?
+
   filedAt              DateTime?
   filingReferenceNumber String?
 

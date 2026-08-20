@@ -32,7 +32,14 @@
  *    point to one filing at the database level too. Every future
  *    "claim this certificate" workflow action must call this guard
  *    before writing claimedOnFilingId.
+ *
+ * throughDate itself (the cutoff) is a separate concern, resolved by
+ * resolveCertificateCutoffDate below — see its doc comment. It is NOT the
+ * same as the period end date: certificates routinely arrive weeks after
+ * the period they economically belong to closes.
  */
+
+import type { CertificateCutoffSource } from "./types";
 
 const CLAIMABLE_STATUSES = new Set(["RECORDED", "CLAIMED_ON_RETURN"]);
 
@@ -90,4 +97,39 @@ export function assertCertificateClaimable(
   if (!certificate.claimedOnFilingId) return;
   if (certificate.claimedOnFilingId === targetFilingId) return;
   throw new CertificateAlreadyClaimedError(certificate.id, certificate.claimedOnFilingId, targetFilingId);
+}
+
+export interface CertificateCutoffResolution {
+  date: Date;
+  source: CertificateCutoffSource;
+}
+
+/**
+ * Resolves the cutoff date used to decide which Form 2307 certificates a
+ * filing claims (SPEC.md 3.5). This is deliberately NOT the period end
+ * date — certificates routinely arrive weeks after the period they
+ * economically belong to closes (e.g. a Q2 certificate arriving Aug 5,
+ * after Jun 30), so using period end would push every certificate a
+ * quarter late.
+ *
+ * Priority, highest first:
+ *   1. manualOverride, if set — the bookkeeper's explicit correction.
+ *      Always editable and always wins when present, even on a filed
+ *      return; it does not itself freeze or unfreeze anything.
+ *   2. filedAt, if the filing has been filed — the cutoff is pinned to
+ *      the moment of filing, since a filed return cannot retroactively
+ *      claim certificates that arrived after it was submitted.
+ *   3. today — a live preview of an unfiled filing always reflects
+ *      "certificates on hand as of right now." Caller supplies today as
+ *      a plain Date (Asia/Manila, resolved at the I/O boundary) so this
+ *      function stays pure.
+ */
+export function resolveCertificateCutoffDate(input: {
+  filedAt: Date | null;
+  manualOverride: Date | null;
+  today: Date;
+}): CertificateCutoffResolution {
+  if (input.manualOverride) return { date: input.manualOverride, source: "MANUAL_OVERRIDE" };
+  if (input.filedAt) return { date: input.filedAt, source: "FILED_AT" };
+  return { date: input.today, source: "TODAY" };
 }
