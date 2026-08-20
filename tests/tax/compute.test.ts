@@ -361,4 +361,24 @@ describe("SPEC.md 16 item 7 — prior-year carry-over credit applies once per pe
     // Q2: base 800,000 -> tax 64,000; 64,000 - 52,500 - 0 - 10,000 = 1,500
     expect(q2.taxPayableCents).toBe(P(1_500));
   });
+
+  it("Q2 in isolation: 10,000 credit brings 64,000 due down to 1,500 payable, not 11,500", () => {
+    // Same figures as the combined Q1+Q2 test above, but computed as a
+    // single standalone call — proves the credit is applied directly off
+    // FilingComputationInput.priorYearExcessCreditCents on every call,
+    // not something that only takes effect after a prior computeFiling()
+    // call for the same year has "used" it.
+    const result = computeFiling(
+      baseInput({
+        period: "Q2",
+        cumulativeGrossSalesCents: P(1_050_000), // -> income tax due 64,000
+        cumulativeCwtCents: P(52_500),
+        priorPeriodPaymentsCents: 0,
+        priorYearExcessCreditCents: P(10_000),
+      }),
+    );
+    expect(result.incomeTaxDueCents).toBe(P(64_000));
+    expect(result.taxPayableCents).toBe(P(1_500));
+    expect(result.taxPayableCents).not.toBe(P(11_500));
+  });
 });

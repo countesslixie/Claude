@@ -462,7 +462,7 @@ Phase 3 is the reason this system exists. If time is short, cut Phase 4 scope, n
 4. Negative payable renders as overpayment, never negative tax due
 5. Cumulative CWT never double-counts a certificate across periods
 6. No Q4 `Filing` is ever generated
-7. Prior-year carry-over credit applies once, in the first period of the following year
+7. Prior-year carry-over credit appears in every cumulative period (Q1, Q2, Q3, ANNUAL) of the following year, not only the first — "once" means it is never double-counted against the same liability, not that it is applied in a single period
 8. Rounding is stable across four cumulative periods (no float drift)
 
 **Deadlines:**
