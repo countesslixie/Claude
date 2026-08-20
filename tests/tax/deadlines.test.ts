@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { eafsDueDate, shiftToNextBusinessDay } from "@/lib/tax/deadlines";
+import {
+  eafsDueDate,
+  shiftToNextBusinessDay,
+  resolveStatutoryDueDate,
+  resolveAdjustedDueDate,
+  deriveWorkingCalendar,
+  type DueDateRuleSet,
+} from "@/lib/tax/deadlines";
 
 const D = (s: string) => new Date(`${s}T00:00:00.000Z`);
 
@@ -109,5 +116,76 @@ describe("shiftToNextBusinessDay", () => {
 
   it("shifts past a holiday that falls on a weekday", () => {
     expect(shiftToNextBusinessDay(D("2026-11-15"), [D("2026-11-15")])).toEqual(D("2026-11-16")); // Sun, also treated as holiday -> Mon
+  });
+});
+
+/**
+ * Phase 3: general statutory-due-date generation, wired into real filing
+ * generation (lib/workflow/filingGeneration.ts) — not just eAFS anymore.
+ * Cross-checked against prisma/seed.ts's independently hand-verified
+ * TY2026 DUE table (SPEC.md 3.6, Phase 2b P6).
+ */
+describe("resolveStatutoryDueDate / resolveAdjustedDueDate", () => {
+  const RULE_SET: DueDateRuleSet = {
+    q1DueMonthDay: "05-15",
+    q2DueMonthDay: "08-15",
+    q3DueMonthDay: "11-15",
+    annualDueMonthDay: "04-15",
+  };
+
+  it("Q1 2026: statutory May 15 (Friday), no shift", () => {
+    const statutory = resolveStatutoryDueDate(2026, "Q1", RULE_SET);
+    expect(statutory).toEqual(D("2026-05-15"));
+    expect(resolveAdjustedDueDate(statutory, [])).toEqual(D("2026-05-15"));
+  });
+
+  it("Q2 2026: statutory Aug 15 (Saturday) shifts to adjusted Aug 17", () => {
+    const statutory = resolveStatutoryDueDate(2026, "Q2", RULE_SET);
+    expect(statutory).toEqual(D("2026-08-15"));
+    expect(resolveAdjustedDueDate(statutory, [])).toEqual(D("2026-08-17"));
+  });
+
+  it("Q3 2026: statutory Nov 15 (Sunday) shifts to adjusted Nov 16", () => {
+    const statutory = resolveStatutoryDueDate(2026, "Q3", RULE_SET);
+    expect(statutory).toEqual(D("2026-11-15"));
+    expect(resolveAdjustedDueDate(statutory, [])).toEqual(D("2026-11-16"));
+  });
+
+  it("ANNUAL 2026: statutory due date falls in 2027, not 2026 (of the following year)", () => {
+    const statutory = resolveStatutoryDueDate(2026, "ANNUAL", RULE_SET);
+    expect(statutory).toEqual(D("2027-04-15"));
+  });
+
+  it("statutory due date shifts against a seeded holiday even when not a weekend", () => {
+    // A hypothetical mid-week holiday landing exactly on the statutory date.
+    const statutory = resolveStatutoryDueDate(2026, "Q1", RULE_SET); // Friday, no weekend shift
+    expect(resolveAdjustedDueDate(statutory, [D("2026-05-15")])).toEqual(D("2026-05-18")); // -> Monday
+  });
+});
+
+/**
+ * Phase 3: deriveWorkingCalendar generalizes the pattern prisma/seed.ts's
+ * WORKING_CALENDAR literals hand-encoded for TY2026 only (Phase 2b P7) —
+ * cross-checked against those exact figures here.
+ */
+describe("deriveWorkingCalendar", () => {
+  it("Q1: certificatesExpectedBy 10 days before internalFilingTarget, which matches the statutory due date", () => {
+    const result = deriveWorkingCalendar("Q1", D("2026-05-15"));
+    expect(result).toEqual({ certificatesExpectedBy: D("2026-05-05"), internalFilingTarget: D("2026-05-15") });
+  });
+
+  it("Q2: matches prisma/seed.ts's given practice figures exactly (Aug 5 / Aug 15)", () => {
+    const result = deriveWorkingCalendar("Q2", D("2026-08-15"));
+    expect(result).toEqual({ certificatesExpectedBy: D("2026-08-05"), internalFilingTarget: D("2026-08-15") });
+  });
+
+  it("Q3: Nov 5 / Nov 15", () => {
+    const result = deriveWorkingCalendar("Q3", D("2026-11-15"));
+    expect(result).toEqual({ certificatesExpectedBy: D("2026-11-05"), internalFilingTarget: D("2026-11-15") });
+  });
+
+  it("ANNUAL: Feb 15 / Mar 31, of the same year as the (following-year) statutory due date", () => {
+    const result = deriveWorkingCalendar("ANNUAL", D("2027-04-15"));
+    expect(result).toEqual({ certificatesExpectedBy: D("2027-02-15"), internalFilingTarget: D("2027-03-31") });
   });
 });

@@ -123,9 +123,11 @@ export function computeFiling(input: FilingComputationInput): FilingComputationR
 
 /**
  * Quarterly periods are always 1701Q. At ANNUAL, a mixed income earner
- * files 1701 (not 1701A) — SPEC.md 3.2, Example B.
+ * files 1701 (not 1701A) — SPEC.md 3.2, Example B. Exported so filing
+ * generation (lib/workflow/filingGeneration.ts) can pick the right
+ * formType before a computation even exists yet.
  */
-function resolveFormType(input: FilingComputationInput): FormType {
+export function resolveFormType(input: Pick<FilingComputationInput, "period" | "taxpayerType">): FormType {
   if (input.period !== "ANNUAL") return "F1701Q";
   return input.taxpayerType === "MIXED_INCOME" ? "F1701" : "F1701A";
 }

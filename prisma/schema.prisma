@@ -473,6 +473,7 @@ model WorkflowStep {
   conditionExpression String?
 
   isWaitingState Boolean   @default(false)
+  waitingOnLabel String? // e.g. "Client" or "BIR" — copied from the template at instantiation; drives Filing status derivation (SPEC.md 7.2)
   expectedResponseDays Int?
   waitingSince   DateTime?
   followUpCount  Int       @default(0)

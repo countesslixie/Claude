@@ -772,6 +772,7 @@ async function instantiateWorkflowSteps(
         isConditional: step.isConditional ?? false,
         conditionExpression: step.conditionExpression,
         isWaitingState: step.isWaitingState ?? false,
+        waitingOnLabel: step.waitingOnLabel,
         expectedResponseDays: step.expectedResponseDays,
         waitingSince,
         followUpCount,

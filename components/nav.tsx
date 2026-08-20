@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { logout } from "@/lib/actions/auth";
 
-// Only screens that exist as of Phase 1. Filings, Transactions, 2307
-// Register, Books, and Calendar are built in later phases (SPEC.md 15).
+// Books, SAWT, and Calendar are Phase 4 (SPEC.md 15) and not built yet.
+// Transactions/2307 register are per-client, reached from the client
+// detail page, not top-level nav items.
 const LINKS = [
   { href: "/", label: "Dashboard" },
+  { href: "/filings", label: "Filings" },
   { href: "/clients", label: "Clients" },
   { href: "/settings", label: "Settings" },
 ];

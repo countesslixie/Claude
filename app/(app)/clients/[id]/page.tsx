@@ -4,7 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { StatusBadge } from "@/components/status-badge";
-import { formatManilaDate } from "@/lib/dates";
+import { GenerateFilingsForm } from "@/components/generate-filings-form";
+import { formatManilaDate, currentTaxableYearManila } from "@/lib/dates";
 import { bpsToPercentLabel, centsToPesos } from "@/lib/money";
 
 const LABELS: Record<string, string> = {
@@ -198,8 +199,9 @@ export default async function ClientDetailPage({
         </Card>
 
         <Card className="lg:col-span-2">
-          <CardHeader>
+          <CardHeader className="flex items-center justify-between">
             <h2 className="text-sm font-semibold text-slate-900">Filings</h2>
+            <GenerateFilingsForm clientId={client.id} defaultYear={currentTaxableYearManila()} />
           </CardHeader>
           <CardBody>
             {client.filings.length === 0 ? (

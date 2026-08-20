@@ -7,6 +7,7 @@ import { getActorId } from "@/lib/actor";
 import { logActivity } from "@/lib/activityLog";
 import { manilaDateInputToJsDate } from "@/lib/dates";
 import { pesosToCents, applyBps, centsToPesos } from "@/lib/money";
+import { checkAndRecordAmendments } from "@/lib/filingComputation";
 
 export type QuickTransactionResult = {
   ok: boolean;
@@ -110,9 +111,120 @@ export async function createQuickTransaction(
     actorId,
   });
 
+  // Integrity rule (SPEC.md 5): if this backdates into an already-filed
+  // period, flag it — never silently rewrite that filing's frozen snapshot.
+  await checkAndRecordAmendments(
+    clientId,
+    taxableYear,
+    transactionDate,
+    `New transaction added dated ${parsed.data.transactionDate} (${centsToPesos(grossAmountCents, { withSymbol: true })}), after this period was filed.`,
+  );
+
   revalidatePath(`/clients/${clientId}/transactions`);
 
   return { ok: true, createdId: created.id, duplicateOrWarning, netReceivedMismatchWarning };
+}
+
+/**
+ * Edits an existing transaction. Same field set/derivation as
+ * createQuickTransaction, plus the integrity rule (SPEC.md 5): if the
+ * transaction (at its old or new date) falls within an already-filed
+ * period's cumulative window, this raises an AmendmentAlert on that
+ * filing rather than silently leaving its frozen computationSnapshot out
+ * of sync with the edited figures.
+ */
+export async function updateSalesTransaction(
+  id: string,
+  raw: Record<string, string>,
+): Promise<QuickTransactionResult> {
+  const parsed = quickTransactionSchema.safeParse(raw);
+  if (!parsed.success) {
+    return { ok: false, fieldErrors: parsed.error.flatten().fieldErrors };
+  }
+
+  const existing = await prisma.salesTransaction.findUnique({ where: { id } });
+  if (!existing || existing.deletedAt) return { ok: false, error: "Transaction not found." };
+
+  const client = await prisma.client.findUnique({ where: { id: existing.clientId } });
+  if (!client) return { ok: false, error: "Client not found." };
+
+  const transactionDate = manilaDateInputToJsDate(parsed.data.transactionDate);
+  const { taxableYear, quarter } = deriveTaxableYearAndQuarter(transactionDate);
+  const grossAmountCents = pesosToCents(parsed.data.grossAmount);
+
+  const explicitWht =
+    parsed.data.withholdingAmount && parsed.data.withholdingAmount !== "0"
+      ? pesosToCents(parsed.data.withholdingAmount)
+      : null;
+  const withholdingRateBps = parsed.data.withholdingRateBps || client.defaultWithholdingRateBps || 0;
+  const withholdingTaxCents = explicitWht ?? applyBps(grossAmountCents, withholdingRateBps);
+
+  const derivedNetReceivedCents = grossAmountCents - withholdingTaxCents;
+  let netReceivedCents = derivedNetReceivedCents;
+  let netReceivedMismatchWarning: string | undefined;
+  if (parsed.data.netReceivedOverride) {
+    const overrideCents = pesosToCents(parsed.data.netReceivedOverride);
+    if (overrideCents !== derivedNetReceivedCents) {
+      netReceivedMismatchWarning = `Net received you entered doesn't match gross - withholding (expected ${centsToPesos(
+        derivedNetReceivedCents,
+      )}). Saved as entered — please recheck.`;
+      netReceivedCents = overrideCents;
+    }
+  }
+
+  const actorId = await getActorId();
+  const updated = await prisma.salesTransaction.update({
+    where: { id },
+    data: {
+      transactionDate,
+      taxableYear,
+      quarter,
+      orNumber: parsed.data.orNumber ?? null,
+      payorName: parsed.data.payorName,
+      payorTin: parsed.data.payorTin ?? null,
+      grossAmountCents,
+      withholdingTaxCents,
+      withholdingRateBps,
+      netReceivedCents,
+      incomeType: parsed.data.incomeType,
+      description: parsed.data.description ?? null,
+      actorId,
+    },
+  });
+
+  await logActivity({
+    entityType: "SalesTransaction",
+    entityId: id,
+    action: "UPDATE",
+    before: existing,
+    after: updated,
+    actorId,
+  });
+
+  const editReason = `Transaction ${id} edited: gross ${centsToPesos(existing.grossAmountCents, {
+    withSymbol: true,
+  })} -> ${centsToPesos(grossAmountCents, { withSymbol: true })}, date ${
+    existing.transactionDate.toISOString().split("T")[0]
+  } -> ${parsed.data.transactionDate}.`;
+
+  if (existing.taxableYear === taxableYear) {
+    // A lower bound is always safe: periodEndDate only grows across
+    // Q1 -> Q2 -> Q3 -> ANNUAL, so starting from whichever date is
+    // earlier guarantees every filing that could possibly be affected
+    // gets checked (see lib/filingComputation.ts's checkAndRecordAmendments).
+    const earliestAffectedDate =
+      existing.transactionDate.getTime() < transactionDate.getTime() ? existing.transactionDate : transactionDate;
+    await checkAndRecordAmendments(existing.clientId, existing.taxableYear, earliestAffectedDate, editReason);
+  } else {
+    // The edit moved the transaction into a different taxable year
+    // entirely — both years' frozen filings need checking.
+    await checkAndRecordAmendments(existing.clientId, existing.taxableYear, existing.transactionDate, editReason);
+    await checkAndRecordAmendments(existing.clientId, taxableYear, transactionDate, editReason);
+  }
+
+  revalidatePath(`/clients/${existing.clientId}/transactions`);
+
+  return { ok: true, createdId: updated.id, netReceivedMismatchWarning };
 }
 
 /**
@@ -164,6 +276,13 @@ export async function createTransactionFromForm2307(
     after: created,
     actorId,
   });
+
+  await checkAndRecordAmendments(
+    cert.clientId,
+    taxableYear,
+    transactionDate,
+    `New transaction added from Form 2307 (${cert.atcCode}) dated ${transactionDateInput}, after this period was filed.`,
+  );
 
   revalidatePath(`/clients/${cert.clientId}/transactions`);
   revalidatePath(`/clients/${cert.clientId}/form-2307`);

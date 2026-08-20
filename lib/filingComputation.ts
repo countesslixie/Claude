@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { computeFiling } from "@/lib/tax/compute";
 import { sumCwtThroughPeriod, resolveCertificateCutoffDate } from "@/lib/tax/cwt";
@@ -87,4 +88,63 @@ export async function assembleAndComputeFiling(
     certificateCutoffDate: certificateCutoff.date,
     certificateCutoffSource: certificateCutoff.source,
   });
+}
+
+/**
+ * The integrity rule (SPEC.md 5): a frozen Filing's computationSnapshot
+ * is never silently rewritten. When a transaction dated on or before a
+ * frozen filing's period end is created or edited, this raises an
+ * AmendmentAlert on that filing showing the delta between the frozen
+ * snapshot and a live recomputation — and does NOT touch
+ * computationSnapshot itself. The bookkeeper decides whether to amend.
+ *
+ * `affectedDate` should be the EARLIEST of a transaction's old/new dates
+ * when editing (a lower bound is always safe here: periodEndDate only
+ * grows Q1 -> Q2 -> Q3 -> ANNUAL, so using the earliest date means every
+ * filing that could possibly be impacted gets checked; one whose figures
+ * turn out unchanged just produces a zero delta and no alert).
+ */
+export async function checkAndRecordAmendments(
+  clientId: string,
+  taxableYear: number,
+  affectedDate: Date,
+  reason: string,
+): Promise<number> {
+  const frozenFilings = await prisma.filing.findMany({
+    where: {
+      clientId,
+      taxableYear,
+      filedAt: { not: null },
+      computationSnapshot: { not: Prisma.DbNull },
+      deletedAt: null,
+    },
+  });
+
+  let alertsCreated = 0;
+
+  for (const filing of frozenFilings) {
+    const periodEnd = periodEndDate(taxableYear, filing.period);
+    if (affectedDate.getTime() > periodEnd.getTime()) continue; // outside this filing's cumulative window
+
+    const live = await assembleAndComputeFiling(clientId, taxableYear, filing.period);
+    const frozen = JSON.parse(filing.computationSnapshot as string) as FilingComputationResult;
+
+    const frozenNetCents = frozen.taxPayableCents - frozen.overpaymentCents;
+    const liveNetCents = live.taxPayableCents - live.overpaymentCents;
+    const deltaCents = liveNetCents - frozenNetCents;
+    if (deltaCents === 0) continue;
+
+    await prisma.amendmentAlert.create({
+      data: {
+        filingId: filing.id,
+        reason,
+        snapshotJson: filing.computationSnapshot as string,
+        recomputedJson: JSON.stringify(live),
+        deltaCents,
+      },
+    });
+    alertsCreated += 1;
+  }
+
+  return alertsCreated;
 }

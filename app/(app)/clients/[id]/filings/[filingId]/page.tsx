@@ -2,14 +2,21 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { assembleAndComputeFiling } from "@/lib/filingComputation";
-import { acknowledgeReceiptsComplete, setCertificateCutoffOverride } from "@/lib/actions/filings";
+import {
+  acknowledgeReceiptsComplete,
+  setCertificateCutoffOverride,
+  acknowledgeAmendmentAlert,
+} from "@/lib/actions/filings";
 import { StatusBadge } from "@/components/status-badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { WorkflowStepCard, type StepCardData } from "@/components/workflow-step-card";
 import { centsToPesos } from "@/lib/money";
 import { formatManilaDate, toManilaDateInputValue } from "@/lib/dates";
+import { deriveStepAging } from "@/lib/workflow/aging";
+import { parseDocSlots } from "@/lib/workflow/types";
 import type { FilingComputationResult } from "@/lib/tax/types";
 
 const CUTOFF_SOURCE_LABEL: Record<string, string> = {
@@ -30,13 +37,20 @@ const STATUS_TONE: Record<string, "pending" | "progress" | "waiting" | "overdue"
 
 export default async function FilingDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string; filingId: string }>;
+  searchParams: Promise<{ showSkipped?: string }>;
 }) {
   const { id, filingId } = await params;
+  const { showSkipped } = await searchParams;
   const filing = await prisma.filing.findUnique({
     where: { id: filingId },
-    include: { client: true },
+    include: {
+      client: true,
+      workflowSteps: { orderBy: { sequence: "asc" }, include: { documents: { where: { deletedAt: null } } } },
+      amendmentAlerts: { orderBy: { createdAt: "desc" } },
+    },
   });
   if (!filing || filing.clientId !== id) notFound();
 
@@ -45,10 +59,52 @@ export default async function FilingDetailPage({
     ? (JSON.parse(filing.computationSnapshot as string) as FilingComputationResult)
     : await assembleAndComputeFiling(filing.clientId, filing.taxableYear, filing.period);
 
+  const now = new Date();
+  const allSteps: StepCardData[] = filing.workflowSteps.map((s) => {
+    const aging = deriveStepAging({
+      stepCode: s.stepCode,
+      status: s.status,
+      waitingSince: s.waitingSince,
+      expectedResponseDays: s.expectedResponseDays,
+      certificatesExpectedBy: filing.certificatesExpectedBy,
+      now,
+    });
+    return {
+      id: s.id,
+      stepCode: s.stepCode,
+      sequence: s.sequence,
+      title: s.title,
+      description: s.description,
+      category: s.category,
+      status: s.status,
+      isWaitingState: s.isWaitingState,
+      waitingOnLabel: s.waitingOnLabel,
+      followUpCount: s.followUpCount,
+      skippedReason: s.skippedReason,
+      requiredDocSlots: parseDocSlots(s.requiredDocSlots),
+      documents: s.documents.map((d) => ({
+        id: d.id,
+        docSlotCode: d.docSlotCode,
+        originalFilename: d.originalFilename,
+        documentDate: d.documentDate.toISOString().split("T")[0],
+      })),
+      agingDaysWaiting: aging?.daysWaiting ?? null,
+      agingTone: aging?.tone ?? null,
+    };
+  });
+  const hiddenCount = allSteps.filter((s) => s.status === "NA" || s.status === "SKIPPED").length;
+  const visibleSteps = showSkipped ? allSteps : allSteps.filter((s) => s.status !== "NA" && s.status !== "SKIPPED");
+
   async function submitAcknowledgement(formData: FormData) {
     "use server";
     const note = String(formData.get("note") ?? "");
     await acknowledgeReceiptsComplete(filingId, note);
+  }
+
+  async function submitAmendmentAck(alertId: string, formData: FormData) {
+    "use server";
+    const note = String(formData.get("note") ?? "");
+    await acknowledgeAmendmentAlert(alertId, note);
   }
 
   async function submitCutoffOverride(formData: FormData) {
@@ -164,6 +220,80 @@ export default async function FilingDetailPage({
               </Button>
             </form>
           )}
+        </CardBody>
+      </Card>
+
+      {filing.amendmentAlerts.length > 0 && (
+        <Card className="mt-4 border-amber-300">
+          <CardHeader>
+            <h2 className="text-sm font-semibold text-amber-900">
+              Amendment alerts ({filing.amendmentAlerts.length})
+            </h2>
+          </CardHeader>
+          <CardBody>
+            <p className="mb-3 text-xs text-slate-500">
+              A transaction changed after this filing was frozen. The computation sheet above still shows
+              exactly what was filed — it was never rewritten. You decide whether to amend.
+            </p>
+            <div className="flex flex-col gap-3">
+              {filing.amendmentAlerts.map((alert) => (
+                <div key={alert.id} className="rounded-md border border-amber-200 bg-amber-50 p-3">
+                  <p className="text-sm text-amber-900">{alert.reason}</p>
+                  <p className="mt-1 text-sm font-medium text-amber-900">
+                    Delta: {alert.deltaCents >= 0 ? "+" : ""}
+                    {centsToPesos(alert.deltaCents, { withSymbol: true })}
+                  </p>
+                  <p className="text-xs text-slate-500">Raised {formatManilaDate(alert.createdAt)}</p>
+                  {alert.acknowledgedAt ? (
+                    <p className="mt-1 text-xs text-slate-500">
+                      Acknowledged {formatManilaDate(alert.acknowledgedAt)}
+                      {alert.acknowledgedNote ? ` — ${alert.acknowledgedNote}` : ""}
+                    </p>
+                  ) : (
+                    <form action={submitAmendmentAck.bind(null, alert.id)} className="mt-2 flex items-end gap-2">
+                      <Textarea name="note" placeholder="Optional note" rows={1} className="flex-1" />
+                      <Button type="submit" size="sm" variant="secondary">
+                        Acknowledge
+                      </Button>
+                    </form>
+                  )}
+                </div>
+              ))}
+            </div>
+          </CardBody>
+        </Card>
+      )}
+
+      <Card className="mt-4">
+        <CardHeader className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-slate-900">Workflow ({visibleSteps.length}/16 steps shown)</h2>
+          <div className="flex items-center gap-3">
+            <a
+              href={`/api/filings/${filing.id}/package`}
+              className="text-xs text-slate-600 underline hover:text-slate-900"
+            >
+              Download period package
+            </a>
+            {hiddenCount > 0 && (
+              <Link
+                href={
+                  showSkipped
+                    ? `/clients/${id}/filings/${filingId}`
+                    : `/clients/${id}/filings/${filingId}?showSkipped=1`
+                }
+                className="text-xs text-slate-600 underline hover:text-slate-900"
+              >
+                {showSkipped ? "Hide skipped/NA" : `Show ${hiddenCount} skipped/NA`}
+              </Link>
+            )}
+          </div>
+        </CardHeader>
+        <CardBody>
+          <div className="flex flex-col gap-2">
+            {visibleSteps.map((step) => (
+              <WorkflowStepCard key={step.id} step={step} />
+            ))}
+          </div>
         </CardBody>
       </Card>
 

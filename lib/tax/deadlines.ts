@@ -1,15 +1,19 @@
+import type { Period } from "./types";
+
 /**
- * eAFS deadline derivation (SPEC.md 3.6, Phase 2b P6). Pure functions,
- * plain object in, plain object out (SPEC.md section 4, 6) — the caller
- * supplies holiday dates and "today" as plain Dates; this module never
+ * Deadline derivation (SPEC.md 3.6). Pure functions, plain object in,
+ * plain object out (SPEC.md section 4, 6) — the caller supplies rule-set
+ * values, holiday dates, and "today" as plain data; this module never
  * touches Prisma or the clock itself.
  *
- * Scoped narrowly to what eafsDueDate needs. This is NOT a general
- * statutory-due-date generator — prisma/seed.ts's DUE table still
- * hand-computes statutory/adjusted due dates against the seeded Holiday
- * table (SPEC.md 3.6: "never compute holidays algorithmically"), and that
- * stays true after this change. Only the eAFS offset-and-shift logic is
- * implemented here.
+ * prisma/seed.ts's own DUE table for the TY2026 demo cycle stays
+ * hand-computed rather than switching to resolveStatutoryDueDate() below
+ * — it's an independent, hand-verified cross-check of this module, the
+ * same reasoning as the seed's money literals (Phase 2b P2). Real filing
+ * generation (Phase 3, lib/workflow/filingGeneration.ts) uses these
+ * functions; "never compute holidays algorithmically" (SPEC.md 3.6) still
+ * holds — the Holiday table itself is always seeded/hand-maintained, only
+ * the shifting logic against that table is computed.
  */
 
 /**
@@ -60,4 +64,76 @@ export function eafsDueDate(input: {
       : input.filedAt;
   const raw = addDays(base, input.offsetDays);
   return shiftToNextBusinessDay(raw, input.holidays);
+}
+
+export interface DueDateRuleSet {
+  /** "MM-DD" strings, e.g. "05-15" (SPEC.md 3.6, TaxRuleSet.q1DueMonthDay etc). */
+  q1DueMonthDay: string;
+  q2DueMonthDay: string;
+  q3DueMonthDay: string;
+  /** "MM-DD" of the FOLLOWING taxable year (SPEC.md 5: TaxRuleSet.annualDueMonthDay). */
+  annualDueMonthDay: string;
+}
+
+function parseMonthDay(monthDay: string, year: number): Date {
+  const [month, day] = monthDay.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
+/**
+ * The statutory due date for a period, before any business-day shift.
+ * ANNUAL's due date falls in taxableYear + 1 (SPEC.md 3.6: "April 15 of
+ * the following year") — every other period is in taxableYear itself.
+ */
+export function resolveStatutoryDueDate(taxableYear: number, period: Period, ruleSet: DueDateRuleSet): Date {
+  switch (period) {
+    case "Q1":
+      return parseMonthDay(ruleSet.q1DueMonthDay, taxableYear);
+    case "Q2":
+      return parseMonthDay(ruleSet.q2DueMonthDay, taxableYear);
+    case "Q3":
+      return parseMonthDay(ruleSet.q3DueMonthDay, taxableYear);
+    case "ANNUAL":
+      return parseMonthDay(ruleSet.annualDueMonthDay, taxableYear + 1);
+  }
+}
+
+/**
+ * A filing's adjusted (legally authoritative) due date: the statutory due
+ * date, business-day shifted against the Holiday table (SPEC.md 3.6).
+ * General-purpose — this is the same shiftToNextBusinessDay() eafsDueDate()
+ * uses above, just applied to the statutory date instead of an eAFS offset.
+ */
+export function resolveAdjustedDueDate(statutoryDueDate: Date, holidays: readonly Date[]): Date {
+  return shiftToNextBusinessDay(statutoryDueDate, holidays);
+}
+
+export interface WorkingCalendar {
+  certificatesExpectedBy: Date;
+  internalFilingTarget: Date;
+}
+
+/**
+ * The bookkeeper's working-calendar practice targets for a period
+ * (SPEC.md 3.6, Phase 2b P7) — distinct from and never overriding the
+ * statutory/adjusted due date. Quarterly returns: internalFilingTarget
+ * matches the statutory due date itself, and certificatesExpectedBy is 10
+ * days before it. ANNUAL follows a longer-lead pattern instead —
+ * certificatesExpectedBy Feb 15, internalFilingTarget Mar 31, of the same
+ * calendar year as the ANNUAL statutory due date (which is itself already
+ * "of the following year" relative to the taxable year — see
+ * resolveStatutoryDueDate above).
+ */
+export function deriveWorkingCalendar(period: Period, statutoryDueDate: Date): WorkingCalendar {
+  if (period === "ANNUAL") {
+    const year = statutoryDueDate.getUTCFullYear();
+    return {
+      certificatesExpectedBy: new Date(Date.UTC(year, 1, 15)), // Feb 15
+      internalFilingTarget: new Date(Date.UTC(year, 2, 31)), // Mar 31
+    };
+  }
+  return {
+    certificatesExpectedBy: addDays(statutoryDueDate, -10),
+    internalFilingTarget: statutoryDueDate,
+  };
 }
