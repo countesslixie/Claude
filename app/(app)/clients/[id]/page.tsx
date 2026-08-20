@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { StatusBadge } from "@/components/status-badge";
 import { formatManilaDate } from "@/lib/dates";
-import { bpsToPercentLabel } from "@/lib/money";
+import { bpsToPercentLabel, centsToPesos } from "@/lib/money";
 
 const LABELS: Record<string, string> = {
   PURELY_SELF_EMPLOYED: "Purely self-employed",
@@ -179,7 +179,7 @@ export default async function ClientDetailPage({
                           <StatusBadge tone="waiting">{LABELS[ty.electionStatus]}</StatusBadge>
                         )}
                       </td>
-                      <td>{(ty.priorYearExcessCreditCents / 100).toFixed(2)}</td>
+                      <td>{centsToPesos(ty.priorYearExcessCreditCents)}</td>
                       <td>{ty.thresholdBreachedAt ? formatManilaDate(ty.thresholdBreachedAt) : "—"}</td>
                       <td>
                         <Link

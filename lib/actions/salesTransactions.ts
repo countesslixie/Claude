@@ -6,7 +6,7 @@ import { quickTransactionSchema } from "@/lib/validation/salesTransaction";
 import { getActorId } from "@/lib/actor";
 import { logActivity } from "@/lib/activityLog";
 import { manilaDateInputToJsDate } from "@/lib/dates";
-import { pesosToCents, applyBps } from "@/lib/money";
+import { pesosToCents, applyBps, centsToPesos } from "@/lib/money";
 
 export type QuickTransactionResult = {
   ok: boolean;
@@ -60,9 +60,9 @@ export async function createQuickTransaction(
   if (parsed.data.netReceivedOverride) {
     const overrideCents = pesosToCents(parsed.data.netReceivedOverride);
     if (overrideCents !== derivedNetReceivedCents) {
-      netReceivedMismatchWarning = `Net received you entered doesn't match gross - withholding (expected ${(
-        derivedNetReceivedCents / 100
-      ).toFixed(2)}). Saved as entered — please recheck.`;
+      netReceivedMismatchWarning = `Net received you entered doesn't match gross - withholding (expected ${centsToPesos(
+        derivedNetReceivedCents,
+      )}). Saved as entered — please recheck.`;
       netReceivedCents = overrideCents;
     }
   }
