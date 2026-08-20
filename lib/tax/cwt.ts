@@ -39,9 +39,29 @@
  * the period they economically belong to closes.
  */
 
+import { DateTime } from "luxon";
 import type { CertificateCutoffSource } from "./types";
 
 const CLAIMABLE_STATUSES = new Set(["RECORDED", "CLAIMED_ON_RETURN"]);
+const MANILA_ZONE = "Asia/Manila";
+
+/**
+ * The cutoff comparison below is calendar-day, not instant. Callers in
+ * this codebase always construct dates via lib/dates.ts's
+ * manilaDateInputToJsDate() (start-of-day Manila), so dateReceived and
+ * throughDate are normally already midnight-aligned and a raw instant
+ * comparison would happen to agree with this. But "received by Aug 15"
+ * means "any time during Aug 15 Manila," not "before the exact instant
+ * of Aug 15 00:00 Manila" — a certificate received at 11:59pm on the
+ * cutoff date must still count. Comparing calendar days directly, using
+ * the same UTC-instant -> Asia/Manila conversion lib/dates.ts uses for
+ * display, makes that true regardless of what time-of-day either Date
+ * happens to encode (SPEC.md 3.5, 3.6: all date arithmetic is
+ * Asia/Manila, never the host's local timezone).
+ */
+function manilaCalendarDay(date: Date): string {
+  return DateTime.fromJSDate(date, { zone: "utc" }).setZone(MANILA_ZONE).toFormat("yyyy-MM-dd");
+}
 
 export interface CertificateForCwt {
   id: string;
@@ -55,6 +75,9 @@ export interface CertificateForCwt {
 /**
  * Sums taxWithheldCents for certificates received on or before
  * `throughDate`, status Recorded or ClaimedOnReturn (SPEC.md 3.2).
+ * "On or before" compares Asia/Manila calendar days, not raw instants —
+ * a certificate received any time on the cutoff's own calendar day
+ * counts, regardless of time-of-day (see manilaCalendarDay above).
  * Deduplicates by certificate id.
  */
 export function sumCwtThroughPeriod(certificates: CertificateForCwt[], throughDate: Date): number {
@@ -65,7 +88,7 @@ export function sumCwtThroughPeriod(certificates: CertificateForCwt[], throughDa
     if (seen.has(cert.id)) continue; // structural guard against duplicate array entries
     if (!CLAIMABLE_STATUSES.has(cert.status)) continue;
     if (!cert.dateReceived) continue;
-    if (cert.dateReceived.getTime() > throughDate.getTime()) continue;
+    if (manilaCalendarDay(cert.dateReceived) > manilaCalendarDay(throughDate)) continue;
 
     seen.add(cert.id);
     total += cert.taxWithheldCents;
