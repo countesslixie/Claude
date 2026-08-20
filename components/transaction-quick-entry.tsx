@@ -84,7 +84,7 @@ export function TransactionQuickEntry({
         payorTin: row.payorTin,
         grossAmount: row.grossAmount,
         withholdingRateBps: row.withholdingRateBps,
-        withholdingAmount: row.withholdingAmount || String(autoWhtNum),
+        withholdingAmount: row.withholdingAmount,
         netReceivedOverride: row.netReceivedOverride,
         incomeType: row.incomeType,
         description: row.description,
