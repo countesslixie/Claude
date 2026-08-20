@@ -406,16 +406,20 @@ async function seedClientA(actorId: string) {
   const existingTx = await prisma.salesTransaction.findFirst({ where: { clientId: client.id } });
   if (existingTx) return;
 
-  const quarters: Array<{ quarter: number; date: string; grossPesos: number }> = [
-    { quarter: 1, date: "2025-03-15", grossPesos: 450_000 },
-    { quarter: 2, date: "2025-06-15", grossPesos: 600_000 },
-    { quarter: 3, date: "2025-09-15", grossPesos: 500_000 },
-    { quarter: 4, date: "2025-12-15", grossPesos: 550_000 },
+  // whtCents is 5% of grossPesos*100, literal, hand-verified against §6
+  // Example A — do not compute. (Left as a literal-math cross-check of the
+  // tax engine's own applyBps(); routing it through applyBps() here would
+  // make that cross-check tautological.)
+  const quarters: Array<{ quarter: number; date: string; grossPesos: number; whtCents: number }> = [
+    { quarter: 1, date: "2025-03-15", grossPesos: 450_000, whtCents: 2_250_000 },
+    { quarter: 2, date: "2025-06-15", grossPesos: 600_000, whtCents: 3_000_000 },
+    { quarter: 3, date: "2025-09-15", grossPesos: 500_000, whtCents: 2_500_000 },
+    { quarter: 4, date: "2025-12-15", grossPesos: 550_000, whtCents: 2_750_000 },
   ];
 
   for (const q of quarters) {
     const grossCents = CENTS(q.grossPesos);
-    const whtCents = Math.round(grossCents * 0.05);
+    const whtCents = q.whtCents;
     const form2307 = await prisma.form2307.create({
       data: {
         clientId: client.id,
@@ -570,16 +574,19 @@ async function seedClientC(actorId: string) {
   const existingTx = await prisma.salesTransaction.findFirst({ where: { clientId: client.id } });
   if (existingTx) return;
 
-  const rows: Array<{ quarter: number; date: string; grossPesos: number }> = [
-    { quarter: 1, date: "2025-03-25", grossPesos: 200_000 },
-    { quarter: 2, date: "2025-06-25", grossPesos: 250_000 },
-    { quarter: 3, date: "2025-09-25", grossPesos: 250_000 },
-    { quarter: 4, date: "2025-12-20", grossPesos: 300_000 },
+  // whtCents is 10% of grossPesos*100, literal, hand-verified against §6
+  // Example A — do not compute. (See the Client A quarters comment above
+  // for why this stays a literal cross-check instead of applyBps().)
+  const rows: Array<{ quarter: number; date: string; grossPesos: number; whtCents: number }> = [
+    { quarter: 1, date: "2025-03-25", grossPesos: 200_000, whtCents: 2_000_000 },
+    { quarter: 2, date: "2025-06-25", grossPesos: 250_000, whtCents: 2_500_000 },
+    { quarter: 3, date: "2025-09-25", grossPesos: 250_000, whtCents: 2_500_000 },
+    { quarter: 4, date: "2025-12-20", grossPesos: 300_000, whtCents: 3_000_000 },
   ];
 
   for (const r of rows) {
     const grossCents = CENTS(r.grossPesos);
-    const whtCents = Math.round(grossCents * 0.1);
+    const whtCents = r.whtCents;
     const form2307 = await prisma.form2307.create({
       data: {
         clientId: client.id,
@@ -627,9 +634,11 @@ async function seedClientC(actorId: string) {
 
 /**
  * Hand-builds a frozen computationSnapshot JSON matching the shape
- * lib/tax/compute.ts's FilingComputationResult will produce (Phase 2).
- * Values are computed here by the same SPEC.md 3.2 formula, by hand,
- * since the real engine doesn't exist yet as of this seed revision.
+ * lib/tax/compute.ts's FilingComputationResult produces. incomeTaxDueCents
+ * is supplied by the caller as a literal, hand-verified against §6 Example
+ * A — do not compute it here. This snapshot stays an independent,
+ * literal-math cross-check of the real engine; routing it through the
+ * engine's own rate arithmetic would make that cross-check tautological.
  */
 function buildSnapshot(params: {
   formType: string;
@@ -637,13 +646,14 @@ function buildSnapshot(params: {
   cumulativeNonOperatingCents: number;
   allowableDeductionCents: number;
   incomeTaxRateBps: number;
+  incomeTaxDueCents: number;
   cumulativeCwtCents: number;
   priorPeriodPaymentsCents: number;
   priorYearExcessCreditCents: number;
 }) {
   const cumulativeGrossCents = params.cumulativeGrossSalesCents + params.cumulativeNonOperatingCents;
   const taxableBaseCents = Math.max(0, cumulativeGrossCents - params.allowableDeductionCents);
-  const incomeTaxDueCents = Math.round((taxableBaseCents * params.incomeTaxRateBps) / 10000);
+  const incomeTaxDueCents = params.incomeTaxDueCents;
   const rawPayable =
     incomeTaxDueCents -
     params.cumulativeCwtCents -
@@ -789,6 +799,11 @@ async function seedTY2026Cycle(actorId: string) {
     whtRateBps: number;
     q1GrossPesos: number;
     q2GrossPesos: number;
+    // literal, hand-verified against §6 Example A — do not compute.
+    q1WhtCents: number;
+    q2WhtCents: number;
+    q1IncomeTaxDueCents: number;
+    q2IncomeTaxDueCents: number;
     q2: {
       // How far Q2's workflow progressed before getting stuck / staying idle.
       doneThroughSequence: number;
@@ -812,6 +827,10 @@ async function seedTY2026Cycle(actorId: string) {
       whtRateBps: 500,
       q1GrossPesos: 450_000,
       q2GrossPesos: 600_000,
+      q1WhtCents: 2_250_000, // 5% of 450,000
+      q2WhtCents: 3_000_000, // 5% of 600,000
+      q1IncomeTaxDueCents: 1_600_000, // 8% of (450,000 - 250,000 deduction)
+      q2IncomeTaxDueCents: 6_400_000, // 8% of (1,050,000 cumulative - 250,000 deduction) — matches §6 Example A
       q2: {
         doneThroughSequence: 9, // filed, paid; waiting on BIR's TRRC (step 10)
         waitingAtStepCode: "RECEIVE_TRRC",
@@ -830,6 +849,10 @@ async function seedTY2026Cycle(actorId: string) {
       whtRateBps: 0,
       q1GrossPesos: 150_000,
       q2GrossPesos: 180_000,
+      q1WhtCents: 0, // no withholding — no 2307
+      q2WhtCents: 0,
+      q1IncomeTaxDueCents: 0, // taxable base is MAX(0, 150,000 - 250,000 deduction) = 0
+      q2IncomeTaxDueCents: 640_000, // 8% of (330,000 cumulative - 250,000 deduction)
       q2: {
         doneThroughSequence: 3, // computation prepared, but never filed — stalled, no one to follow up with
         filed: false,
@@ -845,6 +868,10 @@ async function seedTY2026Cycle(actorId: string) {
       whtRateBps: 1000,
       q1GrossPesos: 220_000,
       q2GrossPesos: 260_000,
+      q1WhtCents: 2_200_000, // 10% of 220,000
+      q2WhtCents: 2_600_000, // 10% of 260,000
+      q1IncomeTaxDueCents: 1_760_000, // 8% of 220,000 — mixed income earner, no deduction (SPEC.md 3.2)
+      q2IncomeTaxDueCents: 3_840_000, // 8% of (480,000 cumulative) — mixed income earner, no deduction
       q2: {
         doneThroughSequence: 13, // filed; TRRC and SAWT ack received; waiting on SAWT validation (step 14)
         waitingAtStepCode: "SAWT_VALIDATION",
@@ -878,7 +905,7 @@ async function seedTY2026Cycle(actorId: string) {
     });
     if (!existingQ1) {
       const q1GrossCents = CENTS(cfg.q1GrossPesos);
-      const q1WhtCents = cfg.whtRateBps > 0 ? Math.round((q1GrossCents * cfg.whtRateBps) / 10000) : 0;
+      const q1WhtCents = cfg.q1WhtCents;
 
       let q1Form2307Id: string | undefined;
       if (cfg.requiresSawt) {
@@ -929,6 +956,7 @@ async function seedTY2026Cycle(actorId: string) {
         cumulativeNonOperatingCents: 0,
         allowableDeductionCents,
         incomeTaxRateBps: 800,
+        incomeTaxDueCents: cfg.q1IncomeTaxDueCents,
         cumulativeCwtCents: q1WhtCents,
         priorPeriodPaymentsCents: 0,
         priorYearExcessCreditCents: 0,
@@ -967,8 +995,8 @@ async function seedTY2026Cycle(actorId: string) {
     if (!existingQ2) {
       const q1GrossCents = CENTS(cfg.q1GrossPesos);
       const q2GrossCents = CENTS(cfg.q2GrossPesos);
-      const q2WhtCents = cfg.whtRateBps > 0 ? Math.round((q2GrossCents * cfg.whtRateBps) / 10000) : 0;
-      const q1WhtCents = cfg.whtRateBps > 0 ? Math.round((q1GrossCents * cfg.whtRateBps) / 10000) : 0;
+      const q2WhtCents = cfg.q2WhtCents;
+      const q1WhtCents = cfg.q1WhtCents;
       const cumGrossQ2 = q1GrossCents + q2GrossCents;
       const cumCwtQ2 = q1WhtCents + q2WhtCents;
 
@@ -1022,6 +1050,7 @@ async function seedTY2026Cycle(actorId: string) {
         cumulativeNonOperatingCents: 0,
         allowableDeductionCents,
         incomeTaxRateBps: 800,
+        incomeTaxDueCents: cfg.q1IncomeTaxDueCents,
         cumulativeCwtCents: q1WhtCents,
         priorPeriodPaymentsCents: 0,
         priorYearExcessCreditCents: 0,
@@ -1033,6 +1062,7 @@ async function seedTY2026Cycle(actorId: string) {
         cumulativeNonOperatingCents: 0,
         allowableDeductionCents,
         incomeTaxRateBps: 800,
+        incomeTaxDueCents: cfg.q2IncomeTaxDueCents,
         cumulativeCwtCents: cumCwtQ2,
         priorPeriodPaymentsCents: q1Snapshot.taxPayableCents,
         priorYearExcessCreditCents: 0,
