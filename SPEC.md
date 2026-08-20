@@ -226,6 +226,7 @@ requiresSawt          boolean, derived: any Form2307 in period
 computationSnapshot   JSON   -- FROZEN at time of filing
 filedAt, filingReferenceNumber
 amountPaidCents, paymentDate, paymentChannel
+receiptsAcknowledgedAt, receiptsAcknowledgedNote   -- step 3 prompt, added 2026-08-20 (§7.1)
 notes
 ```
 
@@ -324,6 +325,8 @@ Seeded as data in `WorkflowStepTemplate`, instantiated when a `Filing` is create
 
 **Steps 11–14 are conditional** on `requiresSawt`. When false they are auto-set to `NA` and hidden from the active view — but remain visible in a "show skipped" toggle so nothing silently disappears.
 
+**Step 3 (`PREPARE_RETURN`), added 2026-08-20:** since transaction entry is now driven by the client's 2307s (the 2307 is the source document for the transaction row, not an independent check on it — see the transaction-entry workflow change), the computation sheet can be internally consistent while still missing receipts that never had a 2307 in the first place. Step 3 therefore prompts: *"Have you confirmed with the client that all receipts for this quarter are accounted for, including any without a 2307?"* The acknowledgement is recorded on the `Filing` with a timestamp (`receiptsAcknowledgedAt`, `receiptsAcknowledgedNote`) — a one-time confirmation, not a per-transaction check, and not itself a doc slot.
+
 Step 16's package contents (filed form, proof of payment, TRRC, validation email) are **assembled by the system from the documents already saved against steps 7, 9, 10, and 14**. If any is missing, step 16 cannot be marked DONE — it displays exactly which document is absent. This is the check that closes the loop on "what have I not saved yet."
 
 ### 7.2 Rules
@@ -371,8 +374,11 @@ Export as XLSX (for loose-leaf submission) and print-to-PDF-friendly HTML. Inclu
 
 ## 10. SAWT / Alphalist Module
 
-- Register all `Form2307` records for a period; reconcile against `SalesTransaction` withholding.
-- **Reconciliation report (critical):** total CWT claimed on the return **must equal** the sum of 2307s included in the SAWT batch. Display three figures side by side — CWT per transactions, CWT per 2307 certificates, CWT claimed on the filing — and block step 11 with a loud variance warning if they disagree. Show the specific certificates or transactions causing the difference.
+- Register all `Form2307` records for a period.
+- **Reconciliation report, revised (2026-08-20):** with transaction entry driven by 2307s (§7.1 step 1 / the transaction record's `form2307Id`), "transaction CWT vs certificate CWT" is no longer a meaningful comparison — one derives from the other by construction, so a hand-entry-vs-hand-entry cross-check would just be comparing a number against itself. Replaced with three checks that catch real gaps instead:
+  1. **Transactions with no linked `form2307Id`** — listed individually, with count and total. This is the real gap: a receipt that might be missing its certificate, or genuinely has none.
+  2. **Certificates received for the period not yet converted into a transaction** — listed individually, with count and total.
+  3. **Total CWT claimed on the filing vs. sum of certificates in the SAWT batch** — kept unchanged. Still a genuine cross-check against what actually gets filed, since the SAWT batch is an independent downstream artifact, not derived from the same entry action as the transaction.
 - Produce a **keying worksheet** (screen + XLSX) with columns in the exact field order of the Alphalist Data Entry Module, so I can key it in quickly and check it off row by row. Include a running row count and total to verify against the module's own totals after entry.
 - Track the batch through `Generated → Emailed → Acknowledged → Validated`, with a document slot at each stage, wired to steps 11–14.
 

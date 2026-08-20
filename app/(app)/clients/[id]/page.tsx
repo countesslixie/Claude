@@ -40,7 +40,10 @@ export default async function ClientDetailPage({
   const { id } = await params;
   const client = await prisma.client.findUnique({
     where: { id },
-    include: { taxYears: { orderBy: { taxableYear: "desc" } } },
+    include: {
+      taxYears: { orderBy: { taxableYear: "desc" } },
+      filings: { orderBy: [{ taxableYear: "desc" }, { period: "asc" }] },
+    },
   });
   if (!client) notFound();
 
@@ -62,6 +65,16 @@ export default async function ClientDetailPage({
           <Link href="/clients">
             <Button variant="secondary" size="sm">
               Back to list
+            </Button>
+          </Link>
+          <Link href={`/clients/${client.id}/transactions`}>
+            <Button variant="secondary" size="sm">
+              Transactions
+            </Button>
+          </Link>
+          <Link href={`/clients/${client.id}/form-2307`}>
+            <Button variant="secondary" size="sm">
+              Form 2307s
             </Button>
           </Link>
           <Link href={`/clients/${client.id}/edit`}>
@@ -174,6 +187,59 @@ export default async function ClientDetailPage({
                           className="text-sm text-slate-600 hover:underline"
                         >
                           Edit
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </CardBody>
+        </Card>
+
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <h2 className="text-sm font-semibold text-slate-900">Filings</h2>
+          </CardHeader>
+          <CardBody>
+            {client.filings.length === 0 ? (
+              <p className="text-sm text-slate-400">No filings yet.</p>
+            ) : (
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Year</th>
+                    <th>Period</th>
+                    <th>Form</th>
+                    <th>Due</th>
+                    <th>Status</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {client.filings.map((f) => (
+                    <tr key={f.id}>
+                      <td>{f.taxableYear}</td>
+                      <td>{f.period}</td>
+                      <td>{f.formType}</td>
+                      <td>{formatManilaDate(f.adjustedDueDate)}</td>
+                      <td>
+                        {f.status === "COMPLETE" ? (
+                          <StatusBadge tone="done">{f.status}</StatusBadge>
+                        ) : f.status === "BLOCKED" ? (
+                          <StatusBadge tone="overdue">{f.status}</StatusBadge>
+                        ) : f.status === "WAITING_BIR" || f.status === "WAITING_CLIENT" ? (
+                          <StatusBadge tone="waiting">{f.status}</StatusBadge>
+                        ) : (
+                          <StatusBadge tone="pending">{f.status}</StatusBadge>
+                        )}
+                      </td>
+                      <td>
+                        <Link
+                          href={`/clients/${client.id}/filings/${f.id}`}
+                          className="text-sm text-slate-600 hover:underline"
+                        >
+                          Open
                         </Link>
                       </td>
                     </tr>

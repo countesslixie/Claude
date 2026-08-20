@@ -8,3 +8,28 @@ import type { Period } from "./types";
  * to construct by accident (SPEC.md 16 item 6).
  */
 export const ALL_PERIODS: readonly Period[] = ["Q1", "Q2", "Q3", "ANNUAL"] as const;
+
+/**
+ * The last calendar day (UTC midnight) of a period, used as the cutoff
+ * for cumulative "year-to-date through this period" aggregation. Pure
+ * and deterministic — no timezone conversion here (that happens once, at
+ * the display/input boundary, in lib/dates.ts).
+ */
+export function periodEndDate(taxableYear: number, period: Period): Date {
+  switch (period) {
+    case "Q1":
+      return new Date(Date.UTC(taxableYear, 2, 31));
+    case "Q2":
+      return new Date(Date.UTC(taxableYear, 5, 30));
+    case "Q3":
+      return new Date(Date.UTC(taxableYear, 8, 30));
+    case "ANNUAL":
+      return new Date(Date.UTC(taxableYear, 11, 31));
+  }
+}
+
+/** The periods strictly before `period` within the same taxable year. */
+export function priorPeriodsOf(period: Period): readonly Period[] {
+  const index = ALL_PERIODS.indexOf(period);
+  return ALL_PERIODS.slice(0, index);
+}

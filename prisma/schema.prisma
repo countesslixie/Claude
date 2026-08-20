@@ -301,7 +301,10 @@ model SalesTransaction {
 
   @@index([clientId, taxableYear, quarter])
   @@index([clientId, transactionDate])
-  @@unique([clientId, orNumber])
+  // Not @@unique: a duplicate OR number for the same client is a real
+  // possibility (typo, legitimate re-use) and should warn, not block
+  // entry — enforced at the application layer, not the database.
+  @@index([clientId, orNumber])
 }
 
 model Form2307 {
@@ -372,6 +375,12 @@ model Filing {
   amountPaidCents Int?
   paymentDate     DateTime?
   paymentChannel  String?
+
+  // PREPARE_RETURN step prompt: "Have you confirmed with the client that
+  // all receipts for this quarter are accounted for, including any
+  // without a 2307?" — recorded once, with who/when (SPEC.md 7.1 step 3).
+  receiptsAcknowledgedAt   DateTime?
+  receiptsAcknowledgedNote String?
 
   notes String?
 
