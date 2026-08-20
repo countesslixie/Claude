@@ -43,7 +43,7 @@ Secondary goals: replace the scattered per-client Excel files with one source of
 
 ### Out of scope (MVP)
 - Direct integration with eBIRForms, eFPS, eAFS, or BIR email systems. **There is no public API. Every BIR interaction stays manual — the system tracks and stores, it does not transmit.** Do not scaffold fake integrations.
-- Automatic .DAT file generation for the Alphalist Data Entry Module. MVP produces a **keying worksheet** that mirrors the module's field order so manual entry is fast and error-free. (See §10 and Open Question 5.)
+- Automatic .DAT file generation for the Alphalist Data Entry Module. MVP produces a **keying worksheet** that mirrors the module's field order so manual entry is fast and error-free. (See §10 and Open Question 4.)
 - Payroll, VAT, percentage tax returns, expanded withholding as a *withholding agent*
 - Client-facing portal or login
 - Automatic email sending or inbox scraping (Phase 5 candidate)
@@ -96,19 +96,23 @@ Continuously track `cumulativeGross` against ₱3,000,000. Emit escalating warni
 - Typical rate on professional fees to an individual payee: **5%** where the payee has furnished a sworn declaration that gross income will not exceed ₱3,000,000, otherwise **10%**. Store `withholdingRate` and `atcCode` per certificate; never infer the rate.
 - Seed an **editable ATC reference table** (code, description, rate, payee type). Seed with the common professional-fee and contractor codes, each marked `verifiedAgainstIssuance: false` so I confirm them against the current BIR list before first live use. **Do not let the agent invent ATC codes it is unsure of** — leave the table sparse and editable rather than plausibly wrong.
 - Certificate status lifecycle: `Received → Recorded → ClaimedOnReturn → IncludedInSAWT → Acknowledged → Validated`.
+- **CWT cutoff rule.** A certificate is claimed in the period whose *cutoff* it falls within — not the period whose calendar dates it economically covers. The cutoff is resolved per filing (highest priority first): a manual override, if the bookkeeper has set one; otherwise the filing's actual `filedAt`, once filed; otherwise "today," for a live preview of an unfiled filing. Certificates routinely arrive weeks after the period they cover closes (e.g. a Q2 certificate arriving in early August, after the June 30 period end), so the period's own end date is never used as the cutoff. **The bookkeeper does not file amended returns** when a certificate arrives late — it is simply claimed on whichever filing is open (by cutoff) when it arrives.
 
 ### 3.6 Deadlines
 
 | Return | Period | Statutory due date |
 |---|---|---|
-| 1701Q | Q1 (Jan–Mar) | April 15 *(configurable — see Open Question 1)* |
+| 1701Q | Q1 (Jan–Mar) | May 15 |
 | 1701Q | Q2 (Apr–Jun) | August 15 |
 | 1701Q | Q3 (Jul–Sep) | November 15 |
 | 1701A / 1701 | Annual | April 15 of the following year |
 
+Each quarterly period runs the full calendar quarter (Q1 Jan 1–Mar 31, Q2 Apr 1–Jun 30, Q3 Jul 1–Sep 30); the annual period is the full taxable year, Jan 1–Dec 31 — not just Q4.
+
 - **There is no Q4 quarterly return.** The annual return covers the fourth quarter. Hardcoding a Q4 filing is a bug.
 - **Business-day shifting:** if a due date falls on a Saturday, Sunday, or a holiday, it moves to the next working day. Implement against an **editable `Holiday` table** (regular + special non-working, national and local). Seed the current and next year; surface an admin screen to maintain it. Never compute holidays algorithmically.
-- SAWT submission deadline and eAFS submission deadline are **configurable offsets** per `TaxRuleSet`, defaulting to *same day as the return deadline* and *15 days from date of filing* respectively.
+- SAWT submission deadline is a **configurable offset** per `TaxRuleSet`, defaulting to *same day as the return deadline*. eAFS submission deadline is **derived**, never stored as a plain date: `eafsDueDate = (filedAt is null OR filedAt ≤ adjustedDueDate ? adjustedDueDate : filedAt) + eafsDeadlineOffsetDays` (offset configurable per `TaxRuleSet`, defaulting to 15 days), then business-day shifted. **Filing early never moves the eAFS deadline earlier** — only filing late (after the due date) pushes it out further, counted from the actual filing date instead of the due date.
+- **Working calendar (practice targets, distinct from the statutory deadline above).** Per filing: `certificatesExpectedBy` (when the bookkeeper expects to have all certificates for the period in hand) and `internalFilingTarget` (when the bookkeeper aims to file), both independently editable and never authoritative — the statutory/adjusted due date above always governs. Actual practice for quarterly returns: `internalFilingTarget` matches the statutory due date, and `certificatesExpectedBy` is 10 days before it. The annual return follows a longer-lead pattern instead: `certificatesExpectedBy` Feb 15, `internalFilingTarget` Mar 31 (of the following year), reflecting the larger scope of the alphalist/SAWT compilation involved. The `RECEIVE_2307` workflow step's waiting clock starts from `certificatesExpectedBy`, not the period's end date — certificates are often not even due from the payor until weeks after the period closes.
 - All date arithmetic uses timezone **Asia/Manila**. Store timestamps as UTC ISO strings; convert at the boundary. Never use the host's local timezone.
 
 ### 3.7 Late filing exposure (informational only)
@@ -491,10 +495,11 @@ Phase 3 is the reason this system exists. If time is short, cut Phase 4 scope, n
 
 The agent must surface these in the UI as configurable settings rather than baking them in, and must not silently pick a side.
 
-1. **Q1 1701Q due date.** Set as a `TaxRuleSet` value, not a constant. I will confirm the correct date against the current BIR issuance before live use.
-2. **Revenue recognition basis.** Assumed *collection* basis, consistent with maintaining a Cash Receipts Journal. Recent legislation has shifted services toward recognition on billing. Provide a per-client `recognitionBasis` toggle (`COLLECTION` | `BILLING`); if `BILLING`, additionally track billed-but-uncollected amounts. Default `COLLECTION` for now.
-3. **eAFS on quarterly filings.** Step 15 is included for all periods per my current practice, but is marked skippable per filing.
-4. **SAWT deadline offset.** Defaulted to the return deadline; configurable.
-5. **.DAT file generation.** Out of scope — the module's format is proprietary and version-sensitive, and a malformed file gets rejected by BIR. Worksheet-assisted manual entry only.
-6. **ATC codes.** Seeded sparse and unverified. I must confirm each against the current BIR list before first live use.
-7. All computed figures are **preparation aids**. The filed return and BIR's own assessment govern. Every computation sheet must carry that statement in the footer.
+1. **Revenue recognition basis.** Assumed *collection* basis, consistent with maintaining a Cash Receipts Journal. Recent legislation has shifted services toward recognition on billing. Provide a per-client `recognitionBasis` toggle (`COLLECTION` | `BILLING`); if `BILLING`, additionally track billed-but-uncollected amounts. Default `COLLECTION` for now.
+2. **eAFS on quarterly filings.** Step 15 is included for all periods per my current practice, but is marked skippable per filing.
+3. **SAWT deadline offset.** Defaulted to the return deadline; configurable.
+4. **.DAT file generation.** Out of scope — the module's format is proprietary and version-sensitive, and a malformed file gets rejected by BIR. Worksheet-assisted manual entry only.
+5. **ATC codes.** Seeded sparse and unverified. I must confirm each against the current BIR list before first live use.
+6. All computed figures are **preparation aids**. The filed return and BIR's own assessment govern. Every computation sheet must carry that statement in the footer.
+
+*(Formerly item 1, "Q1 1701Q due date," is resolved: May 15, per §3.6 — TaxRuleSet remains the source of truth, so it stays configurable, but it is no longer an open question.)*

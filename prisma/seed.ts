@@ -115,7 +115,7 @@ async function seedHolidays(actorId: string) {
 
 async function seedAtcCodes() {
   const disclaimer =
-    "Confirm this code and rate against the current BIR Alphanumeric Tax Code (ATC) list before live use (SPEC.md 3.5, 17.6).";
+    "Confirm this code and rate against the current BIR Alphanumeric Tax Code (ATC) list before live use (SPEC.md 3.5, 17.5).";
   await prisma.atcCode.upsert({
     where: { code: "WI010" },
     update: {},
@@ -720,7 +720,7 @@ function buildSnapshot(params: {
       {
         label: overpaymentCents > 0 ? "Overpayment" : "Tax payable",
         amountCents: overpaymentCents > 0 ? overpaymentCents : taxPayableCents,
-        sourceNote: "This is a preparation aid. The filed return and BIR's own assessment govern (SPEC.md 17.7).",
+        sourceNote: "This is a preparation aid. The filed return and BIR's own assessment govern (SPEC.md 17.6).",
       },
     ],
   };

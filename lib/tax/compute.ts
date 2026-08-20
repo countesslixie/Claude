@@ -97,7 +97,7 @@ export function computeFiling(input: FilingComputationInput): FilingComputationR
     {
       label: overpaymentCents > 0 ? "Overpayment" : "Tax payable",
       amountCents: overpaymentCents > 0 ? overpaymentCents : taxPayableCents,
-      sourceNote: "This is a preparation aid. The filed return and BIR's own assessment govern (SPEC.md 17.7).",
+      sourceNote: "This is a preparation aid. The filed return and BIR's own assessment govern (SPEC.md 17.6).",
     },
   ];
 
