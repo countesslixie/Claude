@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { computeFiling } from "@/lib/tax/compute";
-import { sumCwtThroughPeriod } from "@/lib/tax/cwt";
+import {
+  sumCwtThroughPeriod,
+  assertCertificateClaimable,
+  CertificateAlreadyClaimedError,
+} from "@/lib/tax/cwt";
 import { ALL_PERIODS } from "@/lib/tax/periods";
 import type { FilingComputationInput, TaxRuleSetForCompute } from "@/lib/tax/types";
 
@@ -243,8 +247,8 @@ describe("SPEC.md 16 item 4 — negative payable renders as overpayment, never n
 describe("SPEC.md 16 item 5 — cumulative CWT never double-counts a certificate across periods", () => {
   it("summing through Q2 includes the Q1 certificate once, not twice", () => {
     const certificates = [
-      { taxWithheldCents: P(1_000), dateReceived: new Date("2026-02-15"), status: "RECORDED" as const },
-      { taxWithheldCents: P(2_000), dateReceived: new Date("2026-05-15"), status: "RECORDED" as const },
+      { id: "c1", taxWithheldCents: P(1_000), dateReceived: new Date("2026-02-15"), status: "RECORDED" as const },
+      { id: "c2", taxWithheldCents: P(2_000), dateReceived: new Date("2026-05-15"), status: "RECORDED" as const },
     ];
     const throughQ1 = sumCwtThroughPeriod(certificates, new Date("2026-03-31"));
     const throughQ2 = sumCwtThroughPeriod(certificates, new Date("2026-06-30"));
@@ -254,12 +258,67 @@ describe("SPEC.md 16 item 5 — cumulative CWT never double-counts a certificate
 
   it("only RECORDED/CLAIMED_ON_RETURN certificates count (per SPEC.md 3.2)", () => {
     const certificates = [
-      { taxWithheldCents: P(1_000), dateReceived: new Date("2026-01-10"), status: "RECEIVED" as const },
-      { taxWithheldCents: P(2_000), dateReceived: new Date("2026-01-15"), status: "RECORDED" as const },
-      { taxWithheldCents: P(3_000), dateReceived: new Date("2026-01-20"), status: "CLAIMED_ON_RETURN" as const },
+      { id: "c1", taxWithheldCents: P(1_000), dateReceived: new Date("2026-01-10"), status: "RECEIVED" as const },
+      { id: "c2", taxWithheldCents: P(2_000), dateReceived: new Date("2026-01-15"), status: "RECORDED" as const },
+      { id: "c3", taxWithheldCents: P(3_000), dateReceived: new Date("2026-01-20"), status: "CLAIMED_ON_RETURN" as const },
     ];
     const total = sumCwtThroughPeriod(certificates, new Date("2026-03-31"));
     expect(total).toBe(P(5_000)); // RECEIVED (not yet recorded) excluded
+  });
+
+  it("a duplicate array entry (same id twice) is only summed once", () => {
+    const cert = { id: "c1", taxWithheldCents: P(1_000), dateReceived: new Date("2026-01-10"), status: "RECORDED" as const };
+    const total = sumCwtThroughPeriod([cert, { ...cert }], new Date("2026-03-31"));
+    expect(total).toBe(P(1_000)); // not 2,000
+  });
+
+  it("a certificate arriving late (dateReceived in Q3) is excluded from a fresh Q1 recompute and included in Q3 exactly once", () => {
+    // Economically a Q1 certificate, but not physically received until August.
+    const lateArrivingQ1Cert = {
+      id: "late-q1",
+      taxWithheldCents: P(5_000),
+      dateReceived: new Date("2026-08-05"),
+      status: "RECORDED" as const,
+    };
+    const q3OnlyCert = {
+      id: "q3-cert",
+      taxWithheldCents: P(2_000),
+      dateReceived: new Date("2026-08-20"),
+      status: "RECORDED" as const,
+    };
+    const allCerts = [lateArrivingQ1Cert, q3OnlyCert];
+
+    // Recomputing Q1 today, with the late certificate now sitting in the
+    // system, still excludes it — filtering is on dateReceived, a fixed
+    // fact, not "as of when you ask." Q1's frozen snapshot is never
+    // retroactively altered by this recompute.
+    const q1Recompute = sumCwtThroughPeriod(allCerts, new Date("2026-03-31"));
+    expect(q1Recompute).toBe(0);
+
+    // Q3's cumulative includes it exactly once, in the period it was
+    // actually recorded.
+    const q3Cumulative = sumCwtThroughPeriod(allCerts, new Date("2026-09-30"));
+    expect(q3Cumulative).toBe(P(7_000));
+  });
+});
+
+describe("assertCertificateClaimable — structural guard against re-claiming a certificate", () => {
+  it("allows claiming an unclaimed certificate", () => {
+    expect(() =>
+      assertCertificateClaimable({ id: "c1", claimedOnFilingId: null }, "filing-a"),
+    ).not.toThrow();
+  });
+
+  it("is a no-op when claiming onto the same filing it's already on", () => {
+    expect(() =>
+      assertCertificateClaimable({ id: "c1", claimedOnFilingId: "filing-a" }, "filing-a"),
+    ).not.toThrow();
+  });
+
+  it("throws when a certificate already claimed on one filing is claimed onto a different one", () => {
+    expect(() =>
+      assertCertificateClaimable({ id: "c1", claimedOnFilingId: "filing-a" }, "filing-b"),
+    ).toThrow(CertificateAlreadyClaimedError);
   });
 });
 
