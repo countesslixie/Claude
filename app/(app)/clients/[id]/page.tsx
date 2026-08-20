@@ -129,12 +129,16 @@ export default async function ClientDetailPage({
         <Card className="lg:col-span-2">
           <CardHeader className="flex items-center justify-between">
             <h2 className="text-sm font-semibold text-slate-900">Taxable years</h2>
+            <Link href={`/clients/${client.id}/tax-years/new`}>
+              <Button variant="secondary" size="sm">
+                New tax year
+              </Button>
+            </Link>
           </CardHeader>
           <CardBody>
             {client.taxYears.length === 0 ? (
               <p className="text-sm text-slate-400">
-                No taxable years recorded yet. These are created when a filing cycle is opened
-                (Phase 3).
+                No taxable years recorded yet.
               </p>
             ) : (
               <table className="data-table">
@@ -145,6 +149,7 @@ export default async function ClientDetailPage({
                     <th>Election status</th>
                     <th>Prior-year excess credit</th>
                     <th>Threshold breached</th>
+                    <th></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -163,6 +168,14 @@ export default async function ClientDetailPage({
                       </td>
                       <td>{(ty.priorYearExcessCreditCents / 100).toFixed(2)}</td>
                       <td>{ty.thresholdBreachedAt ? formatManilaDate(ty.thresholdBreachedAt) : "—"}</td>
+                      <td>
+                        <Link
+                          href={`/clients/${client.id}/tax-years/${ty.id}/edit`}
+                          className="text-sm text-slate-600 hover:underline"
+                        >
+                          Edit
+                        </Link>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
