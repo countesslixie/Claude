@@ -10,7 +10,8 @@
     "test": "vitest run",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:seed": "tsx prisma/seed.ts",
+    "verify:real": "tsx scripts/verify-real.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

@@ -45,3 +45,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# real client figures used for manual verification — never committed
+/scripts/real-fixture.local.ts
