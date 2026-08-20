@@ -362,7 +362,14 @@ model Filing {
   formType    FormType
 
   statutoryDueDate DateTime
-  adjustedDueDate  DateTime // after holiday/weekend shift
+  adjustedDueDate  DateTime // after holiday/weekend shift — the authoritative legal deadline
+
+  // Working calendar (SPEC.md 3.6, Phase 2b P7) — the bookkeeper's own
+  // practice targets, distinct from and editable independent of the
+  // statutory/adjusted due date above. eAFS is NOT stored here; it is
+  // always derived via lib/tax/deadlines.ts's eafsDueDate() (Phase 2b P6).
+  certificatesExpectedBy DateTime?
+  internalFilingTarget   DateTime?
 
   status        FilingStatus @default(NOT_STARTED)
   requiresSawt  Boolean      @default(false) // derived: any Form2307 in period

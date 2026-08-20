@@ -176,6 +176,14 @@ const WORKFLOW_STEP_TEMPLATE: Array<{
   requiredDocSlots: Array<{ slotCode: string; label: string; required: boolean; acceptedTypes: string[] }>;
 }> = [
   {
+    // Phase 2b P7: once a real workflow engine sets waitingSince for this
+    // step automatically (Phase 3 — no such automation exists yet; today
+    // waitingSince is only ever hand-set here in the seed), it must anchor
+    // to the filing's certificatesExpectedBy, not the period's end date.
+    // Certificates routinely aren't even due from the payor until weeks
+    // after the period closes (SPEC.md 3.5, 3.6) — starting this clock at
+    // period end would flag the bookkeeper as "waiting" long before a
+    // certificate could reasonably have arrived.
     stepCode: "RECEIVE_2307",
     sequence: 1,
     title: "Receive Form 2307 from client",
@@ -790,6 +798,23 @@ async function seedTY2026Cycle(actorId: string) {
     Q3: { statutory: "2026-11-15", adjusted: "2026-11-16" },
   };
 
+  // Working calendar (SPEC.md 3.6, Phase 2b P7) — the bookkeeper's own
+  // practice targets, distinct from and editable independent of the
+  // statutory/adjusted due dates above. Actual practice for quarterly
+  // returns: internalFilingTarget matches the statutory due date;
+  // certificatesExpectedBy is 10 days before it, giving a window to chase
+  // late certificates before the filing target. Q2's figures (Aug 5 / Aug
+  // 15) are given directly from practice; Q1 and Q3 are derived on the
+  // same pattern. (The ANNUAL return follows a different, longer-lead
+  // pattern — certificatesExpectedBy Feb 15, internalFilingTarget Mar 31,
+  // of the following year — but no ANNUAL filing is seeded in this demo
+  // cycle, so it isn't instantiated here.)
+  const WORKING_CALENDAR = {
+    Q1: { certificatesExpectedBy: "2026-05-05", internalFilingTarget: "2026-05-15" },
+    Q2: { certificatesExpectedBy: "2026-08-05", internalFilingTarget: "2026-08-15" },
+    Q3: { certificatesExpectedBy: "2026-11-05", internalFilingTarget: "2026-11-15" },
+  };
+
   type ClientCycleConfig = {
     clientCode: string;
     taxpayerType: "PURELY_SELF_EMPLOYED" | "MIXED_INCOME";
@@ -971,6 +996,8 @@ async function seedTY2026Cycle(actorId: string) {
           formType: "F1701Q",
           statutoryDueDate: new Date(`${DUE.Q1.statutory}T00:00:00.000Z`),
           adjustedDueDate: new Date(`${DUE.Q1.adjusted}T00:00:00.000Z`),
+          certificatesExpectedBy: new Date(`${WORKING_CALENDAR.Q1.certificatesExpectedBy}T00:00:00.000Z`),
+          internalFilingTarget: new Date(`${WORKING_CALENDAR.Q1.internalFilingTarget}T00:00:00.000Z`),
           status: "COMPLETE",
           requiresSawt: cfg.requiresSawt,
           computationSnapshot: JSON.stringify(q1Snapshot),
@@ -1081,6 +1108,8 @@ async function seedTY2026Cycle(actorId: string) {
           formType: "F1701Q",
           statutoryDueDate: new Date(`${DUE.Q2.statutory}T00:00:00.000Z`),
           adjustedDueDate: new Date(`${DUE.Q2.adjusted}T00:00:00.000Z`),
+          certificatesExpectedBy: new Date(`${WORKING_CALENDAR.Q2.certificatesExpectedBy}T00:00:00.000Z`),
+          internalFilingTarget: new Date(`${WORKING_CALENDAR.Q2.internalFilingTarget}T00:00:00.000Z`),
           status: cfg.q2.waitingAtStepCode ? "WAITING_BIR" : "BLOCKED",
           requiresSawt: cfg.requiresSawt,
           computationSnapshot: cfg.q2.filed ? JSON.stringify(q2Snapshot) : undefined,
@@ -1118,6 +1147,8 @@ async function seedTY2026Cycle(actorId: string) {
           formType: "F1701Q",
           statutoryDueDate: new Date(`${DUE.Q3.statutory}T00:00:00.000Z`),
           adjustedDueDate: new Date(`${DUE.Q3.adjusted}T00:00:00.000Z`),
+          certificatesExpectedBy: new Date(`${WORKING_CALENDAR.Q3.certificatesExpectedBy}T00:00:00.000Z`),
+          internalFilingTarget: new Date(`${WORKING_CALENDAR.Q3.internalFilingTarget}T00:00:00.000Z`),
           status: "NOT_STARTED",
           requiresSawt: cfg.requiresSawt,
           actorId,

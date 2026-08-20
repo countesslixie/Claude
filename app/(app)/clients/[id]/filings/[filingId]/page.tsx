@@ -77,6 +77,13 @@ export default async function FilingDetailPage({
             {filing.statutoryDueDate.getTime() !== filing.adjustedDueDate.getTime() &&
               ` (statutory ${formatManilaDate(filing.statutoryDueDate)}, shifted for weekend/holiday)`}
           </p>
+          {(filing.certificatesExpectedBy || filing.internalFilingTarget) && (
+            <p className="text-xs text-slate-400">
+              Working calendar — certificates expected by {formatManilaDate(filing.certificatesExpectedBy)},
+              filing target {formatManilaDate(filing.internalFilingTarget)} (practice targets, not the
+              statutory deadline above)
+            </p>
+          )}
         </div>
         <Link href={`/clients/${id}`}>
           <Button variant="secondary" size="sm">
