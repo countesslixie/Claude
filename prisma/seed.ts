@@ -58,7 +58,7 @@ async function seedTaxRuleSets(actorId: string) {
         incomeTaxRateBps: 800, // 8.00% — SPEC.md 3.2
         vatThresholdCents: CENTS(3_000_000), // SPEC.md 3.1
         allowableDeductionCents: CENTS(250_000), // SPEC.md 3.2
-        q1DueMonthDay: "04-15",
+        q1DueMonthDay: "05-15", // resolved, SPEC.md 3.6 (formerly Open Question 1)
         q2DueMonthDay: "08-15",
         q3DueMonthDay: "11-15",
         annualDueMonthDay: "04-15", // of the following year
@@ -68,7 +68,7 @@ async function seedTaxRuleSets(actorId: string) {
         interestRateBpsPerAnnum: null,
         compromisePenaltySchedule: undefined,
         notes:
-          "Q1 due date and late-filing rates are unconfirmed placeholders — verify against the current BIR issuance before live use (SPEC.md Open Question 1, section 3.7).",
+          "Late-filing rates (surcharge/interest/compromise) are unconfirmed placeholders — verify against the current BIR issuance before live use (SPEC.md 3.7).",
         actorId,
       },
     });
@@ -777,14 +777,15 @@ async function instantiateWorkflowSteps(
 async function seedTY2026Cycle(actorId: string) {
   const nowManila = DateTime.now().setZone(MANILA_ZONE);
 
-  // Statutory due dates from the seeded TY2026 TaxRuleSet (04-15/08-15/11-15),
+  // Statutory due dates from the seeded TY2026 TaxRuleSet (05-15/08-15/11-15,
+  // per SPEC.md 3.6 — Q1 resolved to May 15, formerly Open Question 1),
   // business-day-shifted by hand against the seeded Holiday table — never
   // computed algorithmically (SPEC.md 3.6). Verified for TY2026:
-  //   Apr 15, 2026 = Wednesday -> no shift
-  //   Aug 15, 2026 = Saturday  -> shifts to Mon Aug 17, 2026
-  //   Nov 15, 2026 = Sunday    -> shifts to Mon Nov 16, 2026
+  //   May 15, 2026 = Friday   -> no shift
+  //   Aug 15, 2026 = Saturday -> shifts to Mon Aug 17, 2026
+  //   Nov 15, 2026 = Sunday   -> shifts to Mon Nov 16, 2026
   const DUE = {
-    Q1: { statutory: "2026-04-15", adjusted: "2026-04-15" },
+    Q1: { statutory: "2026-05-15", adjusted: "2026-05-15" },
     Q2: { statutory: "2026-08-15", adjusted: "2026-08-17" },
     Q3: { statutory: "2026-11-15", adjusted: "2026-11-16" },
   };
