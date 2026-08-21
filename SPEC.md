@@ -267,7 +267,7 @@ uploadedAt, actorId, notes
 ```
 
 ### Supporting tables
-`JournalEntry` + `JournalEntryLine` (for manual/adjusting entries and the General Journal), `ChartOfAccounts`, `Holiday`, `TaxRuleSet`, `AtcCode`, `SawtBatch`, `ActivityLog`, `ImportBatch`, `User`.
+`JournalEntry` + `JournalEntryLine`, `ChartOfAccounts`, `Holiday`, `TaxRuleSet`, `AtcCode`, `SawtBatch`, `ActivityLog`, `ImportBatch`, `User`. **`JournalEntry`/`JournalEntryLine`/`ChartOfAccounts` are present in the schema but unused as of §9's Phase 4 scope decision** — they were modeled for a General Journal/General Ledger that isn't being built. Left in place rather than removed (cheaper to leave than to re-add); see §9.
 
 ### ActivityLog
 Append-only. Every create/update/delete of a Filing, WorkflowStep, Document, SalesTransaction, or Form2307 writes `{entityType, entityId, action, beforeJson, afterJson, actorId, at}`. Never hard-delete these records.
@@ -371,14 +371,16 @@ Example: `/storage/dela-cruz-j/2026/Q2/SAVE_PROOF_PAYMENT__proof__20260812__01.p
 
 ## 9. Books of Accounts
 
-Generate all four sets as printable, columnar reports with the taxpayer's registered name, TIN, and period in the header, page numbering, and a monthly totals line.
+**Scope (decided 2026-08-21): the Cash Receipts Journal only.** Under the 8% option, only gross sales/receipts are taxed — a Cash Disbursements Journal, General Journal, and General Ledger have nothing in the tax computation that reads them, and the client maintains their own disbursements book independently. Building a CDJ with no feed and a ledger with nothing to post would be dead weight. This system generates the CRJ; the other three books are the client's responsibility and are **explicitly out of scope** — not deferred pending a future phase, a deliberate boundary.
 
-1. **Cash Receipts Journal** — primary book. Columns: date, OR no., payor, particulars, gross receipts, creditable withholding tax, cash received. Sourced from `SalesTransaction`.
-2. **Cash Disbursements Journal** — sourced from `JournalEntry` lines flagged as disbursements. Under 8% no expense substantiation is required for the tax computation, but the book must still exist and be maintained. Keep entry lightweight: date, payee, particulars, amount, account.
-3. **General Journal** — manual and adjusting entries.
-4. **General Ledger** — posted from CRJ, CDJ, and GJ against a seeded `ChartOfAccounts`. Minimal chart: Cash, Accounts Receivable, Creditable Withholding Tax, Owner's Capital, Owner's Drawing, Service Income, and a small expense group.
+**Cash Receipts Journal** — the only book this system generates. Sourced from `SalesTransaction`. A printable, columnar report with the taxpayer's registered name, TIN, and period in the header, page numbering, and a monthly totals line. Columns: date, OR no., payor, particulars, gross receipts, creditable withholding tax, cash received. Export as XLSX (for loose-leaf submission) and print-to-PDF-friendly HTML. Include a per-book "as of" lock so a printed period is not silently altered afterward — same amendment-alert pattern as §5.
 
-Export as XLSX (for loose-leaf submission) and print-to-PDF-friendly HTML. Include a per-book "as of" lock so a printed period is not silently altered afterward — same amendment-alert pattern as §5.
+**Not built, and not this system's concern:**
+- Cash Disbursements Journal
+- General Journal
+- General Ledger
+
+`JournalEntry`, `JournalEntryLine`, and `ChartOfAccounts` stay in the Prisma schema, unused — cheaper to leave in place than to re-add if this scope is ever revisited. `ChartOfAccounts.normalBalance` is deliberately **not** added; it becomes required only if the General Ledger is ever built (a ledger needs to know which side is "normal" per account to validate and display balances — the CRJ, having no ledger postings, does not).
 
 ---
 
