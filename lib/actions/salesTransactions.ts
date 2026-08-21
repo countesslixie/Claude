@@ -1,12 +1,11 @@
 "use server";
 
-import { DateTime } from "luxon";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { quickTransactionSchema } from "@/lib/validation/salesTransaction";
 import { getActorId } from "@/lib/actor";
 import { logActivity } from "@/lib/activityLog";
-import { manilaDateInputToJsDate, toManilaDateInputValue, MANILA_ZONE } from "@/lib/dates";
+import { manilaDateInputToJsDate, toManilaDateInputValue, deriveTaxableYearAndQuarter } from "@/lib/dates";
 import { pesosToCents, applyBps, centsToPesos } from "@/lib/money";
 import { checkAndRecordAmendments } from "@/lib/filingComputation";
 
@@ -18,25 +17,6 @@ export type QuickTransactionResult = {
   netReceivedMismatchWarning?: string;
   createdId?: string;
 };
-
-/**
- * transactionDate is manilaDateInputToJsDate()'s output -- Manila midnight,
- * which is always UTC 16:00 the PREVIOUS day. Reading getUTCFullYear()/
- * getUTCMonth() straight off that instant reads the wrong Manila calendar
- * month/year whenever the 1st of a month is involved (any date's Manila
- * midnight crosses a UTC month/year boundary exactly when the date itself
- * is the 1st): a transaction dated Manila Apr 1 would read UTC Mar 31 and
- * be misfiled as Q1, and one dated Manila Jan 1 would read UTC Dec 31 of
- * the PREVIOUS year and be misfiled into Q4 of the wrong taxable year --
- * a period this app has no filing type for (SPEC.md 3.6: no Q4 return).
- * Extract the Manila calendar date instead.
- */
-function deriveTaxableYearAndQuarter(transactionDate: Date): { taxableYear: number; quarter: number } {
-  const manila = DateTime.fromJSDate(transactionDate).setZone(MANILA_ZONE);
-  const taxableYear = manila.year;
-  const quarter = Math.ceil(manila.month / 3);
-  return { taxableYear, quarter };
-}
 
 /**
  * Manual standalone entry — the exception path for receipts with no
