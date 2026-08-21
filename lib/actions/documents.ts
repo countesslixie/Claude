@@ -6,7 +6,7 @@ import { getActorId } from "@/lib/actor";
 import { logActivity } from "@/lib/activityLog";
 import { buildStorageRelativePath, saveDocumentFile } from "@/lib/documents/storage";
 import { computeSha256 } from "@/lib/documents/storage";
-import { manilaDateInputToJsDate } from "@/lib/dates";
+import { manilaDateInputToJsDate, formatManilaDate } from "@/lib/dates";
 
 export type UploadDocumentResult = {
   ok: boolean;
@@ -71,10 +71,13 @@ export async function uploadDocument(formData: FormData): Promise<UploadDocument
   const duplicate = await prisma.document.findFirst({
     where: { clientId: client.id, sha256, deletedAt: null },
   });
+  // formatManilaDate, not toISOString().split("T")[0]: uploadedAt is a real
+  // timestamp (not a clean midnight), so a raw UTC slice can show the
+  // wrong calendar day for any upload in Manila's 00:00-07:59 window.
   const duplicateWarning = duplicate
-    ? `This file's contents match an existing document already on file for this client: "${duplicate.originalFilename}" (uploaded ${
-        duplicate.uploadedAt.toISOString().split("T")[0]
-      }). Saved anyway — please check you didn't mean to attach a different file.`
+    ? `This file's contents match an existing document already on file for this client: "${duplicate.originalFilename}" (uploaded ${formatManilaDate(
+        duplicate.uploadedAt,
+      )}). Saved anyway — please check you didn't mean to attach a different file.`
     : undefined;
 
   const ext = file.name.includes(".") ? (file.name.split(".").pop() as string) : "bin";

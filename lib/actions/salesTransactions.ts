@@ -1,11 +1,12 @@
 "use server";
 
+import { DateTime } from "luxon";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { quickTransactionSchema } from "@/lib/validation/salesTransaction";
 import { getActorId } from "@/lib/actor";
 import { logActivity } from "@/lib/activityLog";
-import { manilaDateInputToJsDate } from "@/lib/dates";
+import { manilaDateInputToJsDate, toManilaDateInputValue, MANILA_ZONE } from "@/lib/dates";
 import { pesosToCents, applyBps, centsToPesos } from "@/lib/money";
 import { checkAndRecordAmendments } from "@/lib/filingComputation";
 
@@ -18,9 +19,22 @@ export type QuickTransactionResult = {
   createdId?: string;
 };
 
+/**
+ * transactionDate is manilaDateInputToJsDate()'s output -- Manila midnight,
+ * which is always UTC 16:00 the PREVIOUS day. Reading getUTCFullYear()/
+ * getUTCMonth() straight off that instant reads the wrong Manila calendar
+ * month/year whenever the 1st of a month is involved (any date's Manila
+ * midnight crosses a UTC month/year boundary exactly when the date itself
+ * is the 1st): a transaction dated Manila Apr 1 would read UTC Mar 31 and
+ * be misfiled as Q1, and one dated Manila Jan 1 would read UTC Dec 31 of
+ * the PREVIOUS year and be misfiled into Q4 of the wrong taxable year --
+ * a period this app has no filing type for (SPEC.md 3.6: no Q4 return).
+ * Extract the Manila calendar date instead.
+ */
 function deriveTaxableYearAndQuarter(transactionDate: Date): { taxableYear: number; quarter: number } {
-  const taxableYear = transactionDate.getUTCFullYear();
-  const quarter = Math.ceil((transactionDate.getUTCMonth() + 1) / 3);
+  const manila = DateTime.fromJSDate(transactionDate).setZone(MANILA_ZONE);
+  const taxableYear = manila.year;
+  const quarter = Math.ceil(manila.month / 3);
   return { taxableYear, quarter };
 }
 
@@ -77,9 +91,13 @@ export async function createQuickTransaction(
       orderBy: { transactionDate: "desc" },
     });
     if (existing) {
-      duplicateOrWarning = `OR ${parsed.data.orNumber} was already used for this client on ${
-        existing.transactionDate.toISOString().split("T")[0]
-      }.`;
+      // toManilaDateInputValue, not toISOString().split("T")[0]: transactionDate
+      // is Manila midnight (manilaDateInputToJsDate), always UTC 16:00 the
+      // PREVIOUS day -- a raw UTC slice would show the wrong calendar date
+      // on every transaction, not just month boundaries.
+      duplicateOrWarning = `OR ${parsed.data.orNumber} was already used for this client on ${toManilaDateInputValue(
+        existing.transactionDate,
+      )}.`;
     }
   }
 
@@ -203,9 +221,9 @@ export async function updateSalesTransaction(
 
   const editReason = `Transaction ${id} edited: gross ${centsToPesos(existing.grossAmountCents, {
     withSymbol: true,
-  })} -> ${centsToPesos(grossAmountCents, { withSymbol: true })}, date ${
-    existing.transactionDate.toISOString().split("T")[0]
-  } -> ${parsed.data.transactionDate}.`;
+  })} -> ${centsToPesos(grossAmountCents, { withSymbol: true })}, date ${toManilaDateInputValue(
+    existing.transactionDate,
+  )} -> ${parsed.data.transactionDate}.`;
 
   if (existing.taxableYear === taxableYear) {
     // A lower bound is always safe: periodEndDate only grows across

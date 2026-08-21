@@ -30,6 +30,20 @@ export function formatManilaDate(value: Date | string | null | undefined): strin
   return dt.isValid ? dt.toFormat("MMM d, yyyy") : "—";
 }
 
+/**
+ * The Asia/Manila calendar day a stored instant falls on, as "yyyy-MM-dd"
+ * -- for comparing two dates by calendar day rather than raw instant. Two
+ * Dates that fall on the same Manila day but carry different times-of-day
+ * (e.g. a clean UTC-midnight due-date marker vs. a real `filedAt`
+ * timestamp) are NOT equal under `.getTime()`, and a raw `a.getTime() >
+ * b.getTime()` comparison between them does not mean "a is a later
+ * calendar day" -- it can trip on the same day depending on time-of-day.
+ * String comparison on this format sorts correctly (ISO 8601 date order).
+ */
+export function manilaCalendarDay(value: Date): string {
+  return DateTime.fromJSDate(value).setZone(MANILA_ZONE).toFormat("yyyy-MM-dd");
+}
+
 /** Formats a stored Date/DateTime as a "YYYY-MM-DD" string for date input defaultValue. */
 export function toManilaDateInputValue(value: Date | string | null | undefined): string {
   if (!value) return "";

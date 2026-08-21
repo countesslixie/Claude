@@ -37,6 +37,22 @@ describe("deriveFilingStatus", () => {
     expect(deriveFilingStatus({ steps, adjustedDueDate: DUE, now: AFTER_DUE })).toBe("BLOCKED");
   });
 
+  it("still on the due date's own Manila calendar day (even hours after DUE's UTC-midnight/Manila-08:00 marker) -> NOT yet BLOCKED", () => {
+    // UTC/Manila sweep regression: DUE is UTC midnight Aug 17 (Manila
+    // 08:00). A raw instant comparison would flip to BLOCKED the moment
+    // `now` passes that instant, treating Aug 17 10am Manila -- still
+    // the due date itself -- as already overdue.
+    const stillDueDayManila = new Date("2026-08-17T02:00:00.000Z"); // Manila Aug 17, 10am
+    const steps = [step("DONE"), step("WAITING_EXTERNAL", "BIR")];
+    expect(deriveFilingStatus({ steps, adjustedDueDate: DUE, now: stillDueDayManila })).toBe("WAITING_BIR");
+  });
+
+  it("the day after the due date's Manila calendar day -> BLOCKED", () => {
+    const nextDayManila = new Date("2026-08-17T20:00:00.000Z"); // Manila Aug 18, 4am
+    const steps = [step("DONE"), step("WAITING_EXTERNAL", "BIR")];
+    expect(deriveFilingStatus({ steps, adjustedDueDate: DUE, now: nextDayManila })).toBe("BLOCKED");
+  });
+
   it("waiting on a BIR step, not yet due -> WAITING_BIR", () => {
     const steps = [step("DONE"), step("WAITING_EXTERNAL", "BIR")];
     expect(deriveFilingStatus({ steps, adjustedDueDate: DUE, now: BEFORE_DUE })).toBe("WAITING_BIR");

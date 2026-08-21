@@ -1,4 +1,9 @@
+import { DateTime } from "luxon";
+import { manilaCalendarDay } from "@/lib/dates";
 import type { Period } from "./types";
+
+const MANILA_ZONE = "Asia/Manila";
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 /**
  * Deadline derivation (SPEC.md 3.6). Pure functions, plain object in,
@@ -17,25 +22,50 @@ import type { Period } from "./types";
  */
 
 /**
- * Shifts `date` forward, day by day, until it lands on a weekday that is
- * not in `holidays`. Weekend = Saturday/Sunday.
+ * Shifts `date` forward, day by day (by Asia/Manila calendar day), until
+ * it lands on a weekday that is not in `holidays`. Weekend = Saturday/
+ * Sunday. Callers in this codebase normally pass UTC-midnight-aligned
+ * dates, but `eafsDueDate` below can pass `filedAt` -- a real timestamp
+ * that, once wired to a "mark as filed" action, will carry a genuine
+ * time-of-day. The result is always normalized to a clean UTC-midnight
+ * value representing the correct Manila calendar day it lands on --
+ * consistent with how every other due date in this app is stored --
+ * rather than carrying forward `date`'s original time-of-day. Comparing
+ * calendar day/weekday via Manila-zone conversion (not raw UTC components
+ * or exact-instant Set membership) keeps this correct regardless of
+ * input: a raw `.getTime()` holiday match would silently never fire for a
+ * non-midnight instant, and raw `.getUTCDay()` can read the wrong weekday
+ * for anything in Manila's 00:00-07:59 window (still the previous UTC
+ * day).
  */
 export function shiftToNextBusinessDay(date: Date, holidays: readonly Date[]): Date {
-  const holidayTimes = new Set(holidays.map((h) => h.getTime()));
-  let current = date;
-  while (isWeekend(current) || holidayTimes.has(current.getTime())) {
+  const holidayManilaDays = new Set(holidays.map(manilaCalendarDay));
+  let current = toManilaMidnightUtc(date);
+  while (isWeekend(current) || holidayManilaDays.has(manilaCalendarDay(current))) {
     current = addDays(current, 1);
   }
   return current;
 }
 
-function isWeekend(date: Date): boolean {
-  const day = date.getUTCDay();
-  return day === 0 || day === 6;
+/** The UTC-midnight instant representing `date`'s Asia/Manila calendar day. */
+function toManilaMidnightUtc(date: Date): Date {
+  const manila = DateTime.fromJSDate(date).setZone(MANILA_ZONE);
+  return new Date(Date.UTC(manila.year, manila.month - 1, manila.day));
 }
 
+function isWeekend(date: Date): boolean {
+  const weekday = DateTime.fromJSDate(date).setZone(MANILA_ZONE).weekday; // Luxon: 1=Mon...7=Sun
+  return weekday === 6 || weekday === 7;
+}
+
+// Plain millisecond arithmetic. Correct for any input, midnight-aligned
+// or not: the Philippines observes no DST, so a calendar day is always
+// exactly 24h and this always lands on the right Manila calendar day N
+// days later. (shiftToNextBusinessDay separately normalizes its result to
+// a clean UTC-midnight value -- see toManilaMidnightUtc -- for output
+// consistency, not because this arithmetic would otherwise be wrong.)
 function addDays(date: Date, days: number): Date {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + days));
+  return new Date(date.getTime() + days * MS_PER_DAY);
 }
 
 /**
@@ -58,8 +88,23 @@ export function eafsDueDate(input: {
   offsetDays: number;
   holidays: readonly Date[];
 }): Date {
+  // Calendar-day comparison, not raw instant: adjustedDueDate is a clean
+  // UTC-midnight marker (Manila 08:00), but filedAt is a real timestamp
+  // once wired to a "mark as filed" action. Filing at any time on the due
+  // date itself -- including Manila evening, a LATER instant than the due
+  // date's UTC-midnight marker -- must still count as "on or before," not
+  // "late," per this function's own doc comment above. Note: because
+  // shiftToNextBusinessDay's result is always normalized to a clean
+  // Manila-day value (see toManilaMidnightUtc), the two possible base
+  // choices only ever disagree within the SAME Manila calendar day, and a
+  // same-day base + a whole-day offsetDays always lands on the same final
+  // calendar day either way -- so this comparison has no independently
+  // observable effect on eafsDueDate's return value today. It stays
+  // calendar-day-correct anyway: relying on a downstream normalization
+  // step to silently paper over an upstream instant-vs-calendar-day bug
+  // is fragile, and this is what the function's own contract states.
   const base =
-    input.filedAt === null || input.filedAt.getTime() <= input.adjustedDueDate.getTime()
+    input.filedAt === null || manilaCalendarDay(input.filedAt) <= manilaCalendarDay(input.adjustedDueDate)
       ? input.adjustedDueDate
       : input.filedAt;
   const raw = addDays(base, input.offsetDays);

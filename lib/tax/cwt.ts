@@ -39,11 +39,10 @@
  * the period they economically belong to closes.
  */
 
-import { DateTime } from "luxon";
+import { manilaCalendarDay } from "@/lib/dates";
 import type { CertificateCutoffSource } from "./types";
 
 const CLAIMABLE_STATUSES = new Set(["RECORDED", "CLAIMED_ON_RETURN"]);
-const MANILA_ZONE = "Asia/Manila";
 
 /**
  * The cutoff comparison below is calendar-day, not instant. Callers in
@@ -59,9 +58,6 @@ const MANILA_ZONE = "Asia/Manila";
  * happens to encode (SPEC.md 3.5, 3.6: all date arithmetic is
  * Asia/Manila, never the host's local timezone).
  */
-function manilaCalendarDay(date: Date): string {
-  return DateTime.fromJSDate(date, { zone: "utc" }).setZone(MANILA_ZONE).toFormat("yyyy-MM-dd");
-}
 
 export interface CertificateForCwt {
   id: string;

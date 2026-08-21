@@ -73,3 +73,81 @@ describe("createQuickTransaction — server-side auto-compute WHT (P1)", () => {
     expect(created.withholdingTaxCents).toBe(expectedWithheldCents);
   });
 });
+
+/**
+ * UTC/Manila sweep (this session): transactionDate is
+ * manilaDateInputToJsDate()'s output -- Manila midnight, which is always
+ * UTC 16:00 the PREVIOUS day. deriveTaxableYearAndQuarter used to read
+ * getUTCFullYear()/getUTCMonth() straight off that instant, which is
+ * wrong exactly when the transaction date is the 1st of a month (the only
+ * time Manila midnight crosses a UTC month/year boundary): a transaction
+ * dated Apr 1 would misfile into Q1 instead of Q2, and one dated Jan 1
+ * would misfile into Q4 of the PREVIOUS taxable year -- a period this app
+ * has no filing type for (SPEC.md 3.6: no Q4 return).
+ */
+describe("createQuickTransaction — taxableYear/quarter derived from the Manila calendar date, not raw UTC", () => {
+  const createdClientIds: string[] = [];
+
+  afterAll(async () => {
+    if (createdClientIds.length === 0) return;
+    await prisma.salesTransaction.deleteMany({ where: { clientId: { in: createdClientIds } } });
+    await prisma.client.deleteMany({ where: { id: { in: createdClientIds } } });
+  });
+
+  async function createTestClient() {
+    const client = await prisma.client.create({
+      data: {
+        code: `month-boundary-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        registeredName: "Month Boundary Test Client",
+        tin: "111222333",
+        rdoCode: "999",
+        registeredAddress: "N/A",
+        taxpayerType: "PURELY_SELF_EMPLOYED",
+        booksType: "MANUAL",
+        defaultWithholdingRateBps: 500,
+      },
+    });
+    createdClientIds.push(client.id);
+    return client;
+  }
+
+  it("a transaction dated Apr 1 (Manila) is filed under Q2, not Q1", async () => {
+    const client = await createTestClient();
+    const result = await createQuickTransaction(client.id, {
+      transactionDate: "2026-04-01",
+      orNumber: "",
+      payorName: "Test Payor",
+      payorTin: "",
+      grossAmount: "10000",
+      withholdingRateBps: "500",
+      withholdingAmount: "",
+      netReceivedOverride: "",
+      incomeType: "OPERATING",
+      description: "",
+    });
+    expect(result.ok).toBe(true);
+    const created = await prisma.salesTransaction.findUniqueOrThrow({ where: { id: result.createdId! } });
+    expect(created.taxableYear).toBe(2026);
+    expect(created.quarter).toBe(2);
+  });
+
+  it("a transaction dated Jan 1 (Manila) is filed under the correct taxable year's Q1, not Q4 of the previous year", async () => {
+    const client = await createTestClient();
+    const result = await createQuickTransaction(client.id, {
+      transactionDate: "2027-01-01",
+      orNumber: "",
+      payorName: "Test Payor",
+      payorTin: "",
+      grossAmount: "10000",
+      withholdingRateBps: "500",
+      withholdingAmount: "",
+      netReceivedOverride: "",
+      incomeType: "OPERATING",
+      description: "",
+    });
+    expect(result.ok).toBe(true);
+    const created = await prisma.salesTransaction.findUniqueOrThrow({ where: { id: result.createdId! } });
+    expect(created.taxableYear).toBe(2027);
+    expect(created.quarter).toBe(1);
+  });
+});

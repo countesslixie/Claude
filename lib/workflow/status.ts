@@ -1,3 +1,4 @@
+import { manilaCalendarDay } from "@/lib/dates";
 import type { FilingStatus, WorkflowStepStatus } from "./types";
 
 /**
@@ -28,7 +29,12 @@ export function deriveFilingStatus(input: {
   const allDoneOrNa = steps.every((s) => s.status === "DONE" || s.status === "NA");
   if (allDoneOrNa) return "COMPLETE";
 
-  const isPastDue = now.getTime() > adjustedDueDate.getTime();
+  // Calendar-day comparison, not raw instant: adjustedDueDate is a clean
+  // UTC-midnight marker (Manila 08:00), while `now` is a real timestamp.
+  // An instant comparison would flip to BLOCKED as soon as Manila passes
+  // 08:00 on the due date itself, wrongly treating most of the due
+  // date's own daylight hours as already overdue.
+  const isPastDue = manilaCalendarDay(now) > manilaCalendarDay(adjustedDueDate);
   if (isPastDue) return "BLOCKED";
 
   const waitingOnBir = steps.some((s) => s.status === "WAITING_EXTERNAL" && s.waitingOnLabel === "BIR");

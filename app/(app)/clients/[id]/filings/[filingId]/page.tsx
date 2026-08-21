@@ -86,7 +86,9 @@ export default async function FilingDetailPage({
         id: d.id,
         docSlotCode: d.docSlotCode,
         originalFilename: d.originalFilename,
-        documentDate: d.documentDate.toISOString().split("T")[0],
+        // toManilaDateInputValue, not toISOString().split("T")[0] -- see
+        // the same fix in lib/actions/salesTransactions.ts.
+        documentDate: toManilaDateInputValue(d.documentDate),
       })),
       agingDaysWaiting: aging?.daysWaiting ?? null,
       agingTone: aging?.tone ?? null,

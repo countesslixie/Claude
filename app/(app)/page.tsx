@@ -4,7 +4,7 @@ import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { StatusBadge, type StatusTone } from "@/components/status-badge";
 import { ClickableRow, ActionCell } from "@/components/clickable-row";
-import { formatManilaDate, currentTaxableYearManila } from "@/lib/dates";
+import { formatManilaDate, currentTaxableYearManila, manilaCalendarDay } from "@/lib/dates";
 import { currentStepCode } from "@/lib/workflow/status";
 import { deriveStepAging, type AgingTone } from "@/lib/workflow/aging";
 import { stepDueDate } from "@/lib/workflow/dueDate";
@@ -91,9 +91,16 @@ export default async function DashboardPage() {
   waitingBir.sort((a, b) => agingRank(b.aging) - agingRank(a.aging));
   waitingClient.sort((a, b) => agingRank(b.aging) - agingRank(a.aging));
 
-  const upcomingDeadlines = activeFilings.filter(
-    (f) => f.adjustedDueDate.getTime() >= now.getTime() && f.adjustedDueDate.getTime() <= in45Days.getTime(),
-  );
+  // Calendar-day comparison, not raw instant: adjustedDueDate is a clean
+  // UTC-midnight marker (Manila 08:00). An instant comparison against
+  // `now` would drop a filing due TODAY off this list the moment Manila
+  // passes 08:00, hours before its actual deadline (Manila midnight).
+  const todayManila = manilaCalendarDay(now);
+  const in45DaysManila = manilaCalendarDay(in45Days);
+  const upcomingDeadlines = activeFilings.filter((f) => {
+    const dueManila = manilaCalendarDay(f.adjustedDueDate);
+    return dueManila >= todayManila && dueManila <= in45DaysManila;
+  });
 
   const missingDocsByClient = new Map<string, { clientName: string; items: typeof missingDocs }>();
   for (const item of missingDocs) {

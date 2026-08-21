@@ -117,6 +117,32 @@ describe("shiftToNextBusinessDay", () => {
   it("shifts past a holiday that falls on a weekday", () => {
     expect(shiftToNextBusinessDay(D("2026-11-15"), [D("2026-11-15")])).toEqual(D("2026-11-16")); // Sun, also treated as holiday -> Mon
   });
+
+  it("still detects a weekend correctly for a real (non-midnight) timestamp, e.g. eafsDueDate's filedAt input", () => {
+    // 2026-08-15 (Sat) 23:00 Manila = 2026-08-15T15:00:00.000Z -- a raw
+    // getUTCDay() on this instant still reads Saturday here, but the
+    // adjacent case below (early-Manila-morning) is where a naive
+    // UTC-component read breaks.
+    const satNightManila = new Date("2026-08-15T15:00:00.000Z");
+    expect(shiftToNextBusinessDay(satNightManila, [])).toEqual(D("2026-08-17"));
+
+    // 2026-08-17 (Mon) 03:00 Manila = 2026-08-16T19:00:00.000Z -- UTC still
+    // reads Sunday the 16th here. A raw getUTCDay()-based isWeekend would
+    // wrongly shift this Monday instant forward to Tuesday. The result is
+    // normalized to clean UTC midnight of the correct Manila day (Aug 17),
+    // not the original instant's time-of-day.
+    const earlyMondayManila = new Date("2026-08-16T19:00:00.000Z");
+    expect(shiftToNextBusinessDay(earlyMondayManila, [])).toEqual(D("2026-08-17"));
+  });
+
+  it("still detects a seeded holiday correctly for a real (non-midnight) timestamp, not just an exact-instant match", () => {
+    // Holiday seeded as clean UTC midnight; filedAt-style input for the
+    // same Manila calendar day carries a real time-of-day. A raw
+    // holidayTimes.has(current.getTime()) exact match would never fire.
+    const holiday = D("2026-08-21"); // Friday, a weekday -- isolates the holiday check
+    const filedAtStyleSameDay = new Date("2026-08-21T05:00:00.000Z"); // Manila 13:00
+    expect(shiftToNextBusinessDay(filedAtStyleSameDay, [holiday])).toEqual(D("2026-08-24")); // -> next Monday
+  });
 });
 
 /**
