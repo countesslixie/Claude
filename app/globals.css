@@ -59,3 +59,19 @@ table.data-table td {
 table.data-table tbody tr:hover {
   background: #f8fafc;
 }
+
+/* Print-friendly books/worksheets (SPEC.md 9, 10): hide chrome and any
+   screen-only controls (period selectors, download/generate buttons)
+   marked .no-print, so a printed page is just the document itself. */
+@media print {
+  header,
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: white;
+  }
+  .print-page-break {
+    break-before: page;
+  }
+}

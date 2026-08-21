@@ -42,7 +42,11 @@
 import { manilaCalendarDay } from "@/lib/dates";
 import type { CertificateCutoffSource } from "./types";
 
-const CLAIMABLE_STATUSES = new Set(["RECORDED", "CLAIMED_ON_RETURN"]);
+// Exported so callers computing the SAME cumulative-CWT-eligible set
+// outside sumCwtThroughPeriod (e.g. the SAWT reconciliation's check 3,
+// lib/reconciliation.ts) use one shared definition of "claimable," not a
+// second hand-copied list that can drift from this one.
+export const CLAIMABLE_STATUSES = new Set(["RECORDED", "CLAIMED_ON_RETURN"]);
 
 /**
  * The cutoff comparison below is calendar-day, not instant. Callers in

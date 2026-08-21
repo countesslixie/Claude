@@ -7,6 +7,8 @@ import { centsToPesos, bpsToPercentLabel } from "@/lib/money";
 import { formatManilaDate } from "@/lib/dates";
 import { currentTaxableYearManila } from "@/lib/dates";
 import { getPeriodReconciliation } from "@/lib/reconciliation";
+import { ALL_PERIODS, periodToQuarters } from "@/lib/tax/periods";
+import type { Period } from "@/lib/tax/types";
 
 const STATUS_TONE: Record<string, "pending" | "progress" | "waiting" | "overdue" | "done"> = {
   RECEIVED: "pending",
@@ -22,24 +24,26 @@ export default async function Form2307RegisterPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ year?: string; quarter?: string }>;
+  searchParams: Promise<{ year?: string; period?: string }>;
 }) {
   const { id } = await params;
-  const { year, quarter } = await searchParams;
+  const { year, period: periodParam } = await searchParams;
 
   const client = await prisma.client.findUnique({ where: { id } });
   if (!client) notFound();
 
   const taxableYear = year ? Number(year) : currentTaxableYearManila();
-  const quarterCovered = quarter ? Number(quarter) : 1;
+  const period: Period = ALL_PERIODS.includes(periodParam as Period) ? (periodParam as Period) : "Q1";
+  const quarters = periodToQuarters(period);
+  const newFormQuarter = quarters[0];
 
   const certificates = await prisma.form2307.findMany({
-    where: { clientId: id, taxableYear, quarterCovered, deletedAt: null },
+    where: { clientId: id, taxableYear, quarterCovered: { in: [...quarters] }, deletedAt: null },
     include: { salesTransactions: { select: { id: true } } },
     orderBy: { dateReceived: "asc" },
   });
 
-  const reconciliation = await getPeriodReconciliation(id, taxableYear, quarterCovered);
+  const reconciliation = await getPeriodReconciliation(id, taxableYear, period);
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -53,9 +57,14 @@ export default async function Form2307RegisterPage({
             (SPEC.md WORKFLOW CHANGE).
           </p>
         </div>
-        <Link href={`/clients/${id}/form-2307/new?year=${taxableYear}&quarter=${quarterCovered}`}>
-          <Button>New Form 2307</Button>
-        </Link>
+        <div className="flex gap-2">
+          <Link href={`/clients/${id}/sawt-worksheet?year=${taxableYear}&period=${period}`}>
+            <Button variant="secondary">Keying worksheet</Button>
+          </Link>
+          <Link href={`/clients/${id}/form-2307/new?year=${taxableYear}&quarter=${newFormQuarter}`}>
+            <Button>New Form 2307</Button>
+          </Link>
+        </div>
       </div>
 
       <form className="mb-4 flex items-center gap-2" method="get">
@@ -66,16 +75,13 @@ export default async function Form2307RegisterPage({
           defaultValue={taxableYear}
           className="h-8 w-24 rounded-md border border-slate-300 px-2 text-sm"
         />
-        <label className="text-sm text-slate-600">Quarter</label>
-        <select
-          name="quarter"
-          defaultValue={quarterCovered}
-          className="h-8 rounded-md border border-slate-300 px-2 text-sm"
-        >
-          <option value={1}>Q1</option>
-          <option value={2}>Q2</option>
-          <option value={3}>Q3</option>
-          <option value={4}>Q4 (annual)</option>
+        <label className="text-sm text-slate-600">Period</label>
+        <select name="period" defaultValue={period} className="h-8 rounded-md border border-slate-300 px-2 text-sm">
+          {ALL_PERIODS.map((p) => (
+            <option key={p} value={p}>
+              {p}
+            </option>
+          ))}
         </select>
         <Button type="submit" variant="secondary" size="sm">
           Filter
@@ -179,16 +185,38 @@ export default async function Form2307RegisterPage({
 
         <div className="rounded-lg border border-slate-200 bg-white p-4">
           <h2 className="text-sm font-semibold text-slate-900">CWT: filing vs SAWT batch</h2>
-          <p className="mt-1 text-xs text-slate-500">Cross-check against what actually gets filed.</p>
-          {reconciliation.hasSawtBatch ? (
-            <p className="mt-3 text-sm text-slate-700">
-              {centsToPesos(reconciliation.sawtBatchCwtCents, { withSymbol: true })} across{" "}
-              {reconciliation.certificatesInSawtBatchCount} certificate(s) in the SAWT batch.
-            </p>
+          <p className="mt-1 text-xs text-slate-500">
+            Cumulative CWT claimed on this filing vs. cumulative certificates batched through this period.
+          </p>
+          <dl className="mt-3 space-y-1 text-sm text-slate-700">
+            <div className="flex justify-between">
+              <dt>Claimed on filing</dt>
+              <dd>{centsToPesos(reconciliation.cumulativeCwtCentsOnFiling, { withSymbol: true })}</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt>In SAWT batch(es)</dt>
+              <dd>{centsToPesos(reconciliation.sawtBatchCwtCents, { withSymbol: true })}</dd>
+            </div>
+          </dl>
+          {reconciliation.hasVariance ? (
+            <div className="mt-3 rounded-md bg-red-50 p-2">
+              <p className="text-sm font-medium text-red-800">
+                Variance: {centsToPesos(reconciliation.varianceCents, { withSymbol: true })}. Alphalist data entry is
+                blocked until resolved.
+              </p>
+              {reconciliation.unbatchedCertificates.length > 0 && (
+                <ul className="mt-2 space-y-0.5 text-xs text-red-700">
+                  {reconciliation.unbatchedCertificates.map((c) => (
+                    <li key={c.id}>
+                      {c.payorName} ({c.atcCode}) — {centsToPesos(c.taxWithheldCents, { withSymbol: true })}
+                      {c.dateReceived && ` — received ${formatManilaDate(c.dateReceived)}`} — not yet in a SAWT batch
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           ) : (
-            <p className="mt-3 text-sm text-slate-400">
-              No SAWT batch created for this period yet (Phase 4).
-            </p>
+            <p className="mt-3 text-sm text-emerald-700">Matches — no variance.</p>
           )}
         </div>
       </div>

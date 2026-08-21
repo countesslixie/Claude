@@ -52,3 +52,23 @@ export function priorPeriodsOf(period: Period): readonly Period[] {
   const index = ALL_PERIODS.indexOf(period);
   return ALL_PERIODS.slice(0, index);
 }
+
+/**
+ * The 1-4 quarter numbers a period covers. Used wherever a query needs
+ * to match against SalesTransaction.quarter / Form2307.quarterCovered,
+ * which are always a raw 1-4 (there is no "quarter" for an annual row) —
+ * unlike Filing.period, which is the Q1/Q2/Q3/ANNUAL enum. Q1-Q3 cover
+ * their own single quarter; ANNUAL covers the whole year, all four.
+ */
+export function periodToQuarters(period: Period): readonly number[] {
+  switch (period) {
+    case "Q1":
+      return [1];
+    case "Q2":
+      return [2];
+    case "Q3":
+      return [3];
+    case "ANNUAL":
+      return [1, 2, 3, 4];
+  }
+}

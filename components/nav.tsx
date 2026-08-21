@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { logout } from "@/lib/actions/auth";
 
-// Books, SAWT, and Calendar are Phase 4 (SPEC.md 15) and not built yet.
-// Transactions/2307 register are per-client, reached from the client
-// detail page, not top-level nav items.
+// Calendar is Phase 4 (SPEC.md 15) and not built yet. Books, SAWT
+// keying worksheet, Transactions, and the 2307 register are all
+// per-client, reached from the client detail page, not top-level nav
+// items.
 const LINKS = [
   { href: "/", label: "Dashboard" },
   { href: "/filings", label: "Filings" },

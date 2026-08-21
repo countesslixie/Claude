@@ -7,6 +7,8 @@ import { logActivity } from "@/lib/activityLog";
 import { missingRequiredSlots, checkSendClientPackageReadiness } from "@/lib/workflow/docSlots";
 import { deriveFilingStatus } from "@/lib/workflow/status";
 import { parseDocSlots } from "@/lib/workflow/types";
+import { getPeriodReconciliation } from "@/lib/reconciliation";
+import { centsToPesos } from "@/lib/money";
 
 export type StepActionResult = { ok: boolean; error?: string };
 
@@ -62,6 +64,31 @@ export async function markStepDone(stepId: string): Promise<StepActionResult> {
     if (!readiness.ok) {
       const names = readiness.missing.map((m) => `${m.stepLabel}: ${m.slotLabel}`).join("; ");
       return { ok: false, error: `Package incomplete — missing: ${names}.` };
+    }
+  }
+
+  // ALPHALIST_ENTRY is blocked by a variance between cumulative CWT
+  // claimed on the filing and cumulative certificates batched through
+  // this period (SPEC.md 10 check 3) — names the specific certificates
+  // responsible rather than a generic "doesn't match" message.
+  if (step.stepCode === "ALPHALIST_ENTRY") {
+    const reconciliation = await getPeriodReconciliation(
+      step.filing.clientId,
+      step.filing.taxableYear,
+      step.filing.period,
+    );
+    if (reconciliation.hasVariance) {
+      const varianceLabel = centsToPesos(reconciliation.varianceCents, { withSymbol: true });
+      const names =
+        reconciliation.unbatchedCertificates.length > 0
+          ? reconciliation.unbatchedCertificates
+              .map((c) => `${c.payorName} (${centsToPesos(c.taxWithheldCents, { withSymbol: true })})`)
+              .join("; ")
+          : "(no specific certificate identified — check the batch for certificates no longer eligible)";
+      return {
+        ok: false,
+        error: `SAWT variance ${varianceLabel} — CWT claimed on the filing doesn't match certificates batched through this period. Not yet batched: ${names}.`,
+      };
     }
   }
 

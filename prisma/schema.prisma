@@ -606,7 +606,7 @@ model SawtBatch {
 
   form2307s Form2307[]
 
-  @@index([clientId, taxableYear, period])
+  @@unique([clientId, taxableYear, period])
 }
 
 // ---------------------------------------------------------------------------

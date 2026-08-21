@@ -364,7 +364,7 @@ Example: `/storage/dela-cruz-j/2026/Q2/SAVE_PROOF_PAYMENT__proof__20260812__01.p
 - Original filename preserved in the DB and restored on download/export.
 - SHA-256 on upload; warn on duplicates within the same client.
 - **Bulk import of my existing folders:** point the tool at a directory, it lists files with a proposed `{client, year, period, step, slot}` mapping inferred from path and filename, I correct the mappings in a review grid, then confirm. **Never auto-file without my confirmation.**
-- **Export:** "Download period package" → zip of all documents for a filing, in step order, with a manifest PDF listing every document, its slot, and its date — plus any slots still empty.
+- **Export:** "Download period package" → zip of all documents for a filing, in step order, with a manifest listing every document, its slot, and its date — plus any slots still empty. **Known gap:** the manifest is plain text, not PDF — this project has no PDF-generation dependency, and a text file satisfies the actual requirement (every document plus empty slots, listed). Not adding a PDF dependency for this alone; revisit only if a real need for a formatted PDF manifest shows up.
 - Every document row has a `documentDate` distinct from `uploadedAt`. BIR emails arrive weeks late; the document's own date is what matters for the record.
 
 ---
@@ -453,7 +453,7 @@ Phase 5 candidate (explicitly deferred): IMAP polling of my mailbox to auto-dete
 | **1** | Foundation | Schema, migrations, seed data, client CRUD, settings (rule sets, holidays), auth |
 | **2** | Money in | Transaction entry + import, 2307 register, tax engine with **all §16 tests passing**, computation sheet |
 | **3** | The point of the whole thing | Workflow engine, filing generation with correct deadlines, step board, document vault, dashboard |
-| **4** | Compliance outputs | 4 books of accounts, SAWT module + reconciliation, exports, filing package zip |
+| **4** | Compliance outputs | Cash Receipts Journal (only — see §9), SAWT module + reconciliation, exports, filing package zip |
 | **5** | Deferred | Email integration, multi-user, .DAT generation — build nothing here without a new spec |
 
 Phase 3 is the reason this system exists. If time is short, cut Phase 4 scope, not Phase 3.
@@ -493,9 +493,14 @@ Phase 3 is the reason this system exists. If time is short, cut Phase 4 scope, n
 18. Duplicate hash within a client triggers a warning, not a silent overwrite
 19. Filing package zip contains every document plus a manifest listing empty slots
 
+**Books & SAWT (Phase 4):**
+
+20. `ALPHALIST_ENTRY` is blocked when cumulative CWT claimed on the filing disagrees with cumulative certificates batched through the period, naming the specific unbatched certificates responsible — not blocked, and not falsely blocked, when they agree
+21. A Cash Receipts Journal's monthly subtotals sum to its grand total, and its grand total matches the sum of the underlying `SalesTransaction` rows for the period
+
 **End-to-end:**
 
-20. Seeded client with 2307s can be driven from step 1 to step 16 with all documents attached and finishes at `COMPLETE`
+22. Seeded client with 2307s can be driven from step 1 to step 16 with all documents attached and finishes at `COMPLETE`
 
 ---
 
