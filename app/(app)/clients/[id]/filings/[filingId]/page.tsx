@@ -16,6 +16,7 @@ import { WorkflowStepCard, type StepCardData } from "@/components/workflow-step-
 import { centsToPesos } from "@/lib/money";
 import { formatManilaDate, toManilaDateInputValue } from "@/lib/dates";
 import { deriveStepAging } from "@/lib/workflow/aging";
+import { countSkippedSteps, filingStatusLabel } from "@/lib/workflow/status";
 import { parseDocSlots } from "@/lib/workflow/types";
 import type { FilingComputationResult } from "@/lib/tax/types";
 
@@ -94,6 +95,7 @@ export default async function FilingDetailPage({
       agingTone: aging?.tone ?? null,
     };
   });
+  const skippedCount = countSkippedSteps(filing.workflowSteps);
   const hiddenCount = allSteps.filter((s) => s.status === "NA" || s.status === "SKIPPED").length;
   const visibleSteps = showSkipped ? allSteps : allSteps.filter((s) => s.status !== "NA" && s.status !== "SKIPPED");
 
@@ -128,7 +130,9 @@ export default async function FilingDetailPage({
             <h1 className="text-lg font-semibold text-slate-900">
               {filing.client.registeredName} — TY{filing.taxableYear} {filing.period}
             </h1>
-            <StatusBadge tone={STATUS_TONE[filing.status] ?? "pending"}>{filing.status}</StatusBadge>
+            <StatusBadge tone={STATUS_TONE[filing.status] ?? "pending"}>
+              {filingStatusLabel(filing.status, skippedCount)}
+            </StatusBadge>
           </div>
           <p className="text-sm text-slate-500">
             {filing.formType} — due {formatManilaDate(filing.adjustedDueDate)}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { deriveFilingStatus, computeProgressPercent, currentStepCode } from "@/lib/workflow/status";
+import { deriveFilingStatus, computeProgressPercent, currentStepCode, countSkippedSteps, filingStatusLabel } from "@/lib/workflow/status";
 import type { StepForStatus } from "@/lib/workflow/status";
 
 const DUE = new Date("2026-08-17T00:00:00.000Z");
@@ -28,6 +28,16 @@ describe("deriveFilingStatus", () => {
   it("all DONE/NA -> COMPLETE, even past the due date", () => {
     const steps = [step("DONE"), step("NA"), step("DONE")];
     expect(deriveFilingStatus({ steps, adjustedDueDate: DUE, now: AFTER_DUE })).toBe("COMPLETE");
+  });
+
+  it("DONE/NA/SKIPPED mix -> COMPLETE: a deliberate, reasoned skip doesn't block completion", () => {
+    const steps = [step("DONE"), step("NA"), step("SKIPPED"), step("DONE")];
+    expect(deriveFilingStatus({ steps, adjustedDueDate: DUE, now: AFTER_DUE })).toBe("COMPLETE");
+  });
+
+  it("a SKIPPED step alongside anything unresolved is NOT COMPLETE", () => {
+    const steps = [step("SKIPPED"), step("PENDING")];
+    expect(deriveFilingStatus({ steps, adjustedDueDate: DUE, now: BEFORE_DUE })).not.toBe("COMPLETE");
   });
 
   it("past adjustedDueDate and not complete -> BLOCKED, even if a step is waiting on BIR", () => {
@@ -125,5 +135,37 @@ describe("currentStepCode", () => {
       { sequence: 2, status: "NA" as const, stepCode: "ALPHALIST_ENTRY" },
     ];
     expect(currentStepCode(steps)).toBeNull();
+  });
+});
+
+describe("countSkippedSteps", () => {
+  it("counts only SKIPPED, not NA -- a deliberately different bucket (SPEC.md 7.2)", () => {
+    const steps = [
+      { status: "SKIPPED" as const },
+      { status: "NA" as const },
+      { status: "NA" as const },
+      { status: "DONE" as const },
+    ];
+    expect(countSkippedSteps(steps)).toBe(1);
+  });
+
+  it("zero when there are no skipped steps", () => {
+    expect(countSkippedSteps([{ status: "DONE" as const }, { status: "NA" as const }])).toBe(0);
+  });
+});
+
+describe("filingStatusLabel", () => {
+  it("COMPLETE with skipped steps renders the skip count", () => {
+    expect(filingStatusLabel("COMPLETE", 1)).toBe("Complete (1 step skipped)");
+    expect(filingStatusLabel("COMPLETE", 3)).toBe("Complete (3 steps skipped)");
+  });
+
+  it("COMPLETE with no skipped steps renders unchanged", () => {
+    expect(filingStatusLabel("COMPLETE", 0)).toBe("COMPLETE");
+  });
+
+  it("any other status renders unchanged, regardless of skip count", () => {
+    expect(filingStatusLabel("BLOCKED", 2)).toBe("BLOCKED");
+    expect(filingStatusLabel("WAITING_BIR", 0)).toBe("WAITING_BIR");
   });
 });

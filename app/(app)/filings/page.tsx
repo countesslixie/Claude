@@ -5,7 +5,8 @@ import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { StatusBadge, type StatusTone } from "@/components/status-badge";
 import { formatManilaDate } from "@/lib/dates";
-import { currentStepCode } from "@/lib/workflow/status";
+import { currentStepCode, countSkippedSteps, filingStatusLabel } from "@/lib/workflow/status";
+import type { FilingStatus, WorkflowStepStatus } from "@/lib/workflow/types";
 
 const FILING_STATUS_TONE: Record<string, StatusTone> = {
   NOT_STARTED: "pending",
@@ -141,9 +142,10 @@ function BoardColumn({
     clientId: string;
     taxableYear: number;
     period: string;
-    status: string;
+    status: FilingStatus;
     adjustedDueDate: Date;
     client: { registeredName: string };
+    workflowSteps: Array<{ status: WorkflowStepStatus }>;
   }>;
 }) {
   return (
@@ -161,7 +163,9 @@ function BoardColumn({
                 TY{f.taxableYear} {f.period}
               </p>
               <div className="mt-1 flex items-center justify-between">
-                <StatusBadge tone={FILING_STATUS_TONE[f.status] ?? "pending"}>{f.status}</StatusBadge>
+                <StatusBadge tone={FILING_STATUS_TONE[f.status] ?? "pending"}>
+                  {filingStatusLabel(f.status, countSkippedSteps(f.workflowSteps))}
+                </StatusBadge>
                 <span className="text-xs text-slate-400">{formatManilaDate(f.adjustedDueDate)}</span>
               </div>
             </div>

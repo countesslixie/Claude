@@ -345,8 +345,8 @@ Step 16's package contents (filed form, proof of payment, TRRC, validation email
 - Setting a waiting step to `WAITING_EXTERNAL` stamps `waitingSince`. Aging is computed from that stamp.
 - **Aging thresholds** (per step, configurable — defaults): green < `expectedResponseDays`; amber at 1×; red at 2×. Red items surface at the top of the dashboard with a **"Log follow-up"** action that increments `followUpCount` and re-stamps the clock. Defaults: TRRC 3 days, SAWT acknowledgement 3 days, SAWT validation 10 days, client response 5 days.
 - A step may be `SKIPPED` only with a written `skippedReason`. No silent skips.
-- Filing status is **derived** from its steps, never set by hand:
-  - all `DONE`/`NA` → `COMPLETE`
+- Filing status is **derived** from its steps, never set by hand (including in seed/demo data — hand-typing a status literal there is exactly how this rule and the seed can silently disagree):
+  - all `DONE`/`NA`/`SKIPPED` → `COMPLETE`. A skip is a deliberate, reasoned decision (it required a written `skippedReason` above) — it isn't "not done," so it must not block `COMPLETE` any more than `NA` does. A filing that reaches `COMPLETE` with one or more skipped steps renders as **"Complete (N steps skipped)"**, not a bare "Complete" — the skip stays visible rather than collapsing into an indistinguishable NA-like state; the filing detail page separately lists which steps were skipped, with the recorded reason.
   - any `WAITING_EXTERNAL` on a BIR step → `WAITING_BIR`
   - any `WAITING_EXTERNAL` on a client step → `WAITING_CLIENT`
   - past `adjustedDueDate` and not complete → `BLOCKED` (rendered red)

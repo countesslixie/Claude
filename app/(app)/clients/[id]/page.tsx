@@ -7,6 +7,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { GenerateFilingsForm } from "@/components/generate-filings-form";
 import { formatManilaDate, currentTaxableYearManila } from "@/lib/dates";
 import { bpsToPercentLabel, centsToPesos } from "@/lib/money";
+import { countSkippedSteps, filingStatusLabel } from "@/lib/workflow/status";
 
 const LABELS: Record<string, string> = {
   PURELY_SELF_EMPLOYED: "Purely self-employed",
@@ -43,7 +44,10 @@ export default async function ClientDetailPage({
     where: { id },
     include: {
       taxYears: { orderBy: { taxableYear: "desc" } },
-      filings: { orderBy: [{ taxableYear: "desc" }, { period: "asc" }] },
+      filings: {
+        orderBy: [{ taxableYear: "desc" }, { period: "asc" }],
+        include: { workflowSteps: { select: { status: true } } },
+      },
     },
   });
   if (!client) notFound();
@@ -227,7 +231,7 @@ export default async function ClientDetailPage({
                       <td>{formatManilaDate(f.adjustedDueDate)}</td>
                       <td>
                         {f.status === "COMPLETE" ? (
-                          <StatusBadge tone="done">{f.status}</StatusBadge>
+                          <StatusBadge tone="done">{filingStatusLabel(f.status, countSkippedSteps(f.workflowSteps))}</StatusBadge>
                         ) : f.status === "BLOCKED" ? (
                           <StatusBadge tone="overdue">{f.status}</StatusBadge>
                         ) : f.status === "WAITING_BIR" || f.status === "WAITING_CLIENT" ? (

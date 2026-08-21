@@ -4,7 +4,15 @@ import type { FilingStatus, WorkflowStepStatus } from "./types";
 /**
  * Filing status derivation (SPEC.md 7.2) — status is DERIVED from its
  * steps, never set by hand:
- *   - all DONE/NA -> COMPLETE
+ *   - all DONE/NA/SKIPPED -> COMPLETE. A SKIPPED step is a deliberate,
+ *     reasoned decision that the step doesn't apply (SPEC.md 7.2 requires
+ *     a written skippedReason to skip at all — see canCompleteStep/
+ *     skipStep) — it isn't "not done," so it must not block COMPLETE any
+ *     more than NA does. Excluding it here would strand a filing on the
+ *     dashboard/board forever with no way to clear it, for a decision
+ *     that was already deliberately made and recorded. The distinction
+ *     stays visible at render time: filingStatusLabel() below renders
+ *     "Complete (N steps skipped)" rather than collapsing SKIPPED into NA.
  *   - past adjustedDueDate and not complete -> BLOCKED (takes priority
  *     over "waiting on X" below: being overdue is the more urgent signal
  *     for a bookkeeper regardless of what it's specifically waiting on)
@@ -26,8 +34,8 @@ export function deriveFilingStatus(input: {
   const { steps, adjustedDueDate, now } = input;
   if (steps.length === 0) return "NOT_STARTED";
 
-  const allDoneOrNa = steps.every((s) => s.status === "DONE" || s.status === "NA");
-  if (allDoneOrNa) return "COMPLETE";
+  const allResolved = steps.every((s) => s.status === "DONE" || s.status === "NA" || s.status === "SKIPPED");
+  if (allResolved) return "COMPLETE";
 
   // Calendar-day comparison, not raw instant: adjustedDueDate is a clean
   // UTC-midnight marker (Manila 08:00), while `now` is a real timestamp.
@@ -45,6 +53,25 @@ export function deriveFilingStatus(input: {
 
   const anyStarted = steps.some((s) => s.status !== "PENDING" && s.status !== "NA");
   return anyStarted ? "IN_PROGRESS" : "NOT_STARTED";
+}
+
+/** Count of SKIPPED steps — NOT including NA, a deliberately different bucket (SPEC.md 7.2). */
+export function countSkippedSteps(steps: { status: WorkflowStepStatus }[]): number {
+  return steps.filter((s) => s.status === "SKIPPED").length;
+}
+
+/**
+ * The label to render for a filing's status. Every status renders as its
+ * bare enum value except COMPLETE with one or more skipped steps, which
+ * renders as "Complete (N steps skipped)" so a skip stays visible at the
+ * point COMPLETE is shown, rather than looking identical to a filing with
+ * no skips at all (SPEC.md 7.2).
+ */
+export function filingStatusLabel(status: FilingStatus, skippedCount: number): string {
+  if (status === "COMPLETE" && skippedCount > 0) {
+    return `Complete (${skippedCount} step${skippedCount === 1 ? "" : "s"} skipped)`;
+  }
+  return status;
 }
 
 /**

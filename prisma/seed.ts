@@ -32,6 +32,7 @@
 
 import { PrismaClient } from "@prisma/client";
 import { DateTime } from "luxon";
+import { deriveFilingStatus } from "../lib/workflow/status";
 
 const prisma = new PrismaClient();
 const MANILA_ZONE = "Asia/Manila";
@@ -735,7 +736,9 @@ async function instantiateWorkflowSteps(
     waitingSince?: Date;
     followUpCount?: number;
   },
-) {
+): Promise<{ status: "PENDING" | "DONE" | "WAITING_EXTERNAL" | "SKIPPED" | "NA"; waitingOnLabel: string | null }[]> {
+  const created: { status: "PENDING" | "DONE" | "WAITING_EXTERNAL" | "SKIPPED" | "NA"; waitingOnLabel: string | null }[] =
+    [];
   for (const step of WORKFLOW_STEP_TEMPLATE) {
     const isSawtStep = step.isConditional === true;
     let status: "PENDING" | "DONE" | "WAITING_EXTERNAL" | "SKIPPED" | "NA" = "PENDING";
@@ -780,7 +783,9 @@ async function instantiateWorkflowSteps(
         skippedReason,
       },
     });
+    created.push({ status, waitingOnLabel: step.waitingOnLabel ?? null });
   }
+  return created;
 }
 
 async function seedTY2026Cycle(actorId: string) {
@@ -1002,7 +1007,10 @@ async function seedTY2026Cycle(actorId: string) {
           adjustedDueDate: new Date(`${DUE.Q1.adjusted}T00:00:00.000Z`),
           certificatesExpectedBy: new Date(`${WORKING_CALENDAR.Q1.certificatesExpectedBy}T00:00:00.000Z`),
           internalFilingTarget: new Date(`${WORKING_CALENDAR.Q1.internalFilingTarget}T00:00:00.000Z`),
-          status: "COMPLETE",
+          // status is derived below from the steps this filing actually
+          // ends up with, once instantiateWorkflowSteps has created them —
+          // never hand-typed (SPEC.md 7.2: a hardcoded literal here is
+          // exactly how the seed and deriveFilingStatus went out of sync).
           requiresSawt: cfg.requiresSawt,
           computationSnapshot: JSON.stringify(q1Snapshot),
           filedAt: new Date(`${DUE.Q1.adjusted}T00:00:00.000Z`),
@@ -1014,9 +1022,19 @@ async function seedTY2026Cycle(actorId: string) {
         },
       });
 
-      await instantiateWorkflowSteps(q1Filing.id, {
+      const q1Steps = await instantiateWorkflowSteps(q1Filing.id, {
         requiresSawt: cfg.requiresSawt,
         doneThroughSequence: 16,
+      });
+      await prisma.filing.update({
+        where: { id: q1Filing.id },
+        data: {
+          status: deriveFilingStatus({
+            steps: q1Steps,
+            adjustedDueDate: q1Filing.adjustedDueDate,
+            now: nowManila.toJSDate(),
+          }),
+        },
       });
     }
 
@@ -1114,7 +1132,7 @@ async function seedTY2026Cycle(actorId: string) {
           adjustedDueDate: new Date(`${DUE.Q2.adjusted}T00:00:00.000Z`),
           certificatesExpectedBy: new Date(`${WORKING_CALENDAR.Q2.certificatesExpectedBy}T00:00:00.000Z`),
           internalFilingTarget: new Date(`${WORKING_CALENDAR.Q2.internalFilingTarget}T00:00:00.000Z`),
-          status: cfg.q2.waitingAtStepCode ? "WAITING_BIR" : "BLOCKED",
+          // status is derived below, not hand-typed — see the Q1 comment above.
           requiresSawt: cfg.requiresSawt,
           computationSnapshot: cfg.q2.filed ? JSON.stringify(q2Snapshot) : undefined,
           filedAt: cfg.q2.filed ? new Date(`${DUE.Q2.adjusted}T00:00:00.000Z`) : null,
@@ -1129,12 +1147,22 @@ async function seedTY2026Cycle(actorId: string) {
         },
       });
 
-      await instantiateWorkflowSteps(q2Filing.id, {
+      const q2Steps = await instantiateWorkflowSteps(q2Filing.id, {
         requiresSawt: cfg.requiresSawt,
         doneThroughSequence: cfg.q2.doneThroughSequence,
         waitingAtStepCode: cfg.q2.waitingAtStepCode,
         waitingSince: waitingSinceDate,
         followUpCount: cfg.q2.followUpCount,
+      });
+      await prisma.filing.update({
+        where: { id: q2Filing.id },
+        data: {
+          status: deriveFilingStatus({
+            steps: q2Steps,
+            adjustedDueDate: q2Filing.adjustedDueDate,
+            now: nowManila.toJSDate(),
+          }),
+        },
       });
     }
 
@@ -1153,15 +1181,25 @@ async function seedTY2026Cycle(actorId: string) {
           adjustedDueDate: new Date(`${DUE.Q3.adjusted}T00:00:00.000Z`),
           certificatesExpectedBy: new Date(`${WORKING_CALENDAR.Q3.certificatesExpectedBy}T00:00:00.000Z`),
           internalFilingTarget: new Date(`${WORKING_CALENDAR.Q3.internalFilingTarget}T00:00:00.000Z`),
-          status: "NOT_STARTED",
+          // status is derived below, not hand-typed — see the Q1 comment above.
           requiresSawt: cfg.requiresSawt,
           actorId,
         },
       });
 
-      await instantiateWorkflowSteps(q3Filing.id, {
+      const q3Steps = await instantiateWorkflowSteps(q3Filing.id, {
         requiresSawt: cfg.requiresSawt,
         doneThroughSequence: 0,
+      });
+      await prisma.filing.update({
+        where: { id: q3Filing.id },
+        data: {
+          status: deriveFilingStatus({
+            steps: q3Steps,
+            adjustedDueDate: q3Filing.adjustedDueDate,
+            now: nowManila.toJSDate(),
+          }),
+        },
       });
     }
   }
