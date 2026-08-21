@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { StatusBadge, type StatusTone } from "@/components/status-badge";
+import { ClickableRow, ActionCell } from "@/components/clickable-row";
 import { formatManilaDate, currentTaxableYearManila } from "@/lib/dates";
 import { currentStepCode } from "@/lib/workflow/status";
 import { deriveStepAging, type AgingTone } from "@/lib/workflow/aging";
@@ -125,78 +126,97 @@ export default async function DashboardPage() {
     }
   }
 
+  const rowHref = (filingId: string, clientId: string) => `/clients/${clientId}/filings/${filingId}`;
+
+  const needsActionRows: FilingTableRow[] = needsAction.map((r) => ({
+    id: r.filing.id,
+    href: rowHref(r.filing.id, r.filing.clientId),
+    clientName: r.filing.client.registeredName,
+    taxableYear: r.filing.taxableYear,
+    period: r.filing.period,
+    stepTitle: r.step.title,
+    dueDate: r.dueDate,
+  }));
+
+  const waitingBirRows: FilingTableRow[] = waitingBir.map((r) => ({
+    id: r.filing.id,
+    href: rowHref(r.filing.id, r.filing.clientId),
+    clientName: r.filing.client.registeredName,
+    taxableYear: r.filing.taxableYear,
+    period: r.filing.period,
+    stepTitle: r.step.title,
+    dueDate: r.dueDate,
+    aging: r.aging,
+    action: (
+      <form action={logFollowUpAction.bind(null, r.step.id)}>
+        <Button type="submit" size="sm" variant="secondary">
+          Log follow-up
+        </Button>
+      </form>
+    ),
+  }));
+
+  const waitingClientRows: FilingTableRow[] = waitingClient.map((r) => ({
+    id: r.filing.id,
+    href: rowHref(r.filing.id, r.filing.clientId),
+    clientName: r.filing.client.registeredName,
+    taxableYear: r.filing.taxableYear,
+    period: r.filing.period,
+    stepTitle: r.step.title,
+    dueDate: r.dueDate,
+    aging: r.aging,
+    action: (
+      <form action={logFollowUpAction.bind(null, r.step.id)}>
+        <Button type="submit" size="sm" variant="secondary">
+          Log follow-up
+        </Button>
+      </form>
+    ),
+  }));
+
+  const upcomingRows: FilingTableRow[] = upcomingDeadlines.map((f) => ({
+    id: f.id,
+    href: rowHref(f.id, f.clientId),
+    clientName: f.client.registeredName,
+    taxableYear: f.taxableYear,
+    period: f.period,
+    // This row is specifically the statutory/adjusted deadline calendar,
+    // unlike the rows above — filing.adjustedDueDate is correct here, not
+    // a bug.
+    stepTitle: f.formType,
+    dueDate: f.adjustedDueDate,
+  }));
+
   return (
-    <div className="flex flex-col gap-4">
+    <div className="mx-auto flex w-full max-w-[1100px] flex-col gap-3">
       <h1 className="text-lg font-semibold text-slate-900">Dashboard</h1>
 
-      <DashboardRow title="Needs my action now" count={needsAction.length}>
-        {needsAction.length === 0 ? (
-          <Empty text="Nothing waiting on you right now." />
-        ) : (
-          needsAction.map(({ filing, step, dueDate }) => (
-            <FilingRowCard key={filing.id} filing={filing} stepTitle={step.title} dueDate={dueDate} />
-          ))
-        )}
+      <DashboardRow title="Needs my action now" count={needsActionRows.length}>
+        <FilingRowsTable rows={needsActionRows} />
       </DashboardRow>
 
-      <DashboardRow title="Waiting on BIR" count={waitingBir.length}>
-        {waitingBir.length === 0 ? (
-          <Empty text="Nothing waiting on BIR." />
-        ) : (
-          waitingBir.map(({ filing, step, aging, dueDate }) => (
-            <FilingRowCard key={filing.id} filing={filing} stepTitle={step.title} dueDate={dueDate} aging={aging}>
-              <form action={logFollowUpAction.bind(null, step.id)}>
-                <Button type="submit" size="sm" variant="secondary">
-                  Log follow-up
-                </Button>
-              </form>
-            </FilingRowCard>
-          ))
-        )}
+      <DashboardRow title="Waiting on BIR" count={waitingBirRows.length}>
+        <FilingRowsTable rows={waitingBirRows} />
       </DashboardRow>
 
-      <DashboardRow title="Waiting on client" count={waitingClient.length}>
-        {waitingClient.length === 0 ? (
-          <Empty text="Nothing waiting on a client." />
-        ) : (
-          waitingClient.map(({ filing, step, aging, dueDate }) => (
-            <FilingRowCard key={filing.id} filing={filing} stepTitle={step.title} dueDate={dueDate} aging={aging}>
-              <form action={logFollowUpAction.bind(null, step.id)}>
-                <Button type="submit" size="sm" variant="secondary">
-                  Log follow-up
-                </Button>
-              </form>
-            </FilingRowCard>
-          ))
-        )}
+      <DashboardRow title="Waiting on client" count={waitingClientRows.length}>
+        <FilingRowsTable rows={waitingClientRows} />
       </DashboardRow>
 
-      <DashboardRow title="Upcoming deadlines (next 45 days)" count={upcomingDeadlines.length}>
-        {upcomingDeadlines.length === 0 ? (
-          <Empty text="Nothing due in the next 45 days." />
-        ) : (
-          // This row is specifically the statutory/adjusted deadline
-          // calendar, unlike the step rows above — filing.adjustedDueDate
-          // is correct here, not a bug (see the "Confirm what that panel
-          // queries" note in the commit for this fix).
-          upcomingDeadlines.map((f) => (
-            <FilingRowCard key={f.id} filing={f} stepTitle={f.formType} dueDate={f.adjustedDueDate} />
-          ))
-        )}
+      <DashboardRow title="Upcoming deadlines (next 45 days)" count={upcomingRows.length}>
+        <FilingRowsTable rows={upcomingRows} />
       </DashboardRow>
 
       <DashboardRow title="Missing documents" count={missingDocs.length}>
-        {missingDocsByClient.size === 0 ? (
-          <Empty text="No missing required documents." />
-        ) : (
-          Array.from(missingDocsByClient.entries()).map(([clientId, bucket]) => (
+        <div className="flex flex-col gap-2 p-3">
+          {Array.from(missingDocsByClient.entries()).map(([clientId, bucket]) => (
             <div key={clientId} className="rounded-md border border-slate-200 p-2">
-              <p className="text-sm font-medium text-slate-900">{bucket.clientName}</p>
+              <p className="text-[14px] font-medium text-slate-900">{bucket.clientName}</p>
               <ul className="mt-1 flex flex-col gap-0.5">
                 {bucket.items.map((item, i) => (
-                  <li key={i} className="text-xs text-slate-600">
+                  <li key={i} className="text-[13px] text-slate-600">
                     TY{item.filing.taxableYear} {item.filing.period} —{" "}
-                    <Link href={`/clients/${item.filing.clientId}/filings/${item.filing.id}`} className="underline">
+                    <Link href={rowHref(item.filing.id, item.filing.clientId)} className="underline">
                       {item.step.title}
                     </Link>
                     : {item.missing.join(", ")}
@@ -204,29 +224,25 @@ export default async function DashboardPage() {
                 ))}
               </ul>
             </div>
-          ))
-        )}
+          ))}
+        </div>
       </DashboardRow>
 
       <DashboardRow title="Threshold & election alerts" count={thresholdAlerts.length + electionAlerts.length}>
-        {thresholdAlerts.length === 0 && electionAlerts.length === 0 ? (
-          <Empty text="No threshold or election alerts." />
-        ) : (
-          <div className="flex flex-col gap-2">
-            {thresholdAlerts.map((a) => (
-              <p key={a.clientName} className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-800">
-                {a.clientName}: {(a.pct * 100).toFixed(0)}% of the ₱3,000,000 VAT threshold
-                {a.pct >= 1 ? " — BREACHED. The 8% option ceases to apply; consult the current BIR issuance." : "."}
-              </p>
-            ))}
-            {electionAlerts.map((c) => (
-              <p key={c.id} className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
-                {c.registeredName}: 8% election for TY{currentYear} is{" "}
-                {c.taxYears[0]?.electionStatus ?? "not recorded"} — Q1 filings are blocked until confirmed.
-              </p>
-            ))}
-          </div>
-        )}
+        <div className="flex flex-col gap-2 p-3">
+          {thresholdAlerts.map((a) => (
+            <p key={a.clientName} className="rounded-md bg-red-50 px-3 py-2 text-[14px] text-red-800">
+              {a.clientName}: {(a.pct * 100).toFixed(0)}% of the ₱3,000,000 VAT threshold
+              {a.pct >= 1 ? " — BREACHED. The 8% option ceases to apply; consult the current BIR issuance." : "."}
+            </p>
+          ))}
+          {electionAlerts.map((c) => (
+            <p key={c.id} className="rounded-md bg-amber-50 px-3 py-2 text-[14px] text-amber-800">
+              {c.registeredName}: 8% election for TY{currentYear} is{" "}
+              {c.taxYears[0]?.electionStatus ?? "not recorded"} — Q1 filings are blocked until confirmed.
+            </p>
+          ))}
+        </div>
       </DashboardRow>
     </div>
   );
@@ -246,48 +262,72 @@ function DashboardRow({
   count: number;
   children: React.ReactNode;
 }) {
+  if (count === 0) {
+    return (
+      <div className="flex items-center gap-2 px-1 text-[13px] text-slate-400">
+        <span>{title}</span>
+        <span className="inline-flex items-center justify-center rounded-full bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-400">
+          0
+        </span>
+      </div>
+    );
+  }
   return (
     <Card>
-      <CardHeader className="flex items-center justify-between">
+      <CardHeader className="flex items-center gap-2 py-2">
         <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
-        <span className="text-xs text-slate-400">{count}</span>
+        <span className="inline-flex items-center justify-center rounded-full bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-500">
+          {count}
+        </span>
       </CardHeader>
-      <CardBody className="flex flex-col gap-2">{children}</CardBody>
+      <CardBody className="p-0">{children}</CardBody>
     </Card>
   );
 }
 
-function Empty({ text }: { text: string }) {
-  return <p className="text-sm text-slate-400">{text}</p>;
-}
-
-function FilingRowCard({
-  filing,
-  stepTitle,
-  dueDate,
-  aging,
-  children,
-}: {
-  filing: { id: string; clientId: string; taxableYear: number; period: string; client: { registeredName: string } };
+type FilingTableRow = {
+  id: string;
+  href: string;
+  clientName: string;
+  taxableYear: number;
+  period: string;
   stepTitle: string;
   dueDate: Date;
   aging?: ReturnType<typeof deriveStepAging>;
-  children?: React.ReactNode;
-}) {
+  action?: React.ReactNode;
+};
+
+function FilingRowsTable({ rows }: { rows: FilingTableRow[] }) {
   return (
-    <div className="flex items-center justify-between rounded-md border border-slate-200 p-2">
-      <div>
-        <Link href={`/clients/${filing.clientId}/filings/${filing.id}`} className="text-sm font-medium text-slate-900 hover:underline">
-          {filing.client.registeredName} — TY{filing.taxableYear} {filing.period}
-        </Link>
-        <p className="text-xs text-slate-500">
-          {stepTitle} — due {formatManilaDate(dueDate)}
-        </p>
-      </div>
-      <div className="flex items-center gap-2">
-        {aging && <StatusBadge tone={AGING_BADGE_TONE[aging.tone]}>{aging.daysWaiting}d</StatusBadge>}
-        {children}
-      </div>
+    <div className="overflow-x-auto">
+      <table className="w-full border-collapse">
+        <thead>
+          <tr className="border-b border-slate-100 text-left text-[11px] font-medium uppercase tracking-wide text-slate-400">
+            <th className="px-3 py-2 font-medium">Client</th>
+            <th className="px-3 py-2 font-medium">Period</th>
+            <th className="px-3 py-2 font-medium">Step</th>
+            <th className="px-3 py-2 font-medium">Due</th>
+            <th className="px-3 py-2 font-medium">Aging</th>
+            <th className="px-3 py-2 font-medium"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <ClickableRow key={r.id} href={r.href} className="border-b border-slate-100 last:border-0">
+              <td className="px-3 py-2 text-[14px] font-medium text-slate-900">{r.clientName}</td>
+              <td className="px-3 py-2 text-[13px] text-slate-500">
+                TY{r.taxableYear} {r.period}
+              </td>
+              <td className="px-3 py-2 text-[14px] text-slate-700">{r.stepTitle}</td>
+              <td className="px-3 py-2 text-[13px] text-slate-500">{formatManilaDate(r.dueDate)}</td>
+              <td className="px-3 py-2">
+                {r.aging && <StatusBadge tone={AGING_BADGE_TONE[r.aging.tone]}>{r.aging.daysWaiting}d</StatusBadge>}
+              </td>
+              {r.action ? <ActionCell>{r.action}</ActionCell> : <td className="px-3 py-2" />}
+            </ClickableRow>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
