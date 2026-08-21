@@ -152,6 +152,29 @@ describe("stepDueDate", () => {
     expect(due).not.toEqual(FILING.adjustedDueDate);
   });
 
+  it("a waiting step's due date lands on the correct Manila calendar day even when waitingSince carries an early-Manila-morning time-of-day", () => {
+    // A real (non-seed) waitingSince is `new Date()` at the moment a
+    // bookkeeper clicks "waiting," not a clean midnight. Manila 2026-08-20
+    // 03:00 is UTC 2026-08-19 19:00 -- a naive getUTCDate()-based addDays
+    // would add `days` starting from Aug 19 (the UTC day), landing the
+    // result a day early. It must land on Aug 23 (3 days after the
+    // Manila-side Aug 20), not Aug 22.
+    const waitingSince = new Date("2026-08-19T19:00:00.000Z"); // Manila Aug 20, 03:00
+    const due = stepDueDate({
+      stepCode: "RECEIVE_TRRC",
+      status: "WAITING_EXTERNAL",
+      waitingSince,
+      expectedResponseDays: 3,
+      certificatesExpectedBy: null,
+      internalFilingTarget: null,
+      adjustedDueDate: waitingSince,
+    });
+    // due, converted to Manila, must fall on Aug 23 -- not Aug 22.
+    const manilaDate = new Date(due.getTime() + 8 * 60 * 60 * 1000);
+    expect(manilaDate.getUTCDate()).toBe(23);
+    expect(manilaDate.getUTCMonth()).toBe(7); // August (0-indexed)
+  });
+
   it("falls back to adjustedDueDate only when no internalFilingTarget was ever set", () => {
     const due = stepDueDate({
       stepCode: "RECORD_CRJ",

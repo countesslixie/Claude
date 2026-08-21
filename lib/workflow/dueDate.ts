@@ -49,6 +49,16 @@ export function stepDueDate(input: {
   return input.internalFilingTarget ?? input.adjustedDueDate;
 }
 
+// Plain millisecond arithmetic, not calendar-component reconstruction: a
+// real (non-seed) waitingSince is `new Date()` at the moment a bookkeeper
+// clicks "waiting," carrying a real time-of-day. Manila is UTC+8, so any
+// click between Manila 00:00-07:59 falls on the previous UTC calendar day;
+// reconstructing via getUTCDate() would then add `days` from the wrong day,
+// landing the result a day early. Millisecond math sidesteps calendar-day
+// extraction entirely and stays exactly consistent with deriveStepAging's
+// elapsed-time threshold (aging.ts), which is also pure millisecond math.
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
 function addDays(date: Date, days: number): Date {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + days));
+  return new Date(date.getTime() + days * MS_PER_DAY);
 }
