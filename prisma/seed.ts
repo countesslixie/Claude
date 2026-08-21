@@ -802,18 +802,21 @@ async function seedTY2026Cycle(actorId: string) {
   // Working calendar (SPEC.md 3.6, Phase 2b P7) — the bookkeeper's own
   // practice targets, distinct from and editable independent of the
   // statutory/adjusted due dates above. Actual practice for quarterly
-  // returns: internalFilingTarget matches the statutory due date;
-  // certificatesExpectedBy is 10 days before it, giving a window to chase
-  // late certificates before the filing target. Q2's figures (Aug 5 / Aug
-  // 15) are given directly from practice; Q1 and Q3 are derived on the
-  // same pattern. (The ANNUAL return follows a different, longer-lead
-  // pattern — certificatesExpectedBy Feb 15, internalFilingTarget Mar 31,
-  // of the following year — but no ANNUAL filing is seeded in this demo
-  // cycle, so it isn't instantiated here.)
+  // returns: internalFilingTarget is the ADJUSTED (business-day-shifted)
+  // due date itself — no internal buffer by design, the bookkeeper works
+  // to the normal deadline for quarterlies — and certificatesExpectedBy is
+  // 10 days before the STATUTORY due date (unshifted), giving a window to
+  // chase late certificates before the filing target. Q1's adjusted date
+  // equals its statutory date (May 15, 2026 is a Friday, no shift), so
+  // its internalFilingTarget is unaffected either way. (The ANNUAL return
+  // keeps a real buffer instead — certificatesExpectedBy Feb 15,
+  // internalFilingTarget Mar 31, of the following year, ahead of the Apr
+  // 15 statutory/adjusted deadline — but no ANNUAL filing is seeded in
+  // this demo cycle, so it isn't instantiated here.)
   const WORKING_CALENDAR = {
-    Q1: { certificatesExpectedBy: "2026-05-05", internalFilingTarget: "2026-05-15" },
-    Q2: { certificatesExpectedBy: "2026-08-05", internalFilingTarget: "2026-08-15" },
-    Q3: { certificatesExpectedBy: "2026-11-05", internalFilingTarget: "2026-11-15" },
+    Q1: { certificatesExpectedBy: "2026-05-05", internalFilingTarget: DUE.Q1.adjusted },
+    Q2: { certificatesExpectedBy: "2026-08-05", internalFilingTarget: DUE.Q2.adjusted },
+    Q3: { certificatesExpectedBy: "2026-11-05", internalFilingTarget: DUE.Q3.adjusted },
   };
 
   type ClientCycleConfig = {

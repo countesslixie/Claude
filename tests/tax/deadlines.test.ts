@@ -169,23 +169,25 @@ describe("resolveStatutoryDueDate / resolveAdjustedDueDate", () => {
  * cross-checked against those exact figures here.
  */
 describe("deriveWorkingCalendar", () => {
-  it("Q1: certificatesExpectedBy 10 days before internalFilingTarget, which matches the statutory due date", () => {
-    const result = deriveWorkingCalendar("Q1", D("2026-05-15"));
+  it("Q1: certificatesExpectedBy 10 days before the statutory due date; internalFilingTarget is the adjusted due date (statutory == adjusted here, May 15 is a Friday)", () => {
+    const result = deriveWorkingCalendar("Q1", D("2026-05-15"), D("2026-05-15"));
     expect(result).toEqual({ certificatesExpectedBy: D("2026-05-05"), internalFilingTarget: D("2026-05-15") });
   });
 
-  it("Q2: matches prisma/seed.ts's given practice figures exactly (Aug 5 / Aug 15)", () => {
-    const result = deriveWorkingCalendar("Q2", D("2026-08-15"));
-    expect(result).toEqual({ certificatesExpectedBy: D("2026-08-05"), internalFilingTarget: D("2026-08-15") });
+  it("Q2: internalFilingTarget is the ADJUSTED due date (Aug 17, Mon), not the statutory date (Aug 15, Sat) -- no internal buffer by design", () => {
+    const result = deriveWorkingCalendar("Q2", D("2026-08-15"), D("2026-08-17"));
+    expect(result).toEqual({ certificatesExpectedBy: D("2026-08-05"), internalFilingTarget: D("2026-08-17") });
+    // certificatesExpectedBy stays anchored to the STATUTORY date, not the adjusted one.
+    expect(result.certificatesExpectedBy).not.toEqual(D("2026-08-07"));
   });
 
-  it("Q3: Nov 5 / Nov 15", () => {
-    const result = deriveWorkingCalendar("Q3", D("2026-11-15"));
-    expect(result).toEqual({ certificatesExpectedBy: D("2026-11-05"), internalFilingTarget: D("2026-11-15") });
+  it("Q3: internalFilingTarget is the adjusted due date (Nov 16, Mon), not the statutory date (Nov 15, Sun)", () => {
+    const result = deriveWorkingCalendar("Q3", D("2026-11-15"), D("2026-11-16"));
+    expect(result).toEqual({ certificatesExpectedBy: D("2026-11-05"), internalFilingTarget: D("2026-11-16") });
   });
 
-  it("ANNUAL: Feb 15 / Mar 31, of the same year as the (following-year) statutory due date", () => {
-    const result = deriveWorkingCalendar("ANNUAL", D("2027-04-15"));
+  it("ANNUAL: keeps a real buffer -- Feb 15 / Mar 31, ahead of the Apr 15 statutory/adjusted deadline, of the same year as the (following-year) statutory due date", () => {
+    const result = deriveWorkingCalendar("ANNUAL", D("2027-04-15"), D("2027-04-15"));
     expect(result).toEqual({ certificatesExpectedBy: D("2027-02-15"), internalFilingTarget: D("2027-03-31") });
   });
 });

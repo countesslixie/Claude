@@ -61,9 +61,12 @@ describe("generateFilingsForClientYear", () => {
     expect(byPeriod.ANNUAL.statutoryDueDate).toEqual(new Date("2027-04-15T00:00:00.000Z")); // following year
     expect(byPeriod.ANNUAL.formType).toBe("F1701A"); // purely self-employed
 
-    // Working calendar (Phase 2b P7 pattern, generalized)
+    // Working calendar (Phase 2b P7 pattern, generalized). Quarterly
+    // internalFilingTarget is the ADJUSTED due date (Aug 17, Mon) -- not
+    // the statutory date (Aug 15, Sat) -- no internal buffer by design;
+    // certificatesExpectedBy stays anchored to the statutory date.
     expect(byPeriod.Q2.certificatesExpectedBy).toEqual(new Date("2026-08-05T00:00:00.000Z"));
-    expect(byPeriod.Q2.internalFilingTarget).toEqual(new Date("2026-08-15T00:00:00.000Z"));
+    expect(byPeriod.Q2.internalFilingTarget).toEqual(new Date("2026-08-17T00:00:00.000Z"));
     expect(byPeriod.ANNUAL.certificatesExpectedBy).toEqual(new Date("2027-02-15T00:00:00.000Z"));
     expect(byPeriod.ANNUAL.internalFilingTarget).toEqual(new Date("2027-03-31T00:00:00.000Z"));
 

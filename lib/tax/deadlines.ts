@@ -116,15 +116,18 @@ export interface WorkingCalendar {
 /**
  * The bookkeeper's working-calendar practice targets for a period
  * (SPEC.md 3.6, Phase 2b P7) — distinct from and never overriding the
- * statutory/adjusted due date. Quarterly returns: internalFilingTarget
- * matches the statutory due date itself, and certificatesExpectedBy is 10
- * days before it. ANNUAL follows a longer-lead pattern instead —
- * certificatesExpectedBy Feb 15, internalFilingTarget Mar 31, of the same
- * calendar year as the ANNUAL statutory due date (which is itself already
- * "of the following year" relative to the taxable year — see
- * resolveStatutoryDueDate above).
+ * statutory/adjusted due date. Quarterly returns: internalFilingTarget is
+ * the ADJUSTED (business-day-shifted) due date itself — no internal buffer
+ * by design, the bookkeeper works to the normal deadline for quarterlies —
+ * and certificatesExpectedBy is 10 days before the STATUTORY due date
+ * (unshifted; a fixed lead time ahead of the normal deadline, not the
+ * shifted one). ANNUAL keeps a real buffer instead: certificatesExpectedBy
+ * Feb 15, internalFilingTarget Mar 31, of the same calendar year as the
+ * ANNUAL statutory due date (which is itself already "of the following
+ * year" relative to the taxable year — see resolveStatutoryDueDate above)
+ * — ahead of the Apr 15 statutory/adjusted deadline.
  */
-export function deriveWorkingCalendar(period: Period, statutoryDueDate: Date): WorkingCalendar {
+export function deriveWorkingCalendar(period: Period, statutoryDueDate: Date, adjustedDueDate: Date): WorkingCalendar {
   if (period === "ANNUAL") {
     const year = statutoryDueDate.getUTCFullYear();
     return {
@@ -134,6 +137,6 @@ export function deriveWorkingCalendar(period: Period, statutoryDueDate: Date): W
   }
   return {
     certificatesExpectedBy: addDays(statutoryDueDate, -10),
-    internalFilingTarget: statutoryDueDate,
+    internalFilingTarget: adjustedDueDate,
   };
 }
