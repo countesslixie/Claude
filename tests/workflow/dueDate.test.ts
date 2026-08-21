@@ -12,7 +12,7 @@ const FILING = {
 };
 
 describe("stepDueDate", () => {
-  it("RECEIVE_2307 shows certificatesExpectedBy, not the filing's adjustedDueDate", () => {
+  it("RECEIVE_2307 shows certificatesExpectedBy + expectedResponseDays, not the filing's adjustedDueDate", () => {
     const due = stepDueDate({
       stepCode: "RECEIVE_2307",
       status: "WAITING_EXTERNAL",
@@ -22,8 +22,61 @@ describe("stepDueDate", () => {
       internalFilingTarget: FILING.internalFilingTarget,
       adjustedDueDate: FILING.adjustedDueDate,
     });
-    expect(due).toEqual(D("2026-11-05"));
+    expect(due).toEqual(D("2026-11-10"));
     expect(due).not.toEqual(FILING.adjustedDueDate);
+  });
+
+  it("RECEIVE_2307's due date is the exact day deriveStepAging's badge turns amber", async () => {
+    const { deriveStepAging } = await import("@/lib/workflow/aging");
+    const expectedResponseDays = 5;
+    const due = stepDueDate({
+      stepCode: "RECEIVE_2307",
+      status: "WAITING_EXTERNAL",
+      waitingSince: FILING.certificatesExpectedBy,
+      expectedResponseDays,
+      certificatesExpectedBy: FILING.certificatesExpectedBy,
+      internalFilingTarget: FILING.internalFilingTarget,
+      adjustedDueDate: FILING.adjustedDueDate,
+    });
+    expect(due).toEqual(D("2026-11-10"));
+
+    const agingBeforeDue = deriveStepAging({
+      stepCode: "RECEIVE_2307",
+      status: "WAITING_EXTERNAL",
+      waitingSince: FILING.certificatesExpectedBy,
+      expectedResponseDays,
+      certificatesExpectedBy: FILING.certificatesExpectedBy,
+      now: D("2026-11-09"),
+    });
+    const agingOnDue = deriveStepAging({
+      stepCode: "RECEIVE_2307",
+      status: "WAITING_EXTERNAL",
+      waitingSince: FILING.certificatesExpectedBy,
+      expectedResponseDays,
+      certificatesExpectedBy: FILING.certificatesExpectedBy,
+      now: due,
+    });
+    expect(agingBeforeDue?.tone).toBe("green");
+    expect(agingOnDue?.tone).toBe("amber");
+  });
+
+  it("RECEIVE_2307 stays anchored on certificatesExpectedBy even if waitingSince has drifted (e.g. after a re-flip to WAITING_EXTERNAL stamps waitingSince to \"now\")", () => {
+    // deriveStepAging unconditionally overrides RECEIVE_2307's clock to
+    // certificatesExpectedBy regardless of waitingSince (aging.ts) — the
+    // due date must do the same, or a re-flipped step would show a due
+    // date computed from the stale waitingSince while the badge still
+    // measures from certificatesExpectedBy.
+    const due = stepDueDate({
+      stepCode: "RECEIVE_2307",
+      status: "WAITING_EXTERNAL",
+      waitingSince: D("2026-12-25"), // drifted: re-stamped to "now" by a re-flip
+      expectedResponseDays: 5,
+      certificatesExpectedBy: FILING.certificatesExpectedBy,
+      internalFilingTarget: FILING.internalFilingTarget,
+      adjustedDueDate: FILING.adjustedDueDate,
+    });
+    expect(due).toEqual(D("2026-11-10"));
+    expect(due).not.toEqual(D("2026-12-30"));
   });
 
   it("a waiting step (not RECEIVE_2307) shows waitingSince + expectedResponseDays, not the filing's adjustedDueDate", () => {

@@ -3,8 +3,17 @@ import type { WorkflowStepStatus } from "./types";
 /**
  * The date to DISPLAY for a step — never the filing's adjustedDueDate by
  * default. Each step has its own clock (SPEC.md 3.6):
- *   - RECEIVE_2307: certificatesExpectedBy — the working-calendar date
- *     certificates are expected in, not the statutory filing deadline.
+ *   - RECEIVE_2307: certificatesExpectedBy + expectedResponseDays — the
+ *     working-calendar date certificates are expected in, plus the grace
+ *     window, i.e. the day the step is officially "late." This must stay
+ *     anchored on certificatesExpectedBy rather than falling through to
+ *     the generic waitingSince branch below: deriveStepAging (aging.ts)
+ *     unconditionally overrides RECEIVE_2307's clock to
+ *     certificatesExpectedBy regardless of waitingSince, because
+ *     markStepWaitingExternal re-stamps waitingSince to "now" if a
+ *     bookkeeper ever re-flips the step back to WAITING_EXTERNAL — using
+ *     that stale waitingSince here would desync the displayed date from
+ *     the aging badge it's shown next to.
  *   - Any other step currently WAITING_EXTERNAL: its own expected-response
  *     date (waitingSince + expectedResponseDays) — the same clock
  *     deriveStepAging's green/amber/red badge already measures against,
@@ -26,7 +35,7 @@ export function stepDueDate(input: {
   adjustedDueDate: Date;
 }): Date {
   if (input.stepCode === "RECEIVE_2307" && input.certificatesExpectedBy) {
-    return input.certificatesExpectedBy;
+    return addDays(input.certificatesExpectedBy, input.expectedResponseDays ?? 0);
   }
 
   if (input.status === "WAITING_EXTERNAL" && input.waitingSince && input.expectedResponseDays) {
