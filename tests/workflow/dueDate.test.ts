@@ -1,0 +1,114 @@
+import { describe, it, expect } from "vitest";
+import { stepDueDate } from "@/lib/workflow/dueDate";
+
+const D = (s: string) => new Date(`${s}T00:00:00.000Z`);
+
+// A Q3 filing: adjusted due Nov 16, working calendar certificatesExpectedBy
+// Nov 5 / internalFilingTarget Nov 15 (Phase 2b P7 pattern).
+const FILING = {
+  certificatesExpectedBy: D("2026-11-05"),
+  internalFilingTarget: D("2026-11-15"),
+  adjustedDueDate: D("2026-11-16"),
+};
+
+describe("stepDueDate", () => {
+  it("RECEIVE_2307 shows certificatesExpectedBy, not the filing's adjustedDueDate", () => {
+    const due = stepDueDate({
+      stepCode: "RECEIVE_2307",
+      status: "WAITING_EXTERNAL",
+      waitingSince: FILING.certificatesExpectedBy,
+      expectedResponseDays: 5,
+      certificatesExpectedBy: FILING.certificatesExpectedBy,
+      internalFilingTarget: FILING.internalFilingTarget,
+      adjustedDueDate: FILING.adjustedDueDate,
+    });
+    expect(due).toEqual(D("2026-11-05"));
+    expect(due).not.toEqual(FILING.adjustedDueDate);
+  });
+
+  it("a waiting step (not RECEIVE_2307) shows waitingSince + expectedResponseDays, not the filing's adjustedDueDate", () => {
+    // RECEIVE_TRRC, waiting since Aug 17 with a 3-day expected response —
+    // due Aug 20, nowhere near the filing's own adjustedDueDate.
+    const due = stepDueDate({
+      stepCode: "RECEIVE_TRRC",
+      status: "WAITING_EXTERNAL",
+      waitingSince: D("2026-08-17"),
+      expectedResponseDays: 3,
+      certificatesExpectedBy: null,
+      internalFilingTarget: null,
+      adjustedDueDate: D("2026-08-17"),
+    });
+    expect(due).toEqual(D("2026-08-20"));
+    expect(due).not.toEqual(D("2026-08-17"));
+  });
+
+  it("this is the same clock deriveStepAging's badge measures against", async () => {
+    const { deriveStepAging } = await import("@/lib/workflow/aging");
+    const waitingSince = D("2026-08-17");
+    const expectedResponseDays = 3;
+    const now = D("2026-08-29"); // 12 days after waitingSince
+
+    const due = stepDueDate({
+      stepCode: "RECEIVE_TRRC",
+      status: "WAITING_EXTERNAL",
+      waitingSince,
+      expectedResponseDays,
+      certificatesExpectedBy: null,
+      internalFilingTarget: null,
+      adjustedDueDate: D("2026-08-17"),
+    });
+    const aging = deriveStepAging({
+      stepCode: "RECEIVE_TRRC",
+      status: "WAITING_EXTERNAL",
+      waitingSince,
+      expectedResponseDays,
+      certificatesExpectedBy: null,
+      now,
+    });
+    // due date is 3 days after waitingSince; "now" is 12 days after
+    // waitingSince, so the step is 9 days past its displayed due date —
+    // consistent with the badge already reading red (>= 2x expected).
+    expect(due).toEqual(D("2026-08-20"));
+    expect(aging?.tone).toBe("red");
+  });
+
+  it("FILE_RETURN shows the filing's adjustedDueDate — it genuinely is the statutory deadline", () => {
+    const due = stepDueDate({
+      stepCode: "FILE_RETURN",
+      status: "PENDING",
+      waitingSince: null,
+      expectedResponseDays: null,
+      certificatesExpectedBy: FILING.certificatesExpectedBy,
+      internalFilingTarget: FILING.internalFilingTarget,
+      adjustedDueDate: FILING.adjustedDueDate,
+    });
+    expect(due).toEqual(FILING.adjustedDueDate);
+  });
+
+  it("a prep step not yet waiting shows internalFilingTarget, not the filing's adjustedDueDate", () => {
+    const due = stepDueDate({
+      stepCode: "RECORD_CRJ",
+      status: "PENDING",
+      waitingSince: null,
+      expectedResponseDays: null,
+      certificatesExpectedBy: FILING.certificatesExpectedBy,
+      internalFilingTarget: FILING.internalFilingTarget,
+      adjustedDueDate: FILING.adjustedDueDate,
+    });
+    expect(due).toEqual(D("2026-11-15"));
+    expect(due).not.toEqual(FILING.adjustedDueDate);
+  });
+
+  it("falls back to adjustedDueDate only when no internalFilingTarget was ever set", () => {
+    const due = stepDueDate({
+      stepCode: "RECORD_CRJ",
+      status: "PENDING",
+      waitingSince: null,
+      expectedResponseDays: null,
+      certificatesExpectedBy: null,
+      internalFilingTarget: null,
+      adjustedDueDate: FILING.adjustedDueDate,
+    });
+    expect(due).toEqual(FILING.adjustedDueDate);
+  });
+});

@@ -6,6 +6,7 @@ import { StatusBadge, type StatusTone } from "@/components/status-badge";
 import { formatManilaDate, currentTaxableYearManila } from "@/lib/dates";
 import { currentStepCode } from "@/lib/workflow/status";
 import { deriveStepAging, type AgingTone } from "@/lib/workflow/aging";
+import { stepDueDate } from "@/lib/workflow/dueDate";
 import { missingRequiredSlots } from "@/lib/workflow/docSlots";
 import { parseDocSlots } from "@/lib/workflow/types";
 import { logFollowUpAction } from "@/lib/actions/workflowSteps";
@@ -35,6 +36,7 @@ export default async function DashboardPage() {
     filing: (typeof activeFilings)[number];
     step: (typeof activeFilings)[number]["workflowSteps"][number];
     aging: ReturnType<typeof deriveStepAging>;
+    dueDate: Date;
   };
   const needsAction: Row[] = [];
   const waitingBir: Row[] = [];
@@ -46,6 +48,22 @@ export default async function DashboardPage() {
     const step = filing.workflowSteps.find((s) => s.stepCode === code);
     if (!step) continue;
 
+    // Each step shows ITS OWN due date, never the filing's adjustedDueDate
+    // by default — RECEIVE_2307 uses certificatesExpectedBy, a waiting
+    // step uses its own expected-response date (the same clock the aging
+    // badge below measures against), FILE_RETURN uses adjustedDueDate
+    // (it genuinely is the statutory deadline), everything else uses
+    // internalFilingTarget. See lib/workflow/dueDate.ts.
+    const dueDate = stepDueDate({
+      stepCode: step.stepCode,
+      status: step.status,
+      waitingSince: step.waitingSince,
+      expectedResponseDays: step.expectedResponseDays,
+      certificatesExpectedBy: filing.certificatesExpectedBy,
+      internalFilingTarget: filing.internalFilingTarget,
+      adjustedDueDate: filing.adjustedDueDate,
+    });
+
     if (step.status === "WAITING_EXTERNAL") {
       const aging = deriveStepAging({
         stepCode: step.stepCode,
@@ -55,11 +73,11 @@ export default async function DashboardPage() {
         certificatesExpectedBy: filing.certificatesExpectedBy,
         now,
       });
-      const row: Row = { filing, step, aging };
+      const row: Row = { filing, step, aging, dueDate };
       if (step.waitingOnLabel === "BIR") waitingBir.push(row);
       else if (step.waitingOnLabel === "Client") waitingClient.push(row);
     } else if (step.status === "PENDING" || step.status === "IN_PROGRESS") {
-      needsAction.push({ filing, step, aging: null });
+      needsAction.push({ filing, step, aging: null, dueDate });
     }
 
     const slots = parseDocSlots(step.requiredDocSlots);
@@ -115,8 +133,8 @@ export default async function DashboardPage() {
         {needsAction.length === 0 ? (
           <Empty text="Nothing waiting on you right now." />
         ) : (
-          needsAction.map(({ filing, step }) => (
-            <FilingRowCard key={filing.id} filing={filing} stepTitle={step.title} />
+          needsAction.map(({ filing, step, dueDate }) => (
+            <FilingRowCard key={filing.id} filing={filing} stepTitle={step.title} dueDate={dueDate} />
           ))
         )}
       </DashboardRow>
@@ -125,8 +143,8 @@ export default async function DashboardPage() {
         {waitingBir.length === 0 ? (
           <Empty text="Nothing waiting on BIR." />
         ) : (
-          waitingBir.map(({ filing, step, aging }) => (
-            <FilingRowCard key={filing.id} filing={filing} stepTitle={step.title} aging={aging}>
+          waitingBir.map(({ filing, step, aging, dueDate }) => (
+            <FilingRowCard key={filing.id} filing={filing} stepTitle={step.title} dueDate={dueDate} aging={aging}>
               <form action={logFollowUpAction.bind(null, step.id)}>
                 <Button type="submit" size="sm" variant="secondary">
                   Log follow-up
@@ -141,8 +159,8 @@ export default async function DashboardPage() {
         {waitingClient.length === 0 ? (
           <Empty text="Nothing waiting on a client." />
         ) : (
-          waitingClient.map(({ filing, step, aging }) => (
-            <FilingRowCard key={filing.id} filing={filing} stepTitle={step.title} aging={aging}>
+          waitingClient.map(({ filing, step, aging, dueDate }) => (
+            <FilingRowCard key={filing.id} filing={filing} stepTitle={step.title} dueDate={dueDate} aging={aging}>
               <form action={logFollowUpAction.bind(null, step.id)}>
                 <Button type="submit" size="sm" variant="secondary">
                   Log follow-up
@@ -157,7 +175,13 @@ export default async function DashboardPage() {
         {upcomingDeadlines.length === 0 ? (
           <Empty text="Nothing due in the next 45 days." />
         ) : (
-          upcomingDeadlines.map((f) => <FilingRowCard key={f.id} filing={f} stepTitle={f.formType} />)
+          // This row is specifically the statutory/adjusted deadline
+          // calendar, unlike the step rows above — filing.adjustedDueDate
+          // is correct here, not a bug (see the "Confirm what that panel
+          // queries" note in the commit for this fix).
+          upcomingDeadlines.map((f) => (
+            <FilingRowCard key={f.id} filing={f} stepTitle={f.formType} dueDate={f.adjustedDueDate} />
+          ))
         )}
       </DashboardRow>
 
@@ -240,11 +264,13 @@ function Empty({ text }: { text: string }) {
 function FilingRowCard({
   filing,
   stepTitle,
+  dueDate,
   aging,
   children,
 }: {
-  filing: { id: string; clientId: string; taxableYear: number; period: string; adjustedDueDate: Date; client: { registeredName: string } };
+  filing: { id: string; clientId: string; taxableYear: number; period: string; client: { registeredName: string } };
   stepTitle: string;
+  dueDate: Date;
   aging?: ReturnType<typeof deriveStepAging>;
   children?: React.ReactNode;
 }) {
@@ -255,7 +281,7 @@ function FilingRowCard({
           {filing.client.registeredName} — TY{filing.taxableYear} {filing.period}
         </Link>
         <p className="text-xs text-slate-500">
-          {stepTitle} — due {formatManilaDate(filing.adjustedDueDate)}
+          {stepTitle} — due {formatManilaDate(dueDate)}
         </p>
       </div>
       <div className="flex items-center gap-2">
