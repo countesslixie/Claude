@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { computeFiling } from "@/lib/tax/compute";
 import { sumCwtThroughPeriod, resolveCertificateCutoffDate } from "@/lib/tax/cwt";
-import { periodEndDate, priorPeriodsOf } from "@/lib/tax/periods";
+import { periodEndDate, priorPeriodsOf, periodToQuarters } from "@/lib/tax/periods";
 import { nowManila } from "@/lib/dates";
 import type { FilingComputationResult, Period } from "@/lib/tax/types";
 
@@ -88,6 +88,32 @@ export async function assembleAndComputeFiling(
     certificateCutoffDate: certificateCutoff.date,
     certificateCutoffSource: certificateCutoff.source,
   });
+}
+
+/**
+ * Whether this specific period has any operating sales recorded at all
+ * (rework brief #2 §3.1) — distinct from cumulativeGrossSalesCents, which
+ * is YTD-through-period and so can be misleadingly nonzero from an
+ * earlier period even when the current one has nothing entered yet. A
+ * filing whose own period has zero recorded sales renders "no sales
+ * recorded" instead of a computed ₱0.00 that reads as a real answer.
+ */
+export async function hasSalesRecordedForPeriod(
+  clientId: string,
+  taxableYear: number,
+  period: Period,
+): Promise<boolean> {
+  const quarters = periodToQuarters(period);
+  const count = await prisma.salesTransaction.count({
+    where: {
+      clientId,
+      taxableYear,
+      quarter: { in: [...quarters] },
+      incomeType: "OPERATING",
+      deletedAt: null,
+    },
+  });
+  return count > 0;
 }
 
 /**

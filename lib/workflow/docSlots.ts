@@ -28,6 +28,19 @@ export function canCompleteStep(slots: DocSlotDef[], documents: AttachedDocument
 }
 
 /**
+ * Every slot (required or optional) with no non-deleted document attached
+ * — used by the filing page's "documents not yet attached" banner (rework
+ * brief #2 §7), which lists what a DONE/IN_PROGRESS step has moved past
+ * without saving regardless of whether that slot blocks completion.
+ */
+export function emptySlots(slots: DocSlotDef[], documents: AttachedDocument[]): DocSlotDef[] {
+  const filledSlotCodes = new Set(
+    documents.filter((d) => !d.deletedAt && d.docSlotCode).map((d) => d.docSlotCode as string),
+  );
+  return slots.filter((s) => !filledSlotCodes.has(s.slotCode));
+}
+
+/**
  * SEND_CLIENT_PACKAGE's contents are assembled from documents already
  * saved against steps 7 (SAVE_FORM_COPY), 9 (SAVE_PROOF_PAYMENT), 10
  * (RECEIVE_TRRC), and 14 (SAWT_VALIDATION) — SPEC.md 7.1, §16 item 14. A

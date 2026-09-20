@@ -46,7 +46,7 @@ describe("stepDueDate business-day invariant (SPEC.md 3.6)", () => {
   it("Q2 2026's prep step due date renders Aug 17 -- the adjusted due date, not Aug 15 (Sat), the raw statutory date", async () => {
     const filings = await seedTestFilings();
     const q2 = filings.find((f) => f.period === "Q2")!;
-    const prepStep = q2.workflowSteps.find((s) => s.stepCode === "RECORD_CRJ")!;
+    const prepStep = q2.workflowSteps.find((s) => s.stepCode === "PREPARE_RETURN")!;
     expect(prepStep.status).toBe("PENDING"); // not a waiting-state clock
 
     const due = stepDueDate({

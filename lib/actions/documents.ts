@@ -7,6 +7,9 @@ import { logActivity } from "@/lib/activityLog";
 import { buildStorageRelativePath, saveDocumentFile } from "@/lib/documents/storage";
 import { computeSha256 } from "@/lib/documents/storage";
 import { manilaDateInputToJsDate, formatManilaDate } from "@/lib/dates";
+import { assembleAndComputeFiling, hasSalesRecordedForPeriod } from "@/lib/filingComputation";
+import { renderComputationSheetHtml } from "@/lib/documents/computationSheet";
+import type { FilingComputationResult } from "@/lib/tax/types";
 
 export type UploadDocumentResult = {
   ok: boolean;
@@ -122,6 +125,81 @@ export async function uploadDocument(formData: FormData): Promise<UploadDocument
   revalidatePath(`/clients/${client.id}/filings/${filing.id}`);
 
   return { ok: true, documentId: created.id, duplicateWarning };
+}
+
+/**
+ * Renders and files the computation sheet into the vault (rework brief #2
+ * §1.2 / Brief #1 §5.4) — no upload. Called automatically when PREPARE_RETURN
+ * (step 3) is marked DONE (lib/actions/workflowSteps.ts), so the document
+ * always reflects the figures at the moment the step was completed.
+ */
+export async function generateComputationSheetDocument(workflowStepId: string): Promise<UploadDocumentResult> {
+  const step = await prisma.workflowStep.findUnique({
+    where: { id: workflowStepId },
+    include: { filing: { include: { client: true } } },
+  });
+  if (!step) return { ok: false, error: "Workflow step not found." };
+
+  const { filing } = step;
+  const { client } = filing;
+
+  const sheet: FilingComputationResult =
+    filing.computationSnapshot != null
+      ? (JSON.parse(filing.computationSnapshot as string) as FilingComputationResult)
+      : await assembleAndComputeFiling(filing.clientId, filing.taxableYear, filing.period);
+  const hasSalesRecorded = await hasSalesRecordedForPeriod(filing.clientId, filing.taxableYear, filing.period);
+
+  const documentDate = new Date();
+  const html = renderComputationSheetHtml({
+    client: { registeredName: client.registeredName, tin: client.tin, rdoCode: client.rdoCode },
+    taxableYear: filing.taxableYear,
+    period: filing.period,
+    generatedAt: documentDate,
+    sheet,
+    hasSalesRecorded,
+  });
+
+  const buffer = Buffer.from(html, "utf-8");
+  const sha256 = computeSha256(buffer);
+  const existingCount = await prisma.document.count({
+    where: { filingId: filing.id, docSlotCode: "draft_computation", deletedAt: null },
+  });
+  const relativePath = buildStorageRelativePath({
+    clientCode: client.code,
+    taxableYear: filing.taxableYear,
+    period: filing.period,
+    stepCode: step.stepCode,
+    slotCode: "draft_computation",
+    documentDate,
+    seq: existingCount + 1,
+    ext: "html",
+  });
+
+  await saveDocumentFile(relativePath, buffer);
+
+  const actorId = await getActorId();
+  const created = await prisma.document.create({
+    data: {
+      clientId: client.id,
+      filingId: filing.id,
+      workflowStepId: step.id,
+      docSlotCode: "draft_computation",
+      category: "COMPUTATION_SHEET" as never,
+      originalFilename: `computation-sheet-${filing.taxableYear}-${filing.period}.html`,
+      storedPath: relativePath,
+      mimeType: "text/html",
+      sizeBytes: buffer.byteLength,
+      sha256,
+      documentDate,
+      notes: "Generated automatically by the app — no upload.",
+      actorId,
+    },
+  });
+
+  await logActivity({ entityType: "Document", entityId: created.id, action: "CREATE", after: created, actorId });
+  revalidatePath(`/clients/${client.id}/filings/${filing.id}`);
+
+  return { ok: true, documentId: created.id };
 }
 
 /** Soft-delete — financial/audit records are never hard-deleted (SPEC.md 14). */
