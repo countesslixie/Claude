@@ -1,5 +1,22 @@
 # SPEC: BIR 8% Freelancer Practice Manager (MVP)
 
+> ## ⚠ Superseded sections — added 2026-09-20, evening
+>
+> This is the **original design document** and is kept as history, not rewritten. Several sections below no longer reflect where the project is going; some also no longer reflect what's actually running, and some still do both. `PROJECT_MASTER.md` and `DECISIONS.md` are authoritative over this file wherever they disagree. Two branches currently exist with different code (`claude/laughing-darwin-wcnh8u` and `claude/peaceful-goldberg-hsh6yo` — see `CURRENT_STATE.md`); the "built" column below is for `laughing-darwin`, the branch this copy of SPEC.md lives on.
+>
+> | Section | Superseded by | Design intent | Actually built on `laughing-darwin` |
+> |---|---|---|---|
+> | **§5 `SalesTransaction`, §7.1 step 1–2's original table** — transaction entry sourced from 2307s | **D26** — gross sales are the client's declared quarterly figure; a 2307 reports withholding only, nothing else | Yes | **No** — `SalesTransaction` (2307-sourced or quick-entered) is still the income record here |
+> | **§9 Books of Accounts** — this system generates the Cash Receipts Journal | **D25** — no books of accounts are generated at all | Yes | **No** — `lib/books/` still generates the CRJ, exported via `exceljs`, unchanged |
+> | **§7.1's per-step doc-slot table** (every slot required, including steps 4, 12, 15, 16) | **D27** — blocks only on documents received from outside; steps 4/12/16 carry no slot, step 15 is optional | Yes | **Yes** — verified against `lib/actions/workflowSteps.ts` and the seeded `WorkflowStepTemplate` |
+> | **§7.1's step order** — step 1 `RECEIVE_2307`, step 2 `RECORD_CRJ` | **D28** — step 1 is Record quarterly sales, step 2 is Receive Form 2307 | Yes | **Yes** — `RECORD_CRJ` retired, `RECORD_SALES` is step 1 |
+> | **§3.1's election "hard blocker"** | Not superseded — still the design intent | Yes | **No** — recorded (`electionStatus`) but not enforced; only a dashboard warning label. Built and enforced on `peaceful-goldberg` only (`lib/workflow/election.ts`) |
+> | **§10's three-check reconciliation** | **D26** (as a consequence — once income is declared-only, the certificate-vs-transaction checks have nothing to compare) | Superseded once D26 lands | **No** — all three original checks (unlinked transactions, unconverted certificates, CWT-vs-batch variance) still run, per `lib/reconciliation.ts` |
+>
+> **Left alone deliberately, both still current:** **§3.1**'s underlying election rule (the *design intent* of a hard blocker on Q1 is not disputed, only its non-implementation on this branch, noted above) and **§4**'s date-handling rules (the `getUTC*`/`manilaCalendarDay`/millisecond-arithmetic conventions), which are unchanged by any rework pass and still exactly how this codebase works. Do not rewrite either on the strength of this banner.
+>
+> This is a banner, not a rewrite — SPEC.md's body text below is untouched and increasingly historical. Read `CURRENT_STATE.md` for what's actually in the tree before building against any section above.
+
 > **How to use this file with Claude Code**
 > Place this at the repo root as `SPEC.md`. Start with:
 > `claude "Read SPEC.md. Build Phase 1 only. Ask me before deviating from the data model or the tax engine rules."`
