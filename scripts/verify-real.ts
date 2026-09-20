@@ -16,10 +16,10 @@
 
 import { computeFiling } from "../lib/tax/compute";
 import { sumCwtThroughPeriod, type CertificateForCwt } from "../lib/tax/cwt";
-import { periodStartDate, periodEndDate } from "../lib/tax/periods";
+import { periodStartDate, periodEndDate, cumulativeSalesQuartersThroughPeriod } from "../lib/tax/periods";
 import { manilaDateInputToJsDate, formatManilaDate } from "../lib/dates";
 import { pesosToCents, centsToPesos } from "../lib/money";
-import type { Period, TaxpayerType, BreakdownLine } from "../lib/tax/types";
+import type { Period, TaxpayerType, BreakdownLine, SalesQuarter } from "../lib/tax/types";
 
 // SPEC.md 3.2 — the 8% option's fixed rule figures. Not read from a
 // TaxRuleSet row (this script never touches the database); update these
@@ -27,13 +27,18 @@ import type { Period, TaxpayerType, BreakdownLine } from "../lib/tax/types";
 const INCOME_TAX_RATE_BPS = 800; // 8.00%
 const ALLOWABLE_DEDUCTION_PESOS = 250_000;
 
+/**
+ * D26 — declared gross sales, one figure per sales quarter, the same
+ * shape as the real QuarterlySales table this fixture stands in for.
+ * A quarter you leave out of this record is treated as zero, exactly as
+ * lib/filingComputation.ts treats a missing QuarterlySales row.
+ */
 export interface RealFixture {
   taxpayerType: TaxpayerType;
   taxableYear: number;
   period: Period;
-  receipts: Array<{ date: string; grossPesos: number }>;
+  quarterlySales: Partial<Record<SalesQuarter, { grossPesos: number; nonOperatingPesos?: number }>>;
   certificates: Array<{ dateReceived: string; incomePaymentPesos: number; taxWithheldPesos: number }>;
-  nonOperatingPesos: number;
   priorYearExcessCreditPesos: number;
   priorPeriodPaymentsPesos: number;
   certificateCutoffDate: string;
@@ -104,32 +109,36 @@ async function main() {
   const { fixture } = await import("./real-fixture.local");
   const f = fixture;
 
-  if (!f.receipts?.length && !f.certificates?.length) {
-    console.warn("WARNING: no receipts and no certificates in the fixture — did you forget to fill it in?");
+  if (!Object.keys(f.quarterlySales ?? {}).length && !f.certificates?.length) {
+    console.warn("WARNING: no quarterlySales and no certificates in the fixture — did you forget to fill it in?");
   }
 
   const periodStart = periodStartDate(f.taxableYear, f.period);
   const periodEnd = periodEndDate(f.taxableYear, f.period);
   const cutoff = manilaDateInputToJsDate(f.certificateCutoffDate);
 
-  // Gross sales: same window the real assembly layer uses
-  // (lib/filingComputation.ts) — Jan 1 through this period's end.
-  // Anything outside that window is excluded and flagged, not silently
-  // summed in.
-  const inWindowReceipts = f.receipts.filter((r) => {
-    const d = manilaDateInputToJsDate(r.date);
-    return d.getTime() >= periodStart.getTime() && d.getTime() <= periodEnd.getTime();
-  });
-  const excludedReceipts = f.receipts.filter((r) => !inWindowReceipts.includes(r));
-  if (excludedReceipts.length > 0) {
+  // Declared gross sales (D26): the same cumulative quarter mapping the
+  // real assembly layer uses (lib/filingComputation.ts) — Q1 sums Q1
+  // only, Q2 sums Q1+Q2, etc., ANNUAL sums all four including Q4. A
+  // quarter you entered but that falls outside this window (e.g. Q3
+  // entered while previewing Q1) is excluded and flagged, not silently
+  // summed in — same as a stray quarter would be ignored by the real
+  // cumulative mapping.
+  const includedQuarters = cumulativeSalesQuartersThroughPeriod(f.period);
+  const enteredQuarters = Object.keys(f.quarterlySales ?? {}) as SalesQuarter[];
+  const excludedQuarters = enteredQuarters.filter((q) => !includedQuarters.includes(q));
+  if (excludedQuarters.length > 0) {
     console.warn(
-      `WARNING: ${excludedReceipts.length} receipt(s) fall outside ${f.period} ${f.taxableYear} ` +
-        `(${formatManilaDate(periodStart)}–${formatManilaDate(periodEnd)}) and were excluded:`,
+      `WARNING: quarterlySales entries for ${excludedQuarters.join(", ")} fall outside ${f.period} ` +
+        `${f.taxableYear}'s cumulative window (${includedQuarters.join(" + ")}) and were excluded:`,
     );
-    for (const r of excludedReceipts) console.warn(`  - ${r.date}: ₱${r.grossPesos.toLocaleString()}`);
   }
-  const cumulativeGrossSalesCents = inWindowReceipts.reduce(
-    (sum, r) => sum + pesosToCents(r.grossPesos),
+  const cumulativeGrossSalesCents = includedQuarters.reduce(
+    (sum, q) => sum + pesosToCents(f.quarterlySales?.[q]?.grossPesos ?? 0),
+    0,
+  );
+  const cumulativeNonOperatingCents = includedQuarters.reduce(
+    (sum, q) => sum + pesosToCents(f.quarterlySales?.[q]?.nonOperatingPesos ?? 0),
     0,
   );
 
@@ -165,7 +174,7 @@ async function main() {
       allowableDeductionCents: pesosToCents(ALLOWABLE_DEDUCTION_PESOS),
     },
     cumulativeGrossSalesCents,
-    cumulativeNonOperatingCents: pesosToCents(f.nonOperatingPesos),
+    cumulativeNonOperatingCents,
     cumulativeCwtCents,
     priorPeriodPaymentsCents: pesosToCents(f.priorPeriodPaymentsPesos),
     priorYearExcessCreditCents: pesosToCents(f.priorYearExcessCreditPesos),

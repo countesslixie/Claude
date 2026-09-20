@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { periodStartDate, periodEndDate, priorPeriodsOf, ALL_PERIODS } from "@/lib/tax/periods";
+import {
+  periodStartDate,
+  periodEndDate,
+  priorPeriodsOf,
+  ALL_PERIODS,
+  cumulativeSalesQuartersThroughPeriod,
+  salesQuarterEndDate,
+} from "@/lib/tax/periods";
 
 /**
  * P4 (Phase 2b): explicit, asserted period boundaries. Q1-Q3 are calendar
@@ -45,5 +52,42 @@ describe("period boundaries", () => {
     for (const period of ALL_PERIODS) {
       expect(priorPeriodsOf(period)).not.toContain("ANNUAL");
     }
+  });
+});
+
+/**
+ * D26/SPEC.md 3.2 — QuarterlySales' cumulative mapping. Q2/Q3 are
+ * genuinely cumulative (unlike periodToQuarters' single-quarter-per-period
+ * behavior for certificates), and ANNUAL includes Q4, which has no filing
+ * period of its own.
+ */
+describe("cumulativeSalesQuartersThroughPeriod", () => {
+  it("Q1 sums only Q1", () => {
+    expect(cumulativeSalesQuartersThroughPeriod("Q1")).toEqual(["Q1"]);
+  });
+
+  it("Q2 sums Q1 + Q2", () => {
+    expect(cumulativeSalesQuartersThroughPeriod("Q2")).toEqual(["Q1", "Q2"]);
+  });
+
+  it("Q3 sums Q1 + Q2 + Q3", () => {
+    expect(cumulativeSalesQuartersThroughPeriod("Q3")).toEqual(["Q1", "Q2", "Q3"]);
+  });
+
+  it("ANNUAL sums all four quarters, including Q4 which has no filing period of its own", () => {
+    expect(cumulativeSalesQuartersThroughPeriod("ANNUAL")).toEqual(["Q1", "Q2", "Q3", "Q4"]);
+  });
+});
+
+describe("salesQuarterEndDate", () => {
+  it("Q1-Q3 agree with the matching filing period's own end date", () => {
+    expect(salesQuarterEndDate(2026, "Q1")).toEqual(periodEndDate(2026, "Q1"));
+    expect(salesQuarterEndDate(2026, "Q2")).toEqual(periodEndDate(2026, "Q2"));
+    expect(salesQuarterEndDate(2026, "Q3")).toEqual(periodEndDate(2026, "Q3"));
+  });
+
+  it("Q4 has no filing period of its own — its end date is Dec 31, same as ANNUAL's", () => {
+    expect(salesQuarterEndDate(2026, "Q4")).toEqual(periodEndDate(2026, "ANNUAL"));
+    expect(salesQuarterEndDate(2026, "Q4")).toEqual(new Date(Date.UTC(2026, 11, 31)));
   });
 });

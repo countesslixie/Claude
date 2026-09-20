@@ -3,7 +3,6 @@ import { rm } from "node:fs/promises";
 import path from "node:path";
 import { prisma } from "@/lib/prisma";
 import { generateFilingsForClientYear } from "@/lib/workflow/filingGeneration";
-import { uploadDocument } from "@/lib/actions/documents";
 import { markStepDone, markStepWaitingExternal, skipStep, logFollowUp } from "@/lib/actions/workflowSteps";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
@@ -46,21 +45,17 @@ describe("workflow step actions", () => {
     return { client, filing };
   }
 
-  it("§16 item 13: markStepDone is blocked while a required doc slot is empty, succeeds once filled", async () => {
+  /**
+   * §5.1/D27 — document gating is gone entirely: a step with an empty
+   * required doc slot can still be marked DONE. Q2 is used here (not
+   * Q1) specifically so this isn't also exercising the election
+   * hard-blocker (§7), which is a separate, deliberate exception.
+   */
+  it("markStepDone succeeds with every required doc slot still empty (§5.1 — no document gating)", async () => {
     const { filing } = await makeClientWithQ2Filing("p3-step-done");
     const step = await prisma.workflowStep.findFirstOrThrow({
       where: { filingId: filing.id, stepCode: "SAVE_FORM_COPY" },
     });
-
-    const blocked = await markStepDone(step.id);
-    expect(blocked.ok).toBe(false);
-
-    const formData = new FormData();
-    formData.set("file", new File(["form-bytes"], "form.pdf", { type: "application/pdf" }));
-    formData.set("workflowStepId", step.id);
-    formData.set("docSlotCode", "filed_form");
-    formData.set("documentDate", "2026-08-15");
-    await uploadDocument(formData);
 
     const allowed = await markStepDone(step.id);
     expect(allowed.ok).toBe(true);
@@ -70,17 +65,16 @@ describe("workflow step actions", () => {
     expect(updated.completedAt).not.toBeNull();
   });
 
-  it("§16 item 14: SEND_CLIENT_PACKAGE names the specific missing document from steps 7/9/10/14", async () => {
+  it("SEND_CLIENT_PACKAGE no longer blocks on steps 7/9/10/14 lacking their document (§5.1)", async () => {
     const { filing } = await makeClientWithQ2Filing("p3-step-package");
     const sendPackageStep = await prisma.workflowStep.findFirstOrThrow({
       where: { filingId: filing.id, stepCode: "SEND_CLIENT_PACKAGE" },
     });
 
-    // sent_email slot itself is unfilled too, but that alone isn't what
-    // we're asserting — the dependency check should fire regardless.
     const result = await markStepDone(sendPackageStep.id);
-    expect(result.ok).toBe(false);
-    expect(result.error).toContain("step 7");
+    expect(result.ok).toBe(true);
+    const updated = await prisma.workflowStep.findUniqueOrThrow({ where: { id: sendPackageStep.id } });
+    expect(updated.status).toBe("DONE");
   });
 
   it("marking RECEIVE_TRRC WAITING_EXTERNAL flips the filing status to WAITING_BIR", async () => {
@@ -122,5 +116,21 @@ describe("workflow step actions", () => {
     const updated = await prisma.workflowStep.findUniqueOrThrow({ where: { id: step.id } });
     expect(updated.status).toBe("SKIPPED");
     expect(updated.skippedReason).toBeTruthy();
+  });
+
+  it("§9.4/§5.4: marking PREPARE_RETURN done saves the app's own computation sheet into the vault, with no upload", async () => {
+    const { filing } = await makeClientWithQ2Filing("p3-step-compsheet");
+    const step = await prisma.workflowStep.findFirstOrThrow({
+      where: { filingId: filing.id, stepCode: "PREPARE_RETURN" },
+    });
+
+    const result = await markStepDone(step.id);
+    expect(result.ok).toBe(true);
+
+    const saved = await prisma.document.findFirst({
+      where: { workflowStepId: step.id, docSlotCode: "draft_computation", deletedAt: null },
+    });
+    expect(saved).not.toBeNull();
+    expect(saved?.mimeType).toBe("text/html");
   });
 });

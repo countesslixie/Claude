@@ -6,9 +6,8 @@ import type { Period } from "@/lib/tax/types";
 
 /**
  * Shared I/O-boundary helpers for "which certificates belong in this
- * period's SAWT batch" — used by both lib/reconciliation.ts's check 3
- * (report the gap) and the batch-generation action (close it), so the
- * two can never define "eligible" differently.
+ * period's SAWT batch" — used by the batch-generation action
+ * (lib/actions/sawt.ts).
  */
 
 export interface CertificateWithBatch {
@@ -31,10 +30,10 @@ export interface CertificateWithBatch {
 
 /**
  * The cutoff resolution lib/filingComputation.ts uses for the real
- * return (filedAt / manual override / today) — check 3 must use the
- * SAME basis as the actual filing computation, or it's comparing two
- * different things again (exactly the "meaningless comparison" problem
- * the original reconciliation revision fixed).
+ * return (filedAt / manual override / today) — SAWT batch generation
+ * must use the SAME basis as the actual filing computation, or it's
+ * comparing two different things (exactly the "meaningless comparison"
+ * problem the original reconciliation revision fixed).
  */
 export async function resolveCertificateCutoffForFilingPeriod(
   clientId: string,
@@ -85,12 +84,4 @@ export function selectUnbatchedClaimableCertificates(
       c.dateReceived.getTime() <= cutoffDate.getTime() &&
       !(c.sawtBatch && periodsThroughThis.has(c.sawtBatch.period)),
   );
-}
-
-/** Sum of taxWithheldCents for certificates already batched through `period`. */
-export function selectBatchedCwtCentsThroughPeriod(certificates: CertificateWithBatch[], period: Period): number {
-  const periodsThroughThis = new Set([...priorPeriodsOf(period), period]);
-  return certificates
-    .filter((c) => c.sawtBatch && periodsThroughThis.has(c.sawtBatch.period))
-    .reduce((sum, c) => sum + c.taxWithheldCents, 0);
 }

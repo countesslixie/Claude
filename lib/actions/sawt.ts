@@ -15,8 +15,7 @@ export type GenerateSawtBatchResult = { ok: boolean; error?: string; batchedCoun
 
 /**
  * Assigns every certificate currently eligible-but-unbatched through
- * `period` (SPEC.md 10 — the same set lib/reconciliation.ts's check 3
- * reports as the variance) to this period's SawtBatch, creating it if
+ * `period` (SPEC.md 10) to this period's SawtBatch, creating it if
  * it doesn't exist yet. This is what "generating" the batch means: a
  * snapshot of which certificates this Alphalist submission covers. Idle
  * (batchedCount: 0) if there's nothing new to add — re-running it is

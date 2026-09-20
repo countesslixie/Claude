@@ -5,6 +5,15 @@
  */
 
 export type Period = "Q1" | "Q2" | "Q3" | "ANNUAL";
+/**
+ * A quarter of declared sales (QuarterlySales.quarter, D26). Deliberately
+ * a different type from Period — sales quarters include Q4 (October
+ * through December is real income, picked up by the ANNUAL return, not a
+ * filing period of its own), while Period never does. Never conflate the
+ * two: see lib/tax/periods.ts's cumulativeSalesQuartersThroughPeriod for
+ * the mapping between them.
+ */
+export type SalesQuarter = "Q1" | "Q2" | "Q3" | "Q4";
 export type TaxpayerType = "PURELY_SELF_EMPLOYED" | "MIXED_INCOME";
 export type FormType = "F1701Q" | "F1701A" | "F1701";
 

@@ -59,6 +59,16 @@ export function WorkflowStepCard({ step }: { step: StepCardData }) {
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
   const [skipReason, setSkipReason] = useState("");
+  const [openSlots, setOpenSlots] = useState<Set<string>>(new Set());
+
+  function toggleSlot(slotCode: string) {
+    setOpenSlots((prev) => {
+      const next = new Set(prev);
+      if (next.has(slotCode)) next.delete(slotCode);
+      else next.add(slotCode);
+      return next;
+    });
+  }
 
   function run(action: () => Promise<{ ok: boolean; error?: string }>) {
     setMessage(null);
@@ -109,12 +119,24 @@ export function WorkflowStepCard({ step }: { step: StepCardData }) {
         <div className="mt-2 flex flex-col gap-2">
           {step.requiredDocSlots.map((slot) => {
             const attached = step.documents.filter((d) => d.docSlotCode === slot.slotCode);
+            const isOpen = openSlots.has(slot.slotCode);
             return (
               <div key={slot.slotCode} className="rounded border border-slate-100 bg-slate-50 p-2">
-                <p className="text-xs font-medium text-slate-600">
-                  {slot.label}
-                  {slot.required && <span className="text-red-500"> *</span>}
-                </p>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-medium text-slate-600">
+                    {slot.label}
+                    {slot.required && <span className="text-red-500"> *</span>}
+                  </p>
+                  {!isOpen && (
+                    <button
+                      type="button"
+                      onClick={() => toggleSlot(slot.slotCode)}
+                      className="text-xs text-slate-500 underline hover:text-slate-900"
+                    >
+                      {attached.length > 0 ? "Attach another" : "Attach a file (optional)"}
+                    </button>
+                  )}
+                </div>
                 {attached.length > 0 && (
                   <ul className="mt-1 flex flex-col gap-0.5">
                     {attached.map((d) => (
@@ -130,21 +152,30 @@ export function WorkflowStepCard({ step }: { step: StepCardData }) {
                     ))}
                   </ul>
                 )}
-                <form
-                  action={(fd) => handleUpload(slot.slotCode, fd)}
-                  className="mt-1 flex items-center gap-1.5"
-                >
-                  <Input type="file" name="file" required className="h-8 text-xs" />
-                  <Input
-                    type="date"
-                    name="documentDate"
-                    defaultValue={new Date().toISOString().split("T")[0]}
-                    className="h-8 w-36 text-xs"
-                  />
-                  <Button type="submit" size="sm" variant="secondary" disabled={isPending}>
-                    Upload
-                  </Button>
-                </form>
+                {isOpen && (
+                  <form
+                    action={(fd) => handleUpload(slot.slotCode, fd)}
+                    className="mt-1 flex items-center gap-1.5"
+                  >
+                    <Input type="file" name="file" required className="h-8 text-xs" />
+                    <Input
+                      type="date"
+                      name="documentDate"
+                      defaultValue={new Date().toISOString().split("T")[0]}
+                      className="h-8 w-36 text-xs"
+                    />
+                    <Button type="submit" size="sm" variant="secondary" disabled={isPending}>
+                      Upload
+                    </Button>
+                    <button
+                      type="button"
+                      onClick={() => toggleSlot(slot.slotCode)}
+                      className="text-xs text-slate-400 underline hover:text-slate-600"
+                    >
+                      Cancel
+                    </button>
+                  </form>
+                )}
               </div>
             );
           })}

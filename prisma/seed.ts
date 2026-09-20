@@ -12,11 +12,14 @@
  *   from Settings.
  * - A sparse, unverified AtcCode table (SPEC.md 3.5) — do not add codes
  *   here without confirming them against the current BIR ATC list.
- * - A minimal ChartOfAccounts (SPEC.md 9).
- * - The 16-step WorkflowStepTemplate (SPEC.md 7.1).
+ * - The 16-step WorkflowStepTemplate (rework brief §5.1: advisory_evidence
+ *   on ADVISE_CLIENT is optional, not required; PREPARE_RETURN carries an
+ *   extra optional slot for the client's own confirmation message/email).
  * - Three fictitious clients spanning the full 2025 cycle (SPEC.md 14):
  *   one purely self-employed with 2307s (figures match SPEC.md Example A
- *   exactly), one purely self-employed without 2307s, and one mixed income.
+ *   exactly), one purely self-employed without 2307s, and one mixed
+ *   income. Declared sales are seeded as QuarterlySales rows (D26) — a
+ *   Form 2307 is a credit record only and never contributes to them.
  * - A TY2026 Filing/WorkflowStep cycle for all three clients, positioned
  *   relative to today so the dashboard has something to show on first
  *   run: Q1 filed and COMPLETE, Q2 past its adjusted due date and not
@@ -38,6 +41,7 @@ const prisma = new PrismaClient();
 const MANILA_ZONE = "Asia/Manila";
 
 const CENTS = (pesos: number) => Math.round(pesos * 100);
+const QUARTER_LABELS = ["Q1", "Q2", "Q3", "Q4"] as const;
 
 async function seedUser() {
   return prisma.user.upsert({
@@ -145,23 +149,6 @@ async function seedAtcCodes() {
   });
 }
 
-async function seedChartOfAccounts() {
-  const accounts: Array<{ code: string; name: string; type: "ASSET" | "LIABILITY" | "EQUITY" | "INCOME" | "EXPENSE" }> = [
-    { code: "1000", name: "Cash", type: "ASSET" },
-    { code: "1010", name: "Accounts Receivable", type: "ASSET" },
-    { code: "1020", name: "Creditable Withholding Tax", type: "ASSET" },
-    { code: "3000", name: "Owner's Capital", type: "EQUITY" },
-    { code: "3010", name: "Owner's Drawing", type: "EQUITY" },
-    { code: "4000", name: "Service Income", type: "INCOME" },
-    { code: "5000", name: "Rent Expense", type: "EXPENSE" },
-    { code: "5010", name: "Utilities Expense", type: "EXPENSE" },
-    { code: "5020", name: "Office Supplies Expense", type: "EXPENSE" },
-    { code: "5090", name: "Miscellaneous Expense", type: "EXPENSE" },
-  ];
-  for (const a of accounts) {
-    await prisma.chartOfAccounts.upsert({ where: { code: a.code }, update: {}, create: a });
-  }
-}
 
 const WORKFLOW_STEP_TEMPLATE: Array<{
   stepCode: string;
@@ -211,7 +198,19 @@ const WORKFLOW_STEP_TEMPLATE: Array<{
     title: "Prepare computation + 1701Q/1701A",
     category: "PREP",
     requiredDocSlots: [
-      { slotCode: "draft_computation", label: "Draft computation sheet", required: true, acceptedTypes: ["pdf", "xlsx"] },
+      // Rework brief §5.4: the app writes its own computation sheet into
+      // this slot (lib/documents/computationSheet.ts) — no user upload.
+      { slotCode: "draft_computation", label: "Draft computation sheet", required: true, acceptedTypes: ["html", "pdf", "xlsx"] },
+      // §5.6: optional evidence of where the declared sales figure came
+      // from — the client's own confirming message/email, if any. Never
+      // required; the acknowledgement itself is evidence of a number
+      // that will be filed, not proof of advice given.
+      {
+        slotCode: "client_confirmation_evidence",
+        label: "Client confirmation message/email (optional)",
+        required: false,
+        acceptedTypes: ["eml", "pdf", "jpg", "png"],
+      },
     ],
   },
   {
@@ -223,7 +222,10 @@ const WORKFLOW_STEP_TEMPLATE: Array<{
     waitingOnLabel: "Client",
     expectedResponseDays: 5,
     requiredDocSlots: [
-      { slotCode: "advisory_evidence", label: "Advisory email/screenshot", required: true, acceptedTypes: ["pdf", "jpg", "png", "eml"] },
+      // Rework brief §5.1: "No need for an email proof" — rejected
+      // outright. The slot stays (optional attachment point), the
+      // requirement is gone.
+      { slotCode: "advisory_evidence", label: "Advisory email/screenshot", required: false, acceptedTypes: ["pdf", "jpg", "png", "eml"] },
     ],
   },
   {
@@ -412,8 +414,8 @@ async function seedClientA(actorId: string) {
     },
   });
 
-  const existingTx = await prisma.salesTransaction.findFirst({ where: { clientId: client.id } });
-  if (existingTx) return;
+  const existingSales = await prisma.quarterlySales.findFirst({ where: { clientId: client.id, taxableYear: 2025 } });
+  if (existingSales) return;
 
   // whtCents is 5% of grossPesos*100, literal, hand-verified against §6
   // Example A — do not compute. (Left as a literal-math cross-check of the
@@ -429,7 +431,9 @@ async function seedClientA(actorId: string) {
   for (const q of quarters) {
     const grossCents = CENTS(q.grossPesos);
     const whtCents = q.whtCents;
-    const form2307 = await prisma.form2307.create({
+    // Form2307 — a credit record only (D26); it never contributes to
+    // declared gross sales, seeded separately as QuarterlySales below.
+    await prisma.form2307.create({
       data: {
         clientId: client.id,
         taxableYear: 2025,
@@ -448,22 +452,13 @@ async function seedClientA(actorId: string) {
       },
     });
 
-    await prisma.salesTransaction.create({
+    await prisma.quarterlySales.create({
       data: {
         clientId: client.id,
-        transactionDate: new Date(`${q.date}T00:00:00.000Z`),
         taxableYear: 2025,
-        quarter: q.quarter,
-        orNumber: `OR-2025-Q${q.quarter}-001`,
-        payorName: "Acme Publishing Corp.",
-        payorTin: "987654321",
-        grossAmountCents: grossCents,
-        withholdingTaxCents: whtCents,
-        withholdingRateBps: 500,
-        netReceivedCents: grossCents - whtCents,
-        incomeType: "OPERATING",
-        description: "Consulting retainer",
-        form2307Id: form2307.id,
+        quarter: QUARTER_LABELS[q.quarter - 1],
+        grossSalesCents: grossCents,
+        sourceNote: "Seeded historical data — consulting retainer from Acme Publishing Corp.",
         actorId,
       },
     });
@@ -507,33 +502,27 @@ async function seedClientB(actorId: string) {
     },
   });
 
-  const existingTx = await prisma.salesTransaction.findFirst({ where: { clientId: client.id } });
-  if (existingTx) return;
+  const existingSales = await prisma.quarterlySales.findFirst({ where: { clientId: client.id, taxableYear: 2025 } });
+  if (existingSales) return;
 
-  const rows: Array<{ quarter: number; date: string; grossPesos: number; payor: string; or: string }> = [
-    { quarter: 1, date: "2025-02-10", grossPesos: 80_000, payor: "Various direct clients", or: "OR-2025-0001" },
-    { quarter: 1, date: "2025-03-20", grossPesos: 60_000, payor: "Various direct clients", or: "OR-2025-0002" },
-    { quarter: 2, date: "2025-05-05", grossPesos: 90_000, payor: "Various direct clients", or: "OR-2025-0003" },
-    { quarter: 3, date: "2025-08-18", grossPesos: 75_000, payor: "Various direct clients", or: "OR-2025-0004" },
-    { quarter: 4, date: "2025-11-22", grossPesos: 100_000, payor: "Various direct clients", or: "OR-2025-0005" },
-  ];
+  // No withholding agents — a client with an empty 2307 register (§5.5).
+  // Declared per quarter, summed from what would have been separate
+  // receipts in the old per-transaction model: Q1 combines two.
+  const quarterlyGrossPesos: Record<(typeof QUARTER_LABELS)[number], number> = {
+    Q1: 80_000 + 60_000,
+    Q2: 90_000,
+    Q3: 75_000,
+    Q4: 100_000,
+  };
 
-  for (const r of rows) {
-    const grossCents = CENTS(r.grossPesos);
-    await prisma.salesTransaction.create({
+  for (const quarter of QUARTER_LABELS) {
+    await prisma.quarterlySales.create({
       data: {
         clientId: client.id,
-        transactionDate: new Date(`${r.date}T00:00:00.000Z`),
         taxableYear: 2025,
-        quarter: r.quarter,
-        orNumber: r.or,
-        payorName: r.payor,
-        grossAmountCents: grossCents,
-        withholdingTaxCents: 0,
-        withholdingRateBps: 0,
-        netReceivedCents: grossCents,
-        incomeType: "OPERATING",
-        description: "Design project fee",
+        quarter,
+        grossSalesCents: CENTS(quarterlyGrossPesos[quarter]),
+        sourceNote: "Seeded historical data — various direct clients, no withholding.",
         actorId,
       },
     });
@@ -580,8 +569,8 @@ async function seedClientC(actorId: string) {
     },
   });
 
-  const existingTx = await prisma.salesTransaction.findFirst({ where: { clientId: client.id } });
-  if (existingTx) return;
+  const existingSales = await prisma.quarterlySales.findFirst({ where: { clientId: client.id, taxableYear: 2025 } });
+  if (existingSales) return;
 
   // whtCents is 10% of grossPesos*100, literal, hand-verified against §6
   // Example A — do not compute. (See the Client A quarters comment above
@@ -596,7 +585,9 @@ async function seedClientC(actorId: string) {
   for (const r of rows) {
     const grossCents = CENTS(r.grossPesos);
     const whtCents = r.whtCents;
-    const form2307 = await prisma.form2307.create({
+    // Form2307 — a credit record only (D26); it never contributes to
+    // declared gross sales, seeded separately as QuarterlySales below.
+    await prisma.form2307.create({
       data: {
         clientId: client.id,
         taxableYear: 2025,
@@ -615,22 +606,13 @@ async function seedClientC(actorId: string) {
       },
     });
 
-    await prisma.salesTransaction.create({
+    await prisma.quarterlySales.create({
       data: {
         clientId: client.id,
-        transactionDate: new Date(`${r.date}T00:00:00.000Z`),
         taxableYear: 2025,
-        quarter: r.quarter,
-        orNumber: `OR-2025-Q${r.quarter}-NG`,
-        payorName: "Northgate Solutions Inc.",
-        payorTin: "456789123",
-        grossAmountCents: grossCents,
-        withholdingTaxCents: whtCents,
-        withholdingRateBps: 1000,
-        netReceivedCents: grossCents - whtCents,
-        incomeType: "OPERATING",
-        description: "IT consulting project",
-        form2307Id: form2307.id,
+        quarter: QUARTER_LABELS[r.quarter - 1],
+        grossSalesCents: grossCents,
+        sourceNote: "Seeded historical data — IT consulting project for Northgate Solutions Inc.",
         actorId,
       },
     });
@@ -942,9 +924,10 @@ async function seedTY2026Cycle(actorId: string) {
       const q1GrossCents = CENTS(cfg.q1GrossPesos);
       const q1WhtCents = cfg.q1WhtCents;
 
-      let q1Form2307Id: string | undefined;
+      // Form2307 — a credit record only (D26); declared sales are seeded
+      // separately as QuarterlySales below, independent of it.
       if (cfg.requiresSawt) {
-        const form2307 = await prisma.form2307.create({
+        await prisma.form2307.create({
           data: {
             clientId: client.id,
             taxableYear: 2026,
@@ -962,25 +945,15 @@ async function seedTY2026Cycle(actorId: string) {
             actorId,
           },
         });
-        q1Form2307Id = form2307.id;
       }
 
-      await prisma.salesTransaction.create({
+      await prisma.quarterlySales.create({
         data: {
           clientId: client.id,
-          transactionDate: new Date("2026-03-15T00:00:00.000Z"),
           taxableYear: 2026,
-          quarter: 1,
-          orNumber: `OR-2026-Q1-${cfg.clientCode}`,
-          payorName: cfg.requiresSawt ? cfg.payorName : "Various direct clients",
-          payorTin: cfg.requiresSawt ? cfg.payorTin : undefined,
-          grossAmountCents: q1GrossCents,
-          withholdingTaxCents: q1WhtCents,
-          withholdingRateBps: cfg.whtRateBps,
-          netReceivedCents: q1GrossCents - q1WhtCents,
-          incomeType: "OPERATING",
-          description: "TY2026 Q1",
-          form2307Id: q1Form2307Id,
+          quarter: "Q1",
+          grossSalesCents: q1GrossCents,
+          sourceNote: cfg.requiresSawt ? `Declared by ${cfg.payorName}'s client` : "Various direct clients",
           actorId,
         },
       });
@@ -1050,9 +1023,10 @@ async function seedTY2026Cycle(actorId: string) {
       const cumGrossQ2 = q1GrossCents + q2GrossCents;
       const cumCwtQ2 = q1WhtCents + q2WhtCents;
 
-      let q2Form2307Id: string | undefined;
+      // Form2307 — a credit record only (D26); declared sales are seeded
+      // separately as QuarterlySales below, independent of it.
       if (cfg.requiresSawt) {
-        const form2307 = await prisma.form2307.create({
+        await prisma.form2307.create({
           data: {
             clientId: client.id,
             taxableYear: 2026,
@@ -1070,25 +1044,15 @@ async function seedTY2026Cycle(actorId: string) {
             actorId,
           },
         });
-        q2Form2307Id = form2307.id;
       }
 
-      await prisma.salesTransaction.create({
+      await prisma.quarterlySales.create({
         data: {
           clientId: client.id,
-          transactionDate: new Date("2026-06-15T00:00:00.000Z"),
           taxableYear: 2026,
-          quarter: 2,
-          orNumber: `OR-2026-Q2-${cfg.clientCode}`,
-          payorName: cfg.requiresSawt ? cfg.payorName : "Various direct clients",
-          payorTin: cfg.requiresSawt ? cfg.payorTin : undefined,
-          grossAmountCents: q2GrossCents,
-          withholdingTaxCents: q2WhtCents,
-          withholdingRateBps: cfg.whtRateBps,
-          netReceivedCents: q2GrossCents - q2WhtCents,
-          incomeType: "OPERATING",
-          description: "TY2026 Q2",
-          form2307Id: q2Form2307Id,
+          quarter: "Q2",
+          grossSalesCents: q2GrossCents,
+          sourceNote: cfg.requiresSawt ? `Declared by ${cfg.payorName}'s client` : "Various direct clients",
           actorId,
         },
       });
@@ -1210,7 +1174,6 @@ async function main() {
   await seedTaxRuleSets(user.id);
   await seedHolidays(user.id);
   await seedAtcCodes();
-  await seedChartOfAccounts();
   await seedWorkflowStepTemplate();
   await seedClientA(user.id);
   await seedClientB(user.id);

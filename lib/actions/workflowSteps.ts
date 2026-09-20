@@ -4,11 +4,9 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getActorId } from "@/lib/actor";
 import { logActivity } from "@/lib/activityLog";
-import { missingRequiredSlots, checkSendClientPackageReadiness } from "@/lib/workflow/docSlots";
 import { deriveFilingStatus } from "@/lib/workflow/status";
-import { parseDocSlots } from "@/lib/workflow/types";
-import { getPeriodReconciliation } from "@/lib/reconciliation";
-import { centsToPesos } from "@/lib/money";
+import { isElectionBlocked } from "@/lib/workflow/election";
+import { ensureComputationSheetSaved } from "@/lib/documents/computationSheet";
 
 export type StepActionResult = { ok: boolean; error?: string };
 
@@ -30,72 +28,32 @@ async function recomputeFilingStatus(filingId: string, actorId: string): Promise
 }
 
 /**
- * A step with an empty required doc slot cannot be set DONE (SPEC.md
- * 7.2, §16 item 13). SEND_CLIENT_PACKAGE additionally requires steps
- * 7/9/10/14 to each have their own document already (SPEC.md 7.1, §16
- * item 14) — names exactly which is missing rather than a generic
- * "not ready" message.
+ * §5.1/D27 — nothing in the checklist gates on documents; a step can be
+ * marked DONE at any time regardless of what is or isn't attached.
+ * Missing documents surface as an informational completeness note on
+ * the filing instead (lib/workflow/completeness.ts), never a block here.
+ *
+ * The one exception (§7) is the election hard-blocker: a Q1 filing for a
+ * client whose election isn't confirmed ELECTED cannot be marked DONE,
+ * because the computation above it may be running at the wrong tax rate
+ * entirely. This is the only thing that blocks.
  */
 export async function markStepDone(stepId: string): Promise<StepActionResult> {
   const step = await prisma.workflowStep.findUnique({
     where: { id: stepId },
-    include: { documents: true, filing: { include: { workflowSteps: { include: { documents: true } } } } },
+    include: { filing: true },
   });
   if (!step) return { ok: false, error: "Step not found." };
 
-  // SEND_CLIENT_PACKAGE's dependency check (steps 7/9/10/14, §16 item 14)
-  // is checked first and reported on its own — it's the more specific,
-  // "closes-the-loop" diagnostic SPEC.md 7.1 asks for, and in realistic
-  // use the step's own sent_email slot is often ALSO still empty at the
-  // same time, which would otherwise mask this message entirely.
-  if (step.stepCode === "SEND_CLIENT_PACKAGE") {
-    const dependencySteps = step.filing.workflowSteps.map((s) => ({
-      stepCode: s.stepCode,
-      status: s.status,
-      requiredDocSlots: parseDocSlots(s.requiredDocSlots),
-    }));
-    const documentsByStepCode = new Map(
-      step.filing.workflowSteps.map((s) => [
-        s.stepCode,
-        s.documents.map((d) => ({ docSlotCode: d.docSlotCode, deletedAt: d.deletedAt })),
-      ]),
-    );
-    const readiness = checkSendClientPackageReadiness(dependencySteps, documentsByStepCode);
-    if (!readiness.ok) {
-      const names = readiness.missing.map((m) => `${m.stepLabel}: ${m.slotLabel}`).join("; ");
-      return { ok: false, error: `Package incomplete — missing: ${names}.` };
-    }
-  }
-
-  // ALPHALIST_ENTRY is blocked by a variance between cumulative CWT
-  // claimed on the filing and cumulative certificates batched through
-  // this period (SPEC.md 10 check 3) — names the specific certificates
-  // responsible rather than a generic "doesn't match" message.
-  if (step.stepCode === "ALPHALIST_ENTRY") {
-    const reconciliation = await getPeriodReconciliation(
-      step.filing.clientId,
-      step.filing.taxableYear,
-      step.filing.period,
-    );
-    if (reconciliation.hasVariance) {
-      const varianceLabel = centsToPesos(reconciliation.varianceCents, { withSymbol: true });
-      const names =
-        reconciliation.unbatchedCertificates.length > 0
-          ? reconciliation.unbatchedCertificates
-              .map((c) => `${c.payorName} (${centsToPesos(c.taxWithheldCents, { withSymbol: true })})`)
-              .join("; ")
-          : "(no specific certificate identified — check the batch for certificates no longer eligible)";
-      return {
-        ok: false,
-        error: `SAWT variance ${varianceLabel} — CWT claimed on the filing doesn't match certificates batched through this period. Not yet batched: ${names}.`,
-      };
-    }
-  }
-
-  const slots = parseDocSlots(step.requiredDocSlots);
-  const missing = missingRequiredSlots(slots, step.documents);
-  if (missing.length > 0) {
-    return { ok: false, error: `Missing required document: ${missing.map((s) => s.label).join(", ")}.` };
+  const clientTaxYear = await prisma.clientTaxYear.findUnique({
+    where: { clientId_taxableYear: { clientId: step.filing.clientId, taxableYear: step.filing.taxableYear } },
+  });
+  if (isElectionBlocked(step.filing.period, clientTaxYear?.electionStatus)) {
+    return {
+      ok: false,
+      error:
+        "8% election for this taxable year is not confirmed Elected — Q1 steps cannot be marked done until this is resolved (SPEC.md 3.1: an unconfirmed election may default to graduated rates, making this filing's computation wrong).",
+    };
   }
 
   const actorId = await getActorId();
@@ -107,6 +65,7 @@ export async function markStepDone(stepId: string): Promise<StepActionResult> {
 
   await logActivity({ entityType: "WorkflowStep", entityId: stepId, action: "UPDATE", before, after: updated, actorId });
   await recomputeFilingStatus(step.filingId, actorId);
+  if (step.stepCode === "PREPARE_RETURN") await ensureComputationSheetSaved(step.filingId);
   revalidatePath(`/clients/${step.filing.clientId}/filings/${step.filingId}`);
   revalidatePath("/filings");
 
@@ -125,6 +84,7 @@ export async function markStepInProgress(stepId: string): Promise<StepActionResu
 
   await logActivity({ entityType: "WorkflowStep", entityId: stepId, action: "UPDATE", before: step, after: updated, actorId });
   await recomputeFilingStatus(step.filingId, actorId);
+  if (step.stepCode === "PREPARE_RETURN") await ensureComputationSheetSaved(step.filingId);
   revalidatePath(`/clients/${step.filing.clientId}/filings/${step.filingId}`);
   revalidatePath("/filings");
 

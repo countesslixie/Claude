@@ -72,19 +72,14 @@ export default async function ClientDetailPage({
               Back to list
             </Button>
           </Link>
-          <Link href={`/clients/${client.id}/transactions`}>
+          <Link href={`/clients/${client.id}/income`}>
             <Button variant="secondary" size="sm">
-              Transactions
+              Income
             </Button>
           </Link>
           <Link href={`/clients/${client.id}/form-2307`}>
             <Button variant="secondary" size="sm">
               Form 2307s
-            </Button>
-          </Link>
-          <Link href={`/clients/${client.id}/books`}>
-            <Button variant="secondary" size="sm">
-              Books
             </Button>
           </Link>
           <Link href={`/clients/${client.id}/edit`}>

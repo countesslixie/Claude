@@ -9,8 +9,7 @@ import type { Period } from "@/lib/tax/types";
 
 /**
  * I/O boundary: assembles the keying worksheet from certificates
- * currently eligible-but-unbatched through `period` — the same set
- * lib/reconciliation.ts's check 3 reports as the variance, and what
+ * currently eligible-but-unbatched through `period` — what
  * lib/actions/sawt.ts's generateSawtBatch would assign to the batch if
  * run now. Viewing/exporting the worksheet never writes anything;
  * generating the batch is a separate, explicit action.

@@ -6,7 +6,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { centsToPesos, bpsToPercentLabel } from "@/lib/money";
 import { formatManilaDate } from "@/lib/dates";
 import { currentTaxableYearManila } from "@/lib/dates";
-import { getPeriodReconciliation } from "@/lib/reconciliation";
+import { getAnnualCertificatesVsSalesReconciliation } from "@/lib/reconciliation";
 import { ALL_PERIODS, periodToQuarters } from "@/lib/tax/periods";
 import type { Period } from "@/lib/tax/types";
 
@@ -39,11 +39,10 @@ export default async function Form2307RegisterPage({
 
   const certificates = await prisma.form2307.findMany({
     where: { clientId: id, taxableYear, quarterCovered: { in: [...quarters] }, deletedAt: null },
-    include: { salesTransactions: { select: { id: true } } },
     orderBy: { dateReceived: "asc" },
   });
 
-  const reconciliation = await getPeriodReconciliation(id, taxableYear, period);
+  const reconciliation = await getAnnualCertificatesVsSalesReconciliation(id, taxableYear);
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -53,8 +52,12 @@ export default async function Form2307RegisterPage({
             Form 2307 register — {client.registeredName}
           </h1>
           <p className="text-sm text-slate-500">
-            The 2307 is the source document for a transaction, not an independent check on it
-            (SPEC.md WORKFLOW CHANGE).
+            A 2307 is a credit record — what one payor paid and withheld. It never contributes to gross
+            sales; declared income is entered separately on the{" "}
+            <Link href={`/clients/${id}/income`} className="underline">
+              income page
+            </Link>
+            .
           </p>
         </div>
         <div className="flex gap-2">
@@ -99,47 +102,25 @@ export default async function Form2307RegisterPage({
               <th>Tax withheld</th>
               <th>Rate</th>
               <th>Status</th>
-              <th>Transaction</th>
-              <th></th>
             </tr>
           </thead>
           <tbody>
-            {certificates.map((c) => {
-              const converted = c.salesTransactions.length > 0;
-              return (
-                <tr key={c.id}>
-                  <td>{formatManilaDate(c.dateReceived)}</td>
-                  <td>{c.payorName}</td>
-                  <td className="font-mono text-xs">{c.atcCode}</td>
-                  <td>{centsToPesos(c.incomePaymentCents, { withSymbol: true })}</td>
-                  <td>{centsToPesos(c.taxWithheldCents, { withSymbol: true })}</td>
-                  <td>{bpsToPercentLabel(c.withholdingRateBps)}</td>
-                  <td>
-                    <StatusBadge tone={STATUS_TONE[c.status] ?? "pending"}>{c.status}</StatusBadge>
-                  </td>
-                  <td>
-                    {converted ? (
-                      <StatusBadge tone="done">Recorded</StatusBadge>
-                    ) : (
-                      <StatusBadge tone="overdue">Not yet</StatusBadge>
-                    )}
-                  </td>
-                  <td>
-                    {!converted && (
-                      <Link
-                        href={`/clients/${id}/transactions/from-2307/${c.id}`}
-                        className="text-sm text-slate-900 underline hover:no-underline"
-                      >
-                        Create transaction
-                      </Link>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
+            {certificates.map((c) => (
+              <tr key={c.id}>
+                <td>{formatManilaDate(c.dateReceived)}</td>
+                <td>{c.payorName}</td>
+                <td className="font-mono text-xs">{c.atcCode}</td>
+                <td>{centsToPesos(c.incomePaymentCents, { withSymbol: true })}</td>
+                <td>{centsToPesos(c.taxWithheldCents, { withSymbol: true })}</td>
+                <td>{bpsToPercentLabel(c.withholdingRateBps)}</td>
+                <td>
+                  <StatusBadge tone={STATUS_TONE[c.status] ?? "pending"}>{c.status}</StatusBadge>
+                </td>
+              </tr>
+            ))}
             {certificates.length === 0 && (
               <tr>
-                <td colSpan={9} className="py-8 text-center text-sm text-slate-400">
+                <td colSpan={7} className="py-8 text-center text-sm text-slate-400">
                   No Form 2307 certificates for this period.
                 </td>
               </tr>
@@ -148,77 +129,29 @@ export default async function Form2307RegisterPage({
         </table>
       </div>
 
-      <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div className="rounded-lg border border-slate-200 bg-white p-4">
-          <h2 className="text-sm font-semibold text-slate-900">
-            Transactions with no linked 2307
-          </h2>
-          <p className="mt-1 text-xs text-slate-500">The real gap — receipts to double-check.</p>
-          <p className="mt-3 text-2xl font-semibold text-slate-900">
-            {reconciliation.transactionsWithoutForm2307.length}
+      <div className="mt-6 rounded-lg border border-slate-200 bg-white p-4">
+        <h2 className="text-sm font-semibold text-slate-900">Certificates vs. declared sales — TY{taxableYear}</h2>
+        <p className="mt-1 text-xs text-slate-500">
+          Runs over the whole taxable year, not per quarter — a certificate is credited to whichever
+          period is open when it arrives, so a per-quarter comparison would flag a variance almost every
+          time.
+        </p>
+        <p className="mt-3 text-sm text-slate-700">
+          Certificates for TY{taxableYear} total{" "}
+          <span className="font-medium">{centsToPesos(reconciliation.certificatesTotalCents, { withSymbol: true })}</span>{" "}
+          in income payments against{" "}
+          <span className="font-medium">{centsToPesos(reconciliation.declaredSalesTotalCents, { withSymbol: true })}</span>{" "}
+          declared gross sales.
+        </p>
+        {reconciliation.hasVariance ? (
+          <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800">
+            Certificates exceed declared sales by{" "}
+            {centsToPesos(reconciliation.varianceCents, { withSymbol: true })} — something is wrong here;
+            check the declared sales figure before filing.
           </p>
-          <p className="text-sm text-slate-600">
-            {centsToPesos(reconciliation.transactionsWithoutForm2307TotalCents, { withSymbol: true })} total
-          </p>
-          {reconciliation.transactionsWithoutForm2307.length > 0 && (
-            <ul className="mt-3 space-y-1 text-xs text-slate-500">
-              {reconciliation.transactionsWithoutForm2307.map((t) => (
-                <li key={t.id}>
-                  {formatManilaDate(t.transactionDate)} — {t.payorName} —{" "}
-                  {centsToPesos(t.grossAmountCents, { withSymbol: true })}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        <div className="rounded-lg border border-slate-200 bg-white p-4">
-          <h2 className="text-sm font-semibold text-slate-900">Certificates not yet converted</h2>
-          <p className="mt-1 text-xs text-slate-500">Received, but no transaction recorded from them yet.</p>
-          <p className="mt-3 text-2xl font-semibold text-slate-900">
-            {reconciliation.certificatesNotYetConverted.length}
-          </p>
-          <p className="text-sm text-slate-600">
-            {centsToPesos(reconciliation.certificatesNotYetConvertedTotalCents, { withSymbol: true })} CWT
-          </p>
-        </div>
-
-        <div className="rounded-lg border border-slate-200 bg-white p-4">
-          <h2 className="text-sm font-semibold text-slate-900">CWT: filing vs SAWT batch</h2>
-          <p className="mt-1 text-xs text-slate-500">
-            Cumulative CWT claimed on this filing vs. cumulative certificates batched through this period.
-          </p>
-          <dl className="mt-3 space-y-1 text-sm text-slate-700">
-            <div className="flex justify-between">
-              <dt>Claimed on filing</dt>
-              <dd>{centsToPesos(reconciliation.cumulativeCwtCentsOnFiling, { withSymbol: true })}</dd>
-            </div>
-            <div className="flex justify-between">
-              <dt>In SAWT batch(es)</dt>
-              <dd>{centsToPesos(reconciliation.sawtBatchCwtCents, { withSymbol: true })}</dd>
-            </div>
-          </dl>
-          {reconciliation.hasVariance ? (
-            <div className="mt-3 rounded-md bg-red-50 p-2">
-              <p className="text-sm font-medium text-red-800">
-                Variance: {centsToPesos(reconciliation.varianceCents, { withSymbol: true })}. Alphalist data entry is
-                blocked until resolved.
-              </p>
-              {reconciliation.unbatchedCertificates.length > 0 && (
-                <ul className="mt-2 space-y-0.5 text-xs text-red-700">
-                  {reconciliation.unbatchedCertificates.map((c) => (
-                    <li key={c.id}>
-                      {c.payorName} ({c.atcCode}) — {centsToPesos(c.taxWithheldCents, { withSymbol: true })}
-                      {c.dateReceived && ` — received ${formatManilaDate(c.dateReceived)}`} — not yet in a SAWT batch
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          ) : (
-            <p className="mt-3 text-sm text-emerald-700">Matches — no variance.</p>
-          )}
-        </div>
+        ) : (
+          <p className="mt-3 text-sm text-emerald-700">Certificates do not exceed declared sales.</p>
+        )}
       </div>
     </div>
   );

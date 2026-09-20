@@ -1,13 +1,14 @@
 import { describe, it, expect, afterAll, vi } from "vitest";
 import { prisma } from "@/lib/prisma";
-import { updateSalesTransaction, createQuickTransaction } from "@/lib/actions/salesTransactions";
+import { upsertQuarterlySales } from "@/lib/actions/quarterlySales";
 import { assembleAndComputeFiling } from "@/lib/filingComputation";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 /**
- * SPEC.md 5 / §16 item 16: editing a transaction in an already-filed
- * period raises an AmendmentAlert showing the delta between the frozen
+ * SPEC.md 5 / §16 item 16: editing declared sales (D26: QuarterlySales,
+ * the only place income enters the system) in an already-filed period
+ * raises an AmendmentAlert showing the delta between the frozen
  * computationSnapshot and a live recomputation — and does NOT mutate
  * computationSnapshot. This is "the single most important integrity
  * rule in the system" per SPEC.md 5.
@@ -18,12 +19,12 @@ describe("AmendmentAlert wiring", () => {
   afterAll(async () => {
     if (createdClientIds.length === 0) return;
     await prisma.amendmentAlert.deleteMany({ where: { filing: { clientId: { in: createdClientIds } } } });
-    await prisma.salesTransaction.deleteMany({ where: { clientId: { in: createdClientIds } } });
+    await prisma.quarterlySales.deleteMany({ where: { clientId: { in: createdClientIds } } });
     await prisma.filing.deleteMany({ where: { clientId: { in: createdClientIds } } });
     await prisma.client.deleteMany({ where: { id: { in: createdClientIds } } });
   });
 
-  it("editing a transaction's gross amount in a filed period raises an AmendmentAlert without mutating computationSnapshot", async () => {
+  it("editing a quarter's declared gross sales in a filed period raises an AmendmentAlert without mutating computationSnapshot", async () => {
     const client = await prisma.client.create({
       data: {
         code: `p3-amend-${Date.now()}`,
@@ -37,17 +38,12 @@ describe("AmendmentAlert wiring", () => {
     });
     createdClientIds.push(client.id);
 
-    const tx = await prisma.salesTransaction.create({
+    await prisma.quarterlySales.create({
       data: {
         clientId: client.id,
-        transactionDate: new Date("2026-01-15T00:00:00.000Z"),
         taxableYear: 2026,
-        quarter: 1,
-        payorName: "Original Payor",
-        grossAmountCents: 200_000_00,
-        withholdingTaxCents: 0,
-        netReceivedCents: 200_000_00,
-        incomeType: "OPERATING",
+        quarter: "Q1",
+        grossSalesCents: 200_000_00,
       },
     });
 
@@ -73,19 +69,8 @@ describe("AmendmentAlert wiring", () => {
 
     // Edit the gross amount — this changes Q1's cumulative gross, so the
     // live recomputation will diverge from the frozen snapshot.
-    const result = await updateSalesTransaction(tx.id, {
-      transactionDate: "2026-01-15",
-      orNumber: "",
-      payorName: "Original Payor",
-      payorTin: "",
-      grossAmount: "400000",
-      withholdingRateBps: "0",
-      withholdingAmount: "",
-      netReceivedOverride: "",
-      incomeType: "OPERATING",
-      description: "",
-    });
-    expect(result.ok).toBe(true);
+    const result = await upsertQuarterlySales(client.id, 2026, "Q1", {}, formDataOf({ grossSales: "400000" }));
+    expect(result.saved).toBe(true);
 
     const filingAfter = await prisma.filing.findUniqueOrThrow({ where: { id: filing.id } });
     expect(filingAfter.computationSnapshot).toBe(snapshotJson); // byte-identical — never mutated
@@ -97,7 +82,7 @@ describe("AmendmentAlert wiring", () => {
     expect(alerts[0].acknowledgedAt).toBeNull();
   });
 
-  it("editing a transaction in a period that was never filed raises no alert", async () => {
+  it("editing a quarter's declared sales for a taxable year with no filing at all raises no alert", async () => {
     const client = await prisma.client.create({
       data: {
         code: `p3-amend-unfiled-${Date.now()}`,
@@ -111,33 +96,11 @@ describe("AmendmentAlert wiring", () => {
     });
     createdClientIds.push(client.id);
 
-    const created = await createQuickTransaction(client.id, {
-      transactionDate: "2026-02-01",
-      orNumber: "",
-      payorName: "Payor",
-      payorTin: "",
-      grossAmount: "50000",
-      withholdingRateBps: "0",
-      withholdingAmount: "",
-      netReceivedOverride: "",
-      incomeType: "OPERATING",
-      description: "",
-    });
-    expect(created.ok).toBe(true);
+    const created = await upsertQuarterlySales(client.id, 2026, "Q2", {}, formDataOf({ grossSales: "50000" }));
+    expect(created.saved).toBe(true);
 
-    const result = await updateSalesTransaction(created.createdId!, {
-      transactionDate: "2026-02-01",
-      orNumber: "",
-      payorName: "Payor",
-      payorTin: "",
-      grossAmount: "75000",
-      withholdingRateBps: "0",
-      withholdingAmount: "",
-      netReceivedOverride: "",
-      incomeType: "OPERATING",
-      description: "",
-    });
-    expect(result.ok).toBe(true);
+    const result = await upsertQuarterlySales(client.id, 2026, "Q2", {}, formDataOf({ grossSales: "75000" }));
+    expect(result.saved).toBe(true);
 
     const alertCount = await prisma.amendmentAlert.count({
       where: { filing: { clientId: client.id } },
@@ -145,3 +108,9 @@ describe("AmendmentAlert wiring", () => {
     expect(alertCount).toBe(0); // no frozen filing exists at all for this client/year
   });
 });
+
+function formDataOf(values: Record<string, string>): FormData {
+  const fd = new FormData();
+  for (const [k, v] of Object.entries(values)) fd.set(k, v);
+  return fd;
+}

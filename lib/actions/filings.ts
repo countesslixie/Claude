@@ -6,6 +6,7 @@ import { getActorId } from "@/lib/actor";
 import { logActivity } from "@/lib/activityLog";
 import { manilaDateInputToJsDate } from "@/lib/dates";
 import { generateFilingsForClientYear } from "@/lib/workflow/filingGeneration";
+import { ensureComputationSheetSaved } from "@/lib/documents/computationSheet";
 
 export type GenerateFilingsResult =
   | { ok: true; createdCount: number; skippedCount: number }
@@ -40,15 +41,27 @@ export async function generateFilingsAction(clientId: string, taxableYear: numbe
  * confirmed with the client that all receipts for this quarter are
  * accounted for, including any without a 2307?" Recorded once, with a
  * timestamp.
+ *
+ * §5.6 — extended with where the declared sales figure came from. With
+ * declared sales as the only income input (D26), this acknowledgement is
+ * the only control left in the system; it must never block, since it is
+ * evidence of a number that will be filed, not proof of advice given.
+ * The client's own confirming message/email is an optional attachment on
+ * this step's doc slot, not a field here.
  */
-export async function acknowledgeReceiptsComplete(filingId: string, note: string): Promise<void> {
+export async function acknowledgeReceiptsComplete(filingId: string, note: string, sourceNote: string): Promise<void> {
   const before = await prisma.filing.findUnique({ where: { id: filingId } });
   if (!before) return;
 
   const actorId = await getActorId();
   const updated = await prisma.filing.update({
     where: { id: filingId },
-    data: { receiptsAcknowledgedAt: new Date(), receiptsAcknowledgedNote: note || null, actorId },
+    data: {
+      receiptsAcknowledgedAt: new Date(),
+      receiptsAcknowledgedNote: note || null,
+      receiptsAcknowledgedSourceNote: sourceNote || null,
+      actorId,
+    },
   });
 
   await logActivity({
@@ -60,6 +73,7 @@ export async function acknowledgeReceiptsComplete(filingId: string, note: string
     actorId,
   });
 
+  await ensureComputationSheetSaved(filingId);
   revalidatePath(`/clients/${before.clientId}/filings/${filingId}`);
 }
 
@@ -89,6 +103,33 @@ export async function acknowledgeAmendmentAlert(alertId: string, note: string): 
   });
 
   revalidatePath(`/clients/${before.filing.clientId}/filings/${before.filingId}`);
+}
+
+/**
+ * Dismisses the filing's completeness note (§5.3) — informational only,
+ * never a block. Dismissing hides it on this filing; it does not
+ * reappear on its own.
+ */
+export async function dismissCompletenessNote(filingId: string): Promise<void> {
+  const before = await prisma.filing.findUnique({ where: { id: filingId } });
+  if (!before) return;
+
+  const actorId = await getActorId();
+  const updated = await prisma.filing.update({
+    where: { id: filingId },
+    data: { completenessNoteDismissedAt: new Date(), actorId },
+  });
+
+  await logActivity({
+    entityType: "Filing",
+    entityId: filingId,
+    action: "UPDATE",
+    before,
+    after: updated,
+    actorId,
+  });
+
+  revalidatePath(`/clients/${before.clientId}/filings/${filingId}`);
 }
 
 /**

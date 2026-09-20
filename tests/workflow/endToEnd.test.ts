@@ -3,18 +3,17 @@ import { rm } from "node:fs/promises";
 import path from "node:path";
 import { prisma } from "@/lib/prisma";
 import { generateFilingsForClientYear, recomputeRequiresSawt } from "@/lib/workflow/filingGeneration";
-import { uploadDocument } from "@/lib/actions/documents";
 import { markStepDone } from "@/lib/actions/workflowSteps";
-import { parseDocSlots } from "@/lib/workflow/types";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 /**
- * SPEC.md §16 item 20: a seeded client with 2307s can be driven from
- * step 1 to step 16, with all documents attached, and finishes at
- * COMPLETE.
+ * Rework brief acceptance criteria: no step can be blocked from DONE by
+ * a missing document, asserted across all 16 steps (§5.1/D27) — driving
+ * a filing from step 1 to step 16 with NO documents attached at all
+ * still reaches COMPLETE.
  */
-describe("end-to-end: driving a filing from step 1 to step 16", () => {
+describe("end-to-end: driving a filing from step 1 to step 16 with no documents attached", () => {
   const createdClientIds: string[] = [];
   let clientCode = "";
 
@@ -30,7 +29,7 @@ describe("end-to-end: driving a filing from step 1 to step 16", () => {
     }
   });
 
-  it("completing every step's required documents and marking each DONE drives the filing to COMPLETE", async () => {
+  it("marking every step DONE with zero documents attached still drives the filing to COMPLETE", async () => {
     clientCode = `p3-e2e-${Date.now()}`;
     const client = await prisma.client.create({
       data: {
@@ -47,6 +46,9 @@ describe("end-to-end: driving a filing from step 1 to step 16", () => {
     createdClientIds.push(client.id);
 
     await generateFilingsForClientYear(client.id, 2026);
+    // Q2, not Q1: this test is about document gating (§5.1), not the
+    // election hard-blocker (§7) — see tests/workflow/election.test.ts
+    // for that one.
     const filing = await prisma.filing.findUniqueOrThrow({
       where: { clientId_taxableYear_period: { clientId: client.id, taxableYear: 2026, period: "Q2" } },
     });
@@ -76,20 +78,15 @@ describe("end-to-end: driving a filing from step 1 to step 16", () => {
     expect(steps.every((s) => s.status !== "NA")).toBe(true); // requiresSawt true -> nothing auto-NA'd
 
     for (const step of steps) {
-      const slots = parseDocSlots(step.requiredDocSlots);
-      for (const slot of slots) {
-        const formData = new FormData();
-        formData.set("file", new File([`${step.stepCode}-${slot.slotCode}-contents`], `${slot.slotCode}.pdf`, { type: "application/pdf" }));
-        formData.set("workflowStepId", step.id);
-        formData.set("docSlotCode", slot.slotCode);
-        formData.set("documentDate", "2026-08-15");
-        const uploadResult = await uploadDocument(formData);
-        expect(uploadResult.ok).toBe(true);
-      }
-
       const doneResult = await markStepDone(step.id);
       expect(doneResult.ok).toBe(true);
     }
+
+    // PREPARE_RETURN is the one exception: the app saves its own
+    // computation sheet into its slot as a side effect of being marked
+    // done (§5.4) — not a document the bookkeeper attached.
+    const attachedDocs = await prisma.document.count({ where: { filingId: filing.id, deletedAt: null } });
+    expect(attachedDocs).toBe(1);
 
     const finalSteps = await prisma.workflowStep.findMany({ where: { filingId: filing.id } });
     expect(finalSteps.every((s) => s.status === "DONE")).toBe(true);

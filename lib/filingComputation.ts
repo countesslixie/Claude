@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { computeFiling } from "@/lib/tax/compute";
 import { sumCwtThroughPeriod, resolveCertificateCutoffDate } from "@/lib/tax/cwt";
-import { periodEndDate, priorPeriodsOf } from "@/lib/tax/periods";
+import { periodEndDate, priorPeriodsOf, cumulativeSalesQuartersThroughPeriod } from "@/lib/tax/periods";
 import { nowManila } from "@/lib/dates";
 import type { FilingComputationResult, Period } from "@/lib/tax/types";
 
@@ -26,20 +26,16 @@ export async function assembleAndComputeFiling(
     where: { clientId_taxableYear_period: { clientId, taxableYear, period } },
   });
 
-  // Transactions belong to their actual period, so gross sales stays keyed
-  // to the period's own end date. The CWT cutoff is a separate concern
-  // (SPEC.md 3.5) — see resolveCertificateCutoffDate.
-  const periodCutoff = periodEndDate(taxableYear, period);
-
-  const transactions = await prisma.salesTransaction.findMany({
-    where: { clientId, taxableYear, transactionDate: { lte: periodCutoff }, deletedAt: null },
+  // Declared gross sales (D26) — one row per client per taxable year per
+  // sales quarter, summed cumulatively through this filing's period
+  // (SPEC.md 3.2). A quarter with no QuarterlySales row contributes zero,
+  // not an error — see cumulativeSalesQuartersThroughPeriod.
+  const salesQuarters = cumulativeSalesQuartersThroughPeriod(period);
+  const salesRows = await prisma.quarterlySales.findMany({
+    where: { clientId, taxableYear, quarter: { in: [...salesQuarters] } },
   });
-  const cumulativeGrossSalesCents = transactions
-    .filter((t) => t.incomeType === "OPERATING")
-    .reduce((sum, t) => sum + t.grossAmountCents, 0);
-  const cumulativeNonOperatingCents = transactions
-    .filter((t) => t.incomeType === "NON_OPERATING")
-    .reduce((sum, t) => sum + t.grossAmountCents, 0);
+  const cumulativeGrossSalesCents = salesRows.reduce((sum, r) => sum + r.grossSalesCents, 0);
+  const cumulativeNonOperatingCents = salesRows.reduce((sum, r) => sum + r.nonOperatingIncomeCents, 0);
 
   const certificateCutoff = resolveCertificateCutoffDate({
     filedAt: filing?.filedAt ?? null,

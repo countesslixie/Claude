@@ -123,11 +123,11 @@ export default async function DashboardPage() {
   const thresholdAlerts: Array<{ clientName: string; pct: number }> = [];
   if (ruleSet) {
     for (const client of activeClients) {
-      const sum = await prisma.salesTransaction.aggregate({
-        where: { clientId: client.id, taxableYear: currentYear, deletedAt: null },
-        _sum: { grossAmountCents: true },
+      const sum = await prisma.quarterlySales.aggregate({
+        where: { clientId: client.id, taxableYear: currentYear },
+        _sum: { grossSalesCents: true, nonOperatingIncomeCents: true },
       });
-      const cumulativeGross = sum._sum.grossAmountCents ?? 0;
+      const cumulativeGross = (sum._sum.grossSalesCents ?? 0) + (sum._sum.nonOperatingIncomeCents ?? 0);
       const pct = cumulativeGross / ruleSet.vatThresholdCents;
       if (pct >= 0.8) thresholdAlerts.push({ clientName: client.registeredName, pct });
     }

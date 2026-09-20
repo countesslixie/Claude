@@ -60,9 +60,11 @@ enum YearEndCreditElection {
   NA
 }
 
-enum IncomeType {
-  OPERATING
-  NON_OPERATING
+enum SalesQuarter {
+  Q1
+  Q2
+  Q3
+  Q4
 }
 
 enum Form2307Status {
@@ -141,12 +143,6 @@ enum SawtBatchStatus {
   VALIDATED
 }
 
-enum ImportBatchStatus {
-  PENDING
-  COMMITTED
-  ROLLED_BACK
-}
-
 enum ActivityAction {
   CREATE
   UPDATE
@@ -163,19 +159,6 @@ enum HolidayScope {
   LOCAL
 }
 
-enum AccountType {
-  ASSET
-  LIABILITY
-  EQUITY
-  INCOME
-  EXPENSE
-}
-
-enum JournalEntryType {
-  GENERAL
-  DISBURSEMENT
-}
-
 // ---------------------------------------------------------------------------
 // Core models
 // ---------------------------------------------------------------------------
@@ -189,21 +172,21 @@ model User {
 }
 
 model Client {
-  id       String @id @default(cuid())
-  code     String @unique // short slug, used in storage file paths
+  id   String @id @default(cuid())
+  code String @unique // short slug, used in storage file paths
 
   registeredName String
   tradeName      String?
 
-  tin         String // 9 digits
-  branchCode  String @default("000")
-  rdoCode     String
+  tin        String // 9 digits
+  branchCode String @default("000")
+  rdoCode    String
 
   registeredAddress String
   email             String?
   mobile            String?
 
-  taxpayerType TaxpayerType
+  taxpayerType   TaxpayerType
   lineOfBusiness String?
   psicCode       String?
   civilStatus    CivilStatus?
@@ -215,13 +198,13 @@ model Client {
   swornDeclarationOnFile Boolean @default(false)
   swornDeclarationYear   Int?
 
-  eBIRFormsEmail       String?
-  eFPSEnrolled         Boolean @default(false)
+  eBIRFormsEmail            String?
+  eFPSEnrolled              Boolean @default(false)
   defaultWithholdingRateBps Int? // basis points, e.g. 500 = 5.00%
 
   recognitionBasis RecognitionBasis @default(COLLECTION)
 
-  isActive     Boolean  @default(true)
+  isActive     Boolean   @default(true)
   engagedSince DateTime?
   notes        String?
 
@@ -229,17 +212,42 @@ model Client {
   updatedAt DateTime @updatedAt
   actorId   String?
 
-  taxYears           ClientTaxYear[]
-  salesTransactions  SalesTransaction[]
-  form2307s          Form2307[]
-  filings            Filing[]
-  documents          Document[]
-  sawtBatches        SawtBatch[]
-  importBatches      ImportBatch[]
-  importMappingProfiles ImportMappingProfile[]
-  journalEntries     JournalEntry[]
+  taxYears       ClientTaxYear[]
+  quarterlySales QuarterlySales[]
+  form2307s      Form2307[]
+  filings        Filing[]
+  documents      Document[]
+  sawtBatches    SawtBatch[]
 
   @@index([isActive])
+}
+
+// One row per client per taxable year per sales quarter — the only place
+// income enters the system (D26: declared gross sales, independent of
+// any Form 2307). Q1-Q3 feed the quarterly returns; Q4 has no quarterly
+// return of its own and is picked up by the ANNUAL return (see
+// lib/tax/quarterlySales.ts's cumulative mapping). A missing row for a
+// quarter is treated as zero, not an error.
+model QuarterlySales {
+  id       String @id @default(cuid())
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id])
+
+  taxableYear Int
+  quarter     SalesQuarter
+
+  grossSalesCents         Int
+  nonOperatingIncomeCents Int @default(0)
+
+  sourceNote String? // how the figure was obtained from the client
+  notes      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  actorId   String?
+
+  @@unique([clientId, taxableYear, quarter])
+  @@index([clientId, taxableYear])
 }
 
 // One row per client per taxable year. Anchor for annual state.
@@ -249,11 +257,11 @@ model ClientTaxYear {
   client      Client @relation(fields: [clientId], references: [id])
   taxableYear Int
 
-  regime         Regime
-  electionStatus ElectionStatus @default(NOT_YET_ELECTED)
+  regime                Regime
+  electionStatus        ElectionStatus @default(NOT_YET_ELECTED)
   electionEvidenceDocId String?
 
-  priorYearExcessCreditCents Int @default(0)
+  priorYearExcessCreditCents Int                   @default(0)
   yearEndCreditElection      YearEndCreditElection @default(NA)
 
   thresholdBreachedAt DateTime?
@@ -264,47 +272,6 @@ model ClientTaxYear {
 
   @@unique([clientId, taxableYear])
   @@index([taxableYear])
-}
-
-model SalesTransaction {
-  id              String   @id @default(cuid())
-  clientId        String
-  client          Client   @relation(fields: [clientId], references: [id])
-  transactionDate DateTime
-  taxableYear     Int
-  quarter         Int // 1-4, derived from transactionDate at write time
-
-  orNumber  String?
-  payorName String
-  payorTin  String?
-
-  grossAmountCents     Int
-  withholdingTaxCents  Int @default(0)
-  withholdingRateBps   Int @default(0)
-  netReceivedCents     Int // derived: gross - wht, validated at write time
-
-  incomeType  IncomeType @default(OPERATING)
-  description String?
-
-  form2307Id       String?
-  form2307         Form2307? @relation(fields: [form2307Id], references: [id])
-  sourceDocumentId String?
-  sourceDocument   Document? @relation("SalesTransactionSourceDocument", fields: [sourceDocumentId], references: [id])
-  importBatchId    String?
-  importBatch      ImportBatch? @relation(fields: [importBatchId], references: [id])
-
-  deletedAt     DateTime?
-  deletedReason String?
-
-  createdAt DateTime @default(now())
-  actorId   String?
-
-  @@index([clientId, taxableYear, quarter])
-  @@index([clientId, transactionDate])
-  // Not @@unique: a duplicate OR number for the same client is a real
-  // possibility (typo, legitimate re-use) and should warn, not block
-  // entry — enforced at the application layer, not the database.
-  @@index([clientId, orNumber])
 }
 
 model Form2307 {
@@ -329,11 +296,11 @@ model Form2307 {
   dateReceived DateTime?
   status       Form2307Status @default(RECEIVED)
 
-  documentId String?
+  documentId      String?
   primaryDocument Document? @relation("Form2307PrimaryDocument", fields: [documentId], references: [id])
 
   claimedOnFilingId String?
-  claimedOnFiling   Filing? @relation(fields: [claimedOnFilingId], references: [id])
+  claimedOnFiling   Filing?    @relation(fields: [claimedOnFilingId], references: [id])
   sawtBatchId       String?
   sawtBatch         SawtBatch? @relation(fields: [sawtBatchId], references: [id])
 
@@ -346,17 +313,16 @@ model Form2307 {
   updatedAt DateTime @updatedAt
   actorId   String?
 
-  salesTransactions SalesTransaction[]
-  documents         Document[]         @relation("DocumentToForm2307")
+  documents Document[] @relation("DocumentToForm2307")
 
   @@index([clientId, taxableYear, quarterCovered])
 }
 
 // One row per client per period per taxable year.
 model Filing {
-  id          String @id @default(cuid())
+  id          String   @id @default(cuid())
   clientId    String
-  client      Client @relation(fields: [clientId], references: [id])
+  client      Client   @relation(fields: [clientId], references: [id])
   taxableYear Int
   period      Period
   formType    FormType
@@ -371,8 +337,8 @@ model Filing {
   certificatesExpectedBy DateTime?
   internalFilingTarget   DateTime?
 
-  status        FilingStatus @default(NOT_STARTED)
-  requiresSawt  Boolean      @default(false) // derived: any Form2307 in period
+  status       FilingStatus @default(NOT_STARTED)
+  requiresSawt Boolean      @default(false) // derived: any Form2307 in period
 
   computationSnapshot Json? // FROZEN once filedAt is set; never rewritten silently
 
@@ -383,7 +349,7 @@ model Filing {
   // or "today" when set.
   certificateCutoffOverride DateTime?
 
-  filedAt              DateTime?
+  filedAt               DateTime?
   filingReferenceNumber String?
 
   amountPaidCents Int?
@@ -395,6 +361,17 @@ model Filing {
   // without a 2307?" — recorded once, with who/when (SPEC.md 7.1 step 3).
   receiptsAcknowledgedAt   DateTime?
   receiptsAcknowledgedNote String?
+
+  // PREPARE_RETURN acknowledgement, extended (§5.6): where the declared
+  // sales figure came from, and an optional slot for the client's own
+  // message/email stating it. Never blocks — evidence of a number that
+  // will be filed, not proof of advice given.
+  receiptsAcknowledgedSourceNote String?
+
+  // Informational completeness note (§5.3) — lists documents not yet
+  // attached across the filing's steps. Amber, never blocking. Dismissing
+  // it hides it on this filing; it does not reappear on its own.
+  completenessNoteDismissedAt DateTime?
 
   notes String?
 
@@ -418,35 +395,35 @@ model Filing {
 // Records the delta when a transaction is edited after a Filing's
 // computationSnapshot has been frozen. Never auto-resolved.
 model AmendmentAlert {
-  id        String   @id @default(cuid())
-  filingId  String
-  filing    Filing   @relation(fields: [filingId], references: [id])
-  reason    String
-  snapshotJson Json  // frozen computation at time of filing
-  recomputedJson Json // live recomputation at time the alert was raised
-  deltaCents Int
-  acknowledgedAt DateTime?
+  id               String    @id @default(cuid())
+  filingId         String
+  filing           Filing    @relation(fields: [filingId], references: [id])
+  reason           String
+  snapshotJson     Json // frozen computation at time of filing
+  recomputedJson   Json // live recomputation at time the alert was raised
+  deltaCents       Int
+  acknowledgedAt   DateTime?
   acknowledgedNote String?
-  createdAt DateTime @default(now())
-  actorId   String?
+  createdAt        DateTime  @default(now())
+  actorId          String?
 
   @@index([filingId])
 }
 
 // Editable template. Instantiated into WorkflowStep rows when a Filing is created.
 model WorkflowStepTemplate {
-  id          String @id @default(cuid())
-  stepCode    String @unique
+  id          String  @id @default(cuid())
+  stepCode    String  @unique
   sequence    Int
   title       String
   description String?
 
-  category      WorkflowStepCategory
-  isConditional Boolean @default(false)
+  category            WorkflowStepCategory
+  isConditional       Boolean              @default(false)
   conditionExpression String? // e.g. "requiresSawt == true"
 
-  isWaitingState       Boolean @default(false)
-  waitingOnLabel       String? // e.g. "Client" or "BIR", display only
+  isWaitingState Boolean @default(false)
+  waitingOnLabel String? // e.g. "Client" or "BIR", display only
 
   expectedResponseDays Int?
   requiredDocSlots     Json // [{slotCode, label, required, acceptedTypes}]
@@ -467,16 +444,16 @@ model WorkflowStep {
   description String?
 
   category WorkflowStepCategory
-  status   WorkflowStepStatus @default(PENDING)
+  status   WorkflowStepStatus   @default(PENDING)
 
   isConditional       Boolean @default(false)
   conditionExpression String?
 
-  isWaitingState Boolean   @default(false)
-  waitingOnLabel String? // e.g. "Client" or "BIR" — copied from the template at instantiation; drives Filing status derivation (SPEC.md 7.2)
+  isWaitingState       Boolean   @default(false)
+  waitingOnLabel       String? // e.g. "Client" or "BIR" — copied from the template at instantiation; drives Filing status derivation (SPEC.md 7.2)
   expectedResponseDays Int?
-  waitingSince   DateTime?
-  followUpCount  Int       @default(0)
+  waitingSince         DateTime?
+  followUpCount        Int       @default(0)
 
   requiredDocSlots Json // [{slotCode, label, required, acceptedTypes}]
 
@@ -521,65 +498,11 @@ model Document {
   deletedAt     DateTime?
   deletedReason String?
 
-  salesTransactionSource SalesTransaction[] @relation("SalesTransactionSourceDocument")
-  form2307Primary        Form2307[]         @relation("Form2307PrimaryDocument")
+  form2307Primary Form2307[] @relation("Form2307PrimaryDocument")
 
   @@index([clientId])
   @@index([filingId])
   @@index([sha256])
-}
-
-// ---------------------------------------------------------------------------
-// Books of accounts
-// ---------------------------------------------------------------------------
-
-model ChartOfAccounts {
-  id      String      @id @default(cuid())
-  code    String      @unique
-  name    String
-  type    AccountType
-  isActive Boolean    @default(true)
-
-  journalEntryLines JournalEntryLine[]
-}
-
-model JournalEntry {
-  id       String @id @default(cuid())
-  clientId String
-  client   Client @relation(fields: [clientId], references: [id])
-
-  entryType   JournalEntryType @default(GENERAL)
-  entryDate   DateTime
-  particulars String
-  payee       String?
-  memo        String?
-
-  lockedAt DateTime? // "as of" lock; a locked period is not silently altered
-
-  deletedAt     DateTime?
-  deletedReason String?
-
-  createdAt DateTime @default(now())
-  actorId   String?
-
-  lines JournalEntryLine[]
-
-  @@index([clientId, entryDate])
-}
-
-model JournalEntryLine {
-  id             String       @id @default(cuid())
-  journalEntryId String
-  journalEntry   JournalEntry @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
-  accountId      String
-  account        ChartOfAccounts @relation(fields: [accountId], references: [id])
-
-  debitCents  Int @default(0)
-  creditCents Int @default(0)
-  description String?
-
-  @@index([journalEntryId])
-  @@index([accountId])
 }
 
 // ---------------------------------------------------------------------------
@@ -593,11 +516,11 @@ model SawtBatch {
   taxableYear Int
   period      Period
 
-  status        SawtBatchStatus @default(GENERATED)
-  generatedAt   DateTime?
-  emailedAt     DateTime?
+  status         SawtBatchStatus @default(GENERATED)
+  generatedAt    DateTime?
+  emailedAt      DateTime?
   acknowledgedAt DateTime?
-  validatedAt   DateTime?
+  validatedAt    DateTime?
 
   notes String?
 
@@ -619,12 +542,12 @@ model SawtBatch {
 model TaxRuleSet {
   id String @id @default(cuid())
 
-  taxableYear    Int      @unique
-  effectiveFrom  DateTime
-  effectiveTo    DateTime?
+  taxableYear   Int       @unique
+  effectiveFrom DateTime
+  effectiveTo   DateTime?
 
-  incomeTaxRateBps      Int // e.g. 800 = 8.00%
-  vatThresholdCents     Int // e.g. 300000000 = PHP 3,000,000.00
+  incomeTaxRateBps        Int // e.g. 800 = 8.00%
+  vatThresholdCents       Int // e.g. 300000000 = PHP 3,000,000.00
   allowableDeductionCents Int // PHP 250,000.00 for purely self-employed
 
   // Statutory due dates, stored as "MM-DD" strings (business-day shift
@@ -634,12 +557,12 @@ model TaxRuleSet {
   q3DueMonthDay     String // e.g. "11-15"
   annualDueMonthDay String // e.g. "04-15" of the FOLLOWING year
 
-  sawtDeadlineOffsetDays Int @default(0)  // from return deadline
+  sawtDeadlineOffsetDays Int @default(0) // from return deadline
   eafsDeadlineOffsetDays Int @default(15) // from date of filing
 
   // Late filing exposure (informational only — see SPEC.md 3.7)
-  surchargeRateBps         Int?
-  interestRateBpsPerAnnum  Int?
+  surchargeRateBps          Int?
+  interestRateBpsPerAnnum   Int?
   compromisePenaltySchedule Json?
 
   notes String?
@@ -650,11 +573,11 @@ model TaxRuleSet {
 }
 
 model Holiday {
-  id    String       @id @default(cuid())
-  date  DateTime
-  name  String
-  type  HolidayType
-  scope HolidayScope @default(NATIONAL)
+  id         String       @id @default(cuid())
+  date       DateTime
+  name       String
+  type       HolidayType
+  scope      HolidayScope @default(NATIONAL)
   localScope String? // e.g. city/province, required when scope = LOCAL
 
   createdAt DateTime @default(now())
@@ -679,49 +602,6 @@ model AtcCode {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-}
-
-// ---------------------------------------------------------------------------
-// Import / export
-// ---------------------------------------------------------------------------
-
-model ImportMappingProfile {
-  id       String @id @default(cuid())
-  clientId String
-  client   Client @relation(fields: [clientId], references: [id])
-  name     String
-
-  columnMapping Json // { targetField: sourceColumnHeader }
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([clientId, name])
-}
-
-model ImportBatch {
-  id       String @id @default(cuid())
-  clientId String
-  client   Client @relation(fields: [clientId], references: [id])
-
-  sourceFilename String
-  status         ImportBatchStatus @default(PENDING)
-
-  totalRows   Int @default(0)
-  successRows Int @default(0)
-  errorRows   Int @default(0)
-  errorReport Json?
-
-  committedAt   DateTime?
-  rolledBackAt  DateTime?
-  notes         String?
-
-  createdAt DateTime @default(now())
-  actorId   String?
-
-  salesTransactions SalesTransaction[]
-
-  @@index([clientId])
 }
 
 // ---------------------------------------------------------------------------
