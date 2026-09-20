@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { centsToPesos } from "@/lib/money";
 import type { BreakdownLine } from "@/lib/tax/types";
 
@@ -22,6 +23,10 @@ export function ComputationSheetPanel({
   taxPayableCents,
   formType,
   isFrozen,
+  hasSalesRecorded,
+  period,
+  taxableYear,
+  incomeHref,
 }: {
   breakdown: BreakdownLine[];
   isOverpayment: boolean;
@@ -29,6 +34,11 @@ export function ComputationSheetPanel({
   taxPayableCents: number;
   formType: string;
   isFrozen: boolean;
+  /** False when this filing's own quarter has no declared sales yet (rework brief #2 §3.1). */
+  hasSalesRecorded: boolean;
+  period: string;
+  taxableYear: number;
+  incomeHref: string;
 }) {
   const [open, setOpen] = useState(false);
   const [showExplanations, setShowExplanations] = useState(false);
@@ -53,9 +63,11 @@ export function ComputationSheetPanel({
     });
   }
 
-  const summaryLabel = isOverpayment
-    ? `Overpayment ${centsToPesos(overpaymentCents, { withSymbol: true })}`
-    : `Tax payable ${centsToPesos(taxPayableCents, { withSymbol: true })}`;
+  const summaryLabel = !hasSalesRecorded
+    ? `No sales recorded for ${period} ${taxableYear}`
+    : isOverpayment
+      ? `Overpayment ${centsToPesos(overpaymentCents, { withSymbol: true })}`
+      : `Tax payable ${centsToPesos(taxPayableCents, { withSymbol: true })}`;
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white">
@@ -73,6 +85,15 @@ export function ComputationSheetPanel({
       </button>
       {open && (
         <div className="border-t border-slate-100 px-4 py-3">
+          {!hasSalesRecorded && (
+            <p className="mb-2 rounded bg-amber-50 px-2 py-1 text-xs text-amber-800">
+              No sales recorded for {period} {taxableYear} — enter the client&apos;s declared figure to compute.{" "}
+              <Link href={incomeHref} className="underline">
+                Record quarterly sales
+              </Link>
+              .
+            </p>
+          )}
           <label className="mb-2 flex items-center gap-1.5 text-xs text-slate-500">
             <input type="checkbox" checked={showExplanations} onChange={toggleExplanations} />
             Show explanations

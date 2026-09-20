@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { computeFiling } from "@/lib/tax/compute";
 import { sumCwtThroughPeriod, resolveCertificateCutoffDate } from "@/lib/tax/cwt";
-import { periodEndDate, priorPeriodsOf, cumulativeSalesQuartersThroughPeriod } from "@/lib/tax/periods";
+import { periodEndDate, priorPeriodsOf, cumulativeSalesQuartersThroughPeriod, ownSalesQuarterOf } from "@/lib/tax/periods";
 import { nowManila } from "@/lib/dates";
 import type { FilingComputationResult, Period } from "@/lib/tax/types";
 
@@ -84,6 +84,28 @@ export async function assembleAndComputeFiling(
     certificateCutoffDate: certificateCutoff.date,
     certificateCutoffSource: certificateCutoff.source,
   });
+}
+
+/**
+ * Whether this filing's OWN quarter has a declared QuarterlySales row at
+ * all (rework brief #2 §3.1). Distinct from cumulativeGrossSalesCents,
+ * which sums every quarter through this period and so can be
+ * misleadingly nonzero even when the current quarter itself is still
+ * blank. A filing whose own quarter has nothing entered renders "no
+ * sales recorded" instead of a computed ₱0.00 that reads as a real
+ * answer.
+ */
+export async function hasSalesRecordedForPeriod(
+  clientId: string,
+  taxableYear: number,
+  period: Period,
+): Promise<boolean> {
+  const row = await prisma.quarterlySales.findUnique({
+    where: {
+      clientId_taxableYear_quarter: { clientId, taxableYear, quarter: ownSalesQuarterOf(period) },
+    },
+  });
+  return row != null;
 }
 
 /**

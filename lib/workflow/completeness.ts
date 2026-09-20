@@ -1,14 +1,21 @@
-import { missingRequiredSlots, type AttachedDocument } from "./docSlots";
+import { emptySlots, type AttachedDocument } from "./docSlots";
 import type { DocSlotDef } from "./types";
 
 /**
- * Rework brief §5.3 — the informational completeness note that replaces
- * document gating everywhere (§5.1). Nothing here blocks; it exists so a
- * missing document is never silently missed, not to stop work. Unlike
- * SEND_CLIENT_PACKAGE's narrower dependency check (steps 7/9/10/14
- * only), this scans every non-NA, non-SKIPPED step on the filing — a
- * step already marked DONE can still be missing its document, since
- * nothing enforced attaching one before DONE was allowed.
+ * The "documents not yet attached" informational note (rework brief #2
+ * §7, reconciled onto D27's real blocking rule). Originally this scanned
+ * every non-NA/non-SKIPPED step for missing REQUIRED slots, back when
+ * nothing blocked and any step could reach DONE with nothing attached.
+ * Now that the seven listed steps (D27) genuinely can't reach DONE
+ * without their document, that old scope would show almost nothing.
+ *
+ * Reworked to: only DONE or IN_PROGRESS steps (empty on a fresh filing,
+ * filling in as she works — a step she's moved past without saving), and
+ * ALL empty slots on them, not just required ones — a required slot on a
+ * DONE step should never actually be empty (D27 already stopped that),
+ * but an IN_PROGRESS step's required slot can be, and an optional slot on
+ * either can be, and both are worth surfacing here since they're the
+ * cases nothing else catches.
  */
 export interface CompletenessGap {
   stepCode: string;
@@ -31,9 +38,9 @@ export function computeFilingCompleteness(
   const gaps: CompletenessGap[] = [];
 
   for (const step of steps) {
-    if (step.status === "NA" || step.status === "SKIPPED") continue;
+    if (step.status !== "DONE" && step.status !== "IN_PROGRESS") continue;
     const documents = documentsByStepCode.get(step.stepCode) ?? [];
-    for (const slot of missingRequiredSlots(step.requiredDocSlots, documents)) {
+    for (const slot of emptySlots(step.requiredDocSlots, documents)) {
       gaps.push({ stepCode: step.stepCode, stepTitle: step.title, slotCode: slot.slotCode, slotLabel: slot.label });
     }
   }

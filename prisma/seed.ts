@@ -164,6 +164,24 @@ const WORKFLOW_STEP_TEMPLATE: Array<{
   requiredDocSlots: Array<{ slotCode: string; label: string; required: boolean; acceptedTypes: string[] }>;
 }> = [
   {
+    // Rework brief #2 §3 / D28 — replaces the retired RECORD_CRJ (it
+    // survived the CRJ's own deletion under D25 and sat in the checklist
+    // naming a feature that no longer existed) and moves ahead of the
+    // certificates: gross sales is the primary figure, certificates are a
+    // credit applied on top, mirroring both the return itself and D26.
+    // Waits on the client for the declared figure, like RECEIVE_2307
+    // below, but carries no document slot: it links straight to the
+    // income entry screen (/clients/[id]/income) and never blocks (D27).
+    stepCode: "RECORD_SALES",
+    sequence: 1,
+    title: "Record quarterly sales",
+    category: "PREP",
+    isWaitingState: true,
+    waitingOnLabel: "Client",
+    expectedResponseDays: 10,
+    requiredDocSlots: [],
+  },
+  {
     // Phase 2b P7: once a real workflow engine sets waitingSince for this
     // step automatically (Phase 3 — no such automation exists yet; today
     // waitingSince is only ever hand-set here in the seed), it must anchor
@@ -172,24 +190,19 @@ const WORKFLOW_STEP_TEMPLATE: Array<{
     // after the period closes (SPEC.md 3.5, 3.6) — starting this clock at
     // period end would flag the bookkeeper as "waiting" long before a
     // certificate could reasonably have arrived.
+    //
+    // The 2307-scan slot is optional and non-blocking (D27, D28): a
+    // client with no certificates at all still has to be able to pass
+    // through this step, and some clients issue none whatsoever (D26).
     stepCode: "RECEIVE_2307",
-    sequence: 1,
+    sequence: 2,
     title: "Receive Form 2307 from client",
     category: "PREP",
     isWaitingState: true,
     waitingOnLabel: "Client",
     expectedResponseDays: 5,
     requiredDocSlots: [
-      { slotCode: "form2307_scan", label: "2307 scan", required: true, acceptedTypes: ["pdf", "jpg", "png"] },
-    ],
-  },
-  {
-    stepCode: "RECORD_CRJ",
-    sequence: 2,
-    title: "Record transactions in Cash Receipts Journal",
-    category: "PREP",
-    requiredDocSlots: [
-      { slotCode: "source_receipts", label: "Source ORs/invoices", required: false, acceptedTypes: ["pdf", "jpg", "png"] },
+      { slotCode: "form2307_scan", label: "2307 scan", required: false, acceptedTypes: ["pdf", "jpg", "png"] },
     ],
   },
   {
@@ -198,13 +211,19 @@ const WORKFLOW_STEP_TEMPLATE: Array<{
     title: "Prepare computation + 1701Q/1701A",
     category: "PREP",
     requiredDocSlots: [
-      // Rework brief §5.4: the app writes its own computation sheet into
-      // this slot (lib/documents/computationSheet.ts) — no user upload.
-      { slotCode: "draft_computation", label: "Draft computation sheet", required: true, acceptedTypes: ["html", "pdf", "xlsx"] },
       // §5.6: optional evidence of where the declared sales figure came
       // from — the client's own confirming message/email, if any. Never
-      // required; the acknowledgement itself is evidence of a number
-      // that will be filed, not proof of advice given.
+      // required; the acknowledgement itself (below) is evidence of a
+      // number about to be filed, not proof of advice given, and once
+      // income is declared-only (D26) it is the only control left in the
+      // system (D27's exception is different in kind: this records
+      // provenance, it doesn't ask her to prove she did something).
+      //
+      // draft_computation is deliberately NOT a slot here — the app
+      // writes its own computation sheet straight into the vault as a
+      // side effect of completing this step (lib/documents/
+      // computationSheet.ts, D27/rework brief §5.4), with no upload UI
+      // and nothing for this list to gate on.
       {
         slotCode: "client_confirmation_evidence",
         label: "Client confirmation message/email (optional)",
@@ -214,6 +233,9 @@ const WORKFLOW_STEP_TEMPLATE: Array<{
     ],
   },
   {
+    // No slot at all (D27) — advising the client is an action the
+    // bookkeeper performs elsewhere; asking her to prove it was rejected
+    // outright ("No need for an email proof").
     stepCode: "ADVISE_CLIENT",
     sequence: 4,
     title: "Advise client of tax payable",
@@ -221,12 +243,7 @@ const WORKFLOW_STEP_TEMPLATE: Array<{
     isWaitingState: true,
     waitingOnLabel: "Client",
     expectedResponseDays: 5,
-    requiredDocSlots: [
-      // Rework brief §5.1: "No need for an email proof" — rejected
-      // outright. The slot stays (optional attachment point), the
-      // requirement is gone.
-      { slotCode: "advisory_evidence", label: "Advisory email/screenshot", required: false, acceptedTypes: ["pdf", "jpg", "png", "eml"] },
-    ],
+    requiredDocSlots: [],
   },
   {
     stepCode: "FILE_RETURN",
@@ -294,15 +311,15 @@ const WORKFLOW_STEP_TEMPLATE: Array<{
     ],
   },
   {
+    // No slot (D27) — the DAT file itself is already captured at step 11;
+    // this step needs nothing of its own.
     stepCode: "EMAIL_DAT",
     sequence: 12,
     title: "Email DAT file to BIR eSubmission",
     category: "SAWT",
     isConditional: true,
     conditionExpression: "requiresSawt == true",
-    requiredDocSlots: [
-      { slotCode: "sent_email", label: "Sent-email evidence", required: true, acceptedTypes: ["eml", "pdf", "jpg"] },
-    ],
+    requiredDocSlots: [],
   },
   {
     stepCode: "SAWT_ACK",
@@ -333,45 +350,66 @@ const WORKFLOW_STEP_TEMPLATE: Array<{
     ],
   },
   {
+    // The one documented exception (D27): the eAFS confirmation is
+    // addressed to the client, not the bookkeeper, and often never
+    // reaches her — she can't obtain it on demand. Optional and hidden
+    // behind a disclosure, never demanded, never blocking; she can still
+    // save it when she has it.
     stepCode: "EAFS_SUBMIT",
     sequence: 15,
     title: "Complete and submit eAFS",
     category: "ATTACHMENT",
     requiredDocSlots: [
-      { slotCode: "eafs_confirmation", label: "eAFS confirmation", required: true, acceptedTypes: ["pdf", "jpg"] },
+      { slotCode: "eafs_confirmation", label: "eAFS confirmation", required: false, acceptedTypes: ["pdf", "jpg"] },
     ],
   },
   {
+    // No slot (D27, §5) — replaced by a package download button and a
+    // copyable client email draft on the step itself.
     stepCode: "SEND_CLIENT_PACKAGE",
     sequence: 16,
     title: "Email package to client",
     category: "CLIENT_COMM",
-    requiredDocSlots: [
-      { slotCode: "sent_email", label: "Sent-email evidence", required: true, acceptedTypes: ["eml", "pdf", "jpg"] },
-    ],
+    requiredDocSlots: [],
   },
 ];
 
 async function seedWorkflowStepTemplate() {
   for (const step of WORKFLOW_STEP_TEMPLATE) {
+    const fields = {
+      sequence: step.sequence,
+      title: step.title,
+      description: step.description,
+      category: step.category,
+      isConditional: step.isConditional ?? false,
+      conditionExpression: step.conditionExpression,
+      isWaitingState: step.isWaitingState ?? false,
+      waitingOnLabel: step.waitingOnLabel,
+      expectedResponseDays: step.expectedResponseDays,
+      requiredDocSlots: JSON.stringify(step.requiredDocSlots),
+    };
     await prisma.workflowStepTemplate.upsert({
       where: { stepCode: step.stepCode },
-      update: {},
-      create: {
-        stepCode: step.stepCode,
-        sequence: step.sequence,
-        title: step.title,
-        description: step.description,
-        category: step.category,
-        isConditional: step.isConditional ?? false,
-        conditionExpression: step.conditionExpression,
-        isWaitingState: step.isWaitingState ?? false,
-        waitingOnLabel: step.waitingOnLabel,
-        expectedResponseDays: step.expectedResponseDays,
-        requiredDocSlots: JSON.stringify(step.requiredDocSlots),
-      },
+      // update, not {}: this table has no settings UI of its own, so the
+      // array above IS the source of truth. `update: {}` (this bug exists
+      // on both branches this was reconciled from) meant reseeding over
+      // an existing database silently kept whatever an earlier seed run
+      // left behind — a step reorder or a required-flag change could be
+      // committed and never actually take effect at runtime.
+      update: fields,
+      create: { stepCode: step.stepCode, ...fields },
     });
   }
+
+  // A stepCode no longer in the array (e.g. the retired RECORD_CRJ) must
+  // stop being active — generateFilingsForClientYear instantiates every
+  // isActive template, and a stale row would silently grow every future
+  // filing past 16 steps.
+  const currentStepCodes = WORKFLOW_STEP_TEMPLATE.map((s) => s.stepCode);
+  await prisma.workflowStepTemplate.updateMany({
+    where: { stepCode: { notIn: currentStepCodes } },
+    data: { isActive: false },
+  });
 }
 
 async function seedClientA(actorId: string) {

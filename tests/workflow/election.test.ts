@@ -66,7 +66,7 @@ describe("election hard-blocker wired into markStepDone", () => {
       where: { clientId_taxableYear_period: { clientId: client.id, taxableYear: 2026, period: "Q1" } },
     });
     const q1Step = await prisma.workflowStep.findFirstOrThrow({
-      where: { filingId: q1Filing.id, stepCode: "RECORD_CRJ" },
+      where: { filingId: q1Filing.id, stepCode: "RECORD_SALES" },
     });
 
     const blocked = await markStepDone(q1Step.id);
@@ -110,7 +110,7 @@ describe("election hard-blocker wired into markStepDone", () => {
       where: { clientId_taxableYear_period: { clientId: client.id, taxableYear: 2026, period: "Q2" } },
     });
     const q2Step = await prisma.workflowStep.findFirstOrThrow({
-      where: { filingId: q2Filing.id, stepCode: "RECORD_CRJ" },
+      where: { filingId: q2Filing.id, stepCode: "RECORD_SALES" },
     });
 
     const allowed = await markStepDone(q2Step.id);

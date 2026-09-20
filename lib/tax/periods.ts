@@ -107,3 +107,27 @@ export function salesQuarterEndDate(taxableYear: number, quarter: SalesQuarter):
   if (quarter === "Q4") return new Date(Date.UTC(taxableYear, 11, 31));
   return periodEndDate(taxableYear, quarter);
 }
+
+/**
+ * The single QuarterlySales quarter that is genuinely "this filing's own"
+ * — as opposed to cumulativeSalesQuartersThroughPeriod's whole
+ * year-to-date set. Used to answer "has this specific period's own sales
+ * figure been entered yet," distinct from "is the cumulative total
+ * nonzero" (rework brief #2 §3.1 / #3 verification item 5): a filing can
+ * have a healthy cumulative total carried from earlier quarters while its
+ * own quarter is still blank, and that should read as "not entered yet,"
+ * not as a real ₱0.00. ANNUAL's own quarter is Q4, the one quarter no
+ * other filing period covers.
+ */
+export function ownSalesQuarterOf(period: Period): SalesQuarter {
+  switch (period) {
+    case "Q1":
+      return "Q1";
+    case "Q2":
+      return "Q2";
+    case "Q3":
+      return "Q3";
+    case "ANNUAL":
+      return "Q4";
+  }
+}

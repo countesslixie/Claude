@@ -3,7 +3,7 @@ import { getActorId } from "@/lib/actor";
 import { logActivity } from "@/lib/activityLog";
 import { buildStorageRelativePath, saveDocumentFile, computeSha256 } from "@/lib/documents/storage";
 import { renderComputationSheetHtml } from "@/lib/documents/computationSheetHtml";
-import { assembleAndComputeFiling } from "@/lib/filingComputation";
+import { assembleAndComputeFiling, hasSalesRecordedForPeriod } from "@/lib/filingComputation";
 import type { FilingComputationResult, Period } from "@/lib/tax/types";
 
 const DRAFT_COMPUTATION_SLOT = "draft_computation";
@@ -49,6 +49,7 @@ export async function ensureComputationSheetSaved(filingId: string): Promise<{ d
   const sheet: FilingComputationResult = isFrozen
     ? (JSON.parse(filing.computationSnapshot as string) as FilingComputationResult)
     : await assembleAndComputeFiling(filing.clientId, filing.taxableYear, filing.period as Period);
+  const hasSalesRecorded = await hasSalesRecordedForPeriod(filing.clientId, filing.taxableYear, filing.period as Period);
 
   const generatedAt = new Date();
   const html = renderComputationSheetHtml({
@@ -59,6 +60,7 @@ export async function ensureComputationSheetSaved(filingId: string): Promise<{ d
     sheet,
     isFrozen,
     generatedAt,
+    hasSalesRecorded,
   });
   const buffer = Buffer.from(html, "utf-8");
   const sha256 = computeSha256(buffer);

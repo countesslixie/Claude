@@ -19,6 +19,8 @@ export interface ComputationSheetHtmlInput {
   sheet: FilingComputationResult;
   isFrozen: boolean;
   generatedAt: Date;
+  /** False when this filing's own quarter has no QuarterlySales row yet (rework brief #2 §3.1). */
+  hasSalesRecorded: boolean;
 }
 
 function escapeHtml(value: string): string {
@@ -40,9 +42,11 @@ export function renderComputationSheetHtml(input: ComputationSheetHtmlInput): st
     )
     .join("\n");
 
-  const resultLine = input.sheet.isOverpayment
-    ? `Overpayment: ${centsToPesos(input.sheet.overpaymentCents, { withSymbol: true })}`
-    : `Tax payable: ${centsToPesos(input.sheet.taxPayableCents, { withSymbol: true })}`;
+  const resultLine = !input.hasSalesRecorded
+    ? `No sales recorded for ${input.period} ${input.taxableYear} — enter the client's declared figure to compute. Figures below are incomplete until then.`
+    : input.sheet.isOverpayment
+      ? `Overpayment: ${centsToPesos(input.sheet.overpaymentCents, { withSymbol: true })}`
+      : `Tax payable: ${centsToPesos(input.sheet.taxPayableCents, { withSymbol: true })}`;
 
   return `<!DOCTYPE html>
 <html lang="en">

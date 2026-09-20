@@ -7,6 +7,8 @@ import { logActivity } from "@/lib/activityLog";
 import { deriveFilingStatus } from "@/lib/workflow/status";
 import { isElectionBlocked } from "@/lib/workflow/election";
 import { ensureComputationSheetSaved } from "@/lib/documents/computationSheet";
+import { missingRequiredSlots, checkSendClientPackageReadiness } from "@/lib/workflow/docSlots";
+import { parseDocSlots } from "@/lib/workflow/types";
 
 export type StepActionResult = { ok: boolean; error?: string };
 
@@ -28,20 +30,29 @@ async function recomputeFilingStatus(filingId: string, actorId: string): Promise
 }
 
 /**
- * §5.1/D27 — nothing in the checklist gates on documents; a step can be
- * marked DONE at any time regardless of what is or isn't attached.
- * Missing documents surface as an informational completeness note on
- * the filing instead (lib/workflow/completeness.ts), never a block here.
+ * D27 (rework brief #2 §2) — the corrected blocking rule, reconciled onto
+ * this branch's income model: the app blocks on documents it receives,
+ * never on proof that the bookkeeper did something. Steps 6, 7, 9, 10, 11
+ * (both slots), 13, 14 require their document; everything else — most
+ * importantly steps 4, 12, 16 (no slot at all) and step 3/15 (optional) —
+ * marks DONE freely regardless of what's attached.
  *
- * The one exception (§7) is the election hard-blocker: a Q1 filing for a
- * client whose election isn't confirmed ELECTED cannot be marked DONE,
- * because the computation above it may be running at the wrong tax rate
- * entirely. This is the only thing that blocks.
+ * Two things are checked ahead of the document gate, in order:
+ *   1. The election hard-blocker (unaffected by D27 — it guards a wrong
+ *      tax rate, not a missing file): a Q1 filing whose election isn't
+ *      confirmed ELECTED cannot be marked DONE on any step.
+ *   2. Step 13 -> 14 (D29): a validation email cannot arrive before the
+ *      acknowledgement it follows, so SAWT_VALIDATION stays blocked while
+ *      SAWT_ACK is unresolved. One explicit edge, not a general
+ *      "waiting blocks the next step" rule.
+ * SEND_CLIENT_PACKAGE's own dependency check (steps 7/9/10/14 must each
+ * have their document, SPEC.md 7.1) runs before its own (now nonexistent)
+ * slot would, so its specific "what's missing" message isn't masked.
  */
 export async function markStepDone(stepId: string): Promise<StepActionResult> {
   const step = await prisma.workflowStep.findUnique({
     where: { id: stepId },
-    include: { filing: true },
+    include: { documents: true, filing: { include: { workflowSteps: { include: { documents: true } } } } },
   });
   if (!step) return { ok: false, error: "Step not found." };
 
@@ -54,6 +65,44 @@ export async function markStepDone(stepId: string): Promise<StepActionResult> {
       error:
         "8% election for this taxable year is not confirmed Elected — Q1 steps cannot be marked done until this is resolved (SPEC.md 3.1: an unconfirmed election may default to graduated rates, making this filing's computation wrong).",
     };
+  }
+
+  // Step 13 -> 14 (D29) — the one genuine sequencing dependency in the
+  // workflow. Every other waiting step (notably RECEIVE_TRRC and
+  // SAWT_VALIDATION itself) blocks nothing downstream.
+  if (step.stepCode === "SAWT_VALIDATION") {
+    const ackStep = step.filing.workflowSteps.find((s) => s.stepCode === "SAWT_ACK");
+    if (ackStep && ackStep.status !== "DONE" && ackStep.status !== "NA" && ackStep.status !== "SKIPPED") {
+      return {
+        ok: false,
+        error: "Cannot complete — the acknowledgement email (step 13) hasn't been received yet.",
+      };
+    }
+  }
+
+  if (step.stepCode === "SEND_CLIENT_PACKAGE") {
+    const dependencySteps = step.filing.workflowSteps.map((s) => ({
+      stepCode: s.stepCode,
+      status: s.status,
+      requiredDocSlots: parseDocSlots(s.requiredDocSlots),
+    }));
+    const documentsByStepCode = new Map(
+      step.filing.workflowSteps.map((s) => [
+        s.stepCode,
+        s.documents.map((d) => ({ docSlotCode: d.docSlotCode, deletedAt: d.deletedAt })),
+      ]),
+    );
+    const readiness = checkSendClientPackageReadiness(dependencySteps, documentsByStepCode);
+    if (!readiness.ok) {
+      const names = readiness.missing.map((m) => `${m.stepLabel}: ${m.slotLabel}`).join("; ");
+      return { ok: false, error: `Package incomplete — missing: ${names}.` };
+    }
+  }
+
+  const slots = parseDocSlots(step.requiredDocSlots);
+  const missing = missingRequiredSlots(slots, step.documents);
+  if (missing.length > 0) {
+    return { ok: false, error: `Missing required document: ${missing.map((s) => s.label).join(", ")}.` };
   }
 
   const actorId = await getActorId();

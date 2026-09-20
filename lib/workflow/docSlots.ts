@@ -8,11 +8,19 @@ import type { DocSlotDef } from "./types";
 
 export interface AttachedDocument {
   docSlotCode: string | null;
-  deletedAt: Date | null;
+  /** Omit entirely for a list already filtered to non-deleted documents (e.g. client-side StepCardDoc). */
+  deletedAt?: Date | null;
+}
+
+/** The fields these checks actually read — narrower than DocSlotDef so a client-side slot shape (no acceptedTypes) satisfies it too. */
+export interface DocSlotLike {
+  slotCode: string;
+  label: string;
+  required: boolean;
 }
 
 /** Required slots on `slots` with no non-deleted document attached. */
-export function missingRequiredSlots(slots: DocSlotDef[], documents: AttachedDocument[]): DocSlotDef[] {
+export function missingRequiredSlots<T extends DocSlotLike>(slots: T[], documents: AttachedDocument[]): T[] {
   const filledSlotCodes = new Set(
     documents.filter((d) => !d.deletedAt && d.docSlotCode).map((d) => d.docSlotCode as string),
   );
@@ -23,8 +31,42 @@ export function missingRequiredSlots(slots: DocSlotDef[], documents: AttachedDoc
  * A step with an empty required doc slot cannot be set DONE (SPEC.md 7.2,
  * §16 item 13).
  */
-export function canCompleteStep(slots: DocSlotDef[], documents: AttachedDocument[]): boolean {
+export function canCompleteStep(slots: DocSlotLike[], documents: AttachedDocument[]): boolean {
   return missingRequiredSlots(slots, documents).length === 0;
+}
+
+/**
+ * Every slot (required or optional) with no non-deleted document attached
+ * — used by the filing page's "documents not yet attached" banner (D27's
+ * carry-over, rework brief #2 §7), which lists what a DONE/IN_PROGRESS
+ * step has moved past without saving regardless of whether that slot
+ * blocks completion.
+ */
+export function emptySlots<T extends DocSlotLike>(slots: T[], documents: AttachedDocument[]): T[] {
+  const filledSlotCodes = new Set(
+    documents.filter((d) => !d.deletedAt && d.docSlotCode).map((d) => d.docSlotCode as string),
+  );
+  return slots.filter((s) => !filledSlotCodes.has(s.slotCode));
+}
+
+/**
+ * The single reason (if any) a step's DONE control is disabled, for
+ * client-side display beside the control itself rather than only as a
+ * post-click error (rework brief #2 §2.1: "the DONE control disabled and
+ * a plain-language reason until the file is attached"). Missing documents
+ * take priority over a dependency reason when both apply, since attaching
+ * the document is the more immediately actionable of the two.
+ */
+export function stepBlockReason(
+  slots: DocSlotLike[],
+  documents: AttachedDocument[],
+  dependencyBlockedReason?: string | null,
+): string | null {
+  const missing = missingRequiredSlots(slots, documents);
+  if (missing.length > 0) {
+    return `Missing required document${missing.length > 1 ? "s" : ""}: ${missing.map((s) => s.label).join(", ")}.`;
+  }
+  return dependencyBlockedReason ?? null;
 }
 
 /**

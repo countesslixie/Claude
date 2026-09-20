@@ -2,8 +2,10 @@ import { describe, it, expect, afterAll, vi } from "vitest";
 import { rm } from "node:fs/promises";
 import path from "node:path";
 import { prisma } from "@/lib/prisma";
-import { generateFilingsForClientYear } from "@/lib/workflow/filingGeneration";
+import { generateFilingsForClientYear, recomputeRequiresSawt } from "@/lib/workflow/filingGeneration";
+import { uploadDocument } from "@/lib/actions/documents";
 import { markStepDone, markStepWaitingExternal, skipStep, logFollowUp } from "@/lib/actions/workflowSteps";
+import { parseDocSlots } from "@/lib/workflow/types";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
@@ -14,6 +16,7 @@ describe("workflow step actions", () => {
   afterAll(async () => {
     if (createdClientIds.length === 0) return;
     await prisma.document.deleteMany({ where: { clientId: { in: createdClientIds } } });
+    await prisma.form2307.deleteMany({ where: { clientId: { in: createdClientIds } } });
     await prisma.workflowStep.deleteMany({ where: { filing: { clientId: { in: createdClientIds } } } });
     await prisma.filing.deleteMany({ where: { clientId: { in: createdClientIds } } });
     await prisma.client.deleteMany({ where: { id: { in: createdClientIds } } });
@@ -46,16 +49,27 @@ describe("workflow step actions", () => {
   }
 
   /**
-   * §5.1/D27 — document gating is gone entirely: a step with an empty
-   * required doc slot can still be marked DONE. Q2 is used here (not
-   * Q1) specifically so this isn't also exercising the election
-   * hard-blocker (§7), which is a separate, deliberate exception.
+   * D27 (reconciled from laughing-darwin's commit 7bfbd5d) — the
+   * corrected blocking rule: markStepDone is blocked while a required doc
+   * slot is empty, and succeeds once filled. Q2 is used here (not Q1) so
+   * this isn't also exercising the election hard-blocker, a separate
+   * exception.
    */
-  it("markStepDone succeeds with every required doc slot still empty (§5.1 — no document gating)", async () => {
+  it("markStepDone is blocked while a required doc slot is empty, succeeds once filled", async () => {
     const { filing } = await makeClientWithQ2Filing("p3-step-done");
     const step = await prisma.workflowStep.findFirstOrThrow({
       where: { filingId: filing.id, stepCode: "SAVE_FORM_COPY" },
     });
+
+    const blocked = await markStepDone(step.id);
+    expect(blocked.ok).toBe(false);
+
+    const formData = new FormData();
+    formData.set("file", new File(["form-bytes"], "form.pdf", { type: "application/pdf" }));
+    formData.set("workflowStepId", step.id);
+    formData.set("docSlotCode", "filed_form");
+    formData.set("documentDate", "2026-08-15");
+    await uploadDocument(formData);
 
     const allowed = await markStepDone(step.id);
     expect(allowed.ok).toBe(true);
@@ -65,16 +79,15 @@ describe("workflow step actions", () => {
     expect(updated.completedAt).not.toBeNull();
   });
 
-  it("SEND_CLIENT_PACKAGE no longer blocks on steps 7/9/10/14 lacking their document (§5.1)", async () => {
+  it("SEND_CLIENT_PACKAGE names the specific missing document from steps 7/9/10/14", async () => {
     const { filing } = await makeClientWithQ2Filing("p3-step-package");
     const sendPackageStep = await prisma.workflowStep.findFirstOrThrow({
       where: { filingId: filing.id, stepCode: "SEND_CLIENT_PACKAGE" },
     });
 
     const result = await markStepDone(sendPackageStep.id);
-    expect(result.ok).toBe(true);
-    const updated = await prisma.workflowStep.findUniqueOrThrow({ where: { id: sendPackageStep.id } });
-    expect(updated.status).toBe("DONE");
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("step 7");
   });
 
   it("marking RECEIVE_TRRC WAITING_EXTERNAL flips the filing status to WAITING_BIR", async () => {
@@ -132,5 +145,134 @@ describe("workflow step actions", () => {
     });
     expect(saved).not.toBeNull();
     expect(saved?.mimeType).toBe("text/html");
+  });
+
+  describe("D27 reconciliation: the corrected blocking rule", () => {
+    it("step 1 is Record quarterly sales (no doc slot) and step 2 is Receive Form 2307 from client (optional slot)", async () => {
+      const step1 = await prisma.workflowStepTemplate.findUniqueOrThrow({ where: { stepCode: "RECORD_SALES" } });
+      expect(step1.sequence).toBe(1);
+      expect(step1.title).toBe("Record quarterly sales");
+      expect(parseDocSlots(step1.requiredDocSlots)).toEqual([]);
+
+      const step2 = await prisma.workflowStepTemplate.findUniqueOrThrow({ where: { stepCode: "RECEIVE_2307" } });
+      expect(step2.sequence).toBe(2);
+      expect(parseDocSlots(step2.requiredDocSlots).every((s) => !s.required)).toBe(true);
+    });
+
+    it("steps 4, 12, and 16 have no doc slots at all; step 15's slot is optional", async () => {
+      for (const stepCode of ["ADVISE_CLIENT", "EMAIL_DAT", "SEND_CLIENT_PACKAGE"]) {
+        const template = await prisma.workflowStepTemplate.findUniqueOrThrow({ where: { stepCode } });
+        expect(parseDocSlots(template.requiredDocSlots)).toEqual([]);
+      }
+
+      const eafs = await prisma.workflowStepTemplate.findUniqueOrThrow({ where: { stepCode: "EAFS_SUBMIT" } });
+      const eafsSlots = parseDocSlots(eafs.requiredDocSlots);
+      expect(eafsSlots.length).toBeGreaterThan(0);
+      expect(eafsSlots.every((s) => !s.required)).toBe(true);
+    });
+
+    it("the seven blocking steps (6,7,9,10,11,13,14) still require their documents", async () => {
+      const blockingSteps: Record<string, number> = {
+        SAVE_SUBMISSION_SS: 1,
+        SAVE_FORM_COPY: 1,
+        SAVE_PROOF_PAYMENT: 1,
+        RECEIVE_TRRC: 1,
+        ALPHALIST_ENTRY: 2,
+        SAWT_ACK: 1,
+        SAWT_VALIDATION: 1,
+      };
+      for (const [stepCode, expectedRequired] of Object.entries(blockingSteps)) {
+        const template = await prisma.workflowStepTemplate.findUniqueOrThrow({ where: { stepCode } });
+        const slots = parseDocSlots(template.requiredDocSlots);
+        expect(slots.filter((s) => s.required)).toHaveLength(expectedRequired);
+      }
+    });
+
+    it("non-blocking steps mark DONE freely, with or without their optional slot", async () => {
+      const { filing } = await makeClientWithQ2Filing("p3-nonblocking");
+
+      for (const stepCode of ["RECORD_SALES", "ADVISE_CLIENT", "FILE_RETURN", "MAKE_PAYMENT", "PREPARE_RETURN"]) {
+        const step = await prisma.workflowStep.findFirstOrThrow({ where: { filingId: filing.id, stepCode } });
+        const result = await markStepDone(step.id);
+        expect(result.ok).toBe(true);
+      }
+
+      // RECEIVE_2307's 2307-scan slot is optional -- a client with no
+      // certificates at all still has to be able to pass through.
+      const receive2307 = await prisma.workflowStep.findFirstOrThrow({
+        where: { filingId: filing.id, stepCode: "RECEIVE_2307" },
+      });
+      expect((await markStepDone(receive2307.id)).ok).toBe(true);
+
+      // EAFS_SUBMIT's confirmation is the one documented exception:
+      // optional, never demanded, never blocking.
+      const eafs = await prisma.workflowStep.findFirstOrThrow({
+        where: { filingId: filing.id, stepCode: "EAFS_SUBMIT" },
+      });
+      expect((await markStepDone(eafs.id)).ok).toBe(true);
+    });
+
+    it("step 13 waiting blocks step 14; step 14 unblocks once step 13 is DONE", async () => {
+      const { client, filing } = await makeClientWithQ2Filing("p3-sawt-dependency");
+      await prisma.form2307.create({
+        data: {
+          clientId: client.id,
+          taxableYear: 2026,
+          payorName: "Dependency Test Payor",
+          payorTin: "111222333",
+          periodFrom: new Date("2026-04-01T00:00:00.000Z"),
+          periodTo: new Date("2026-06-30T00:00:00.000Z"),
+          quarterCovered: 2,
+          atcCode: "WI010",
+          incomePaymentCents: 10_000_00,
+          taxWithheldCents: 500_00,
+          withholdingRateBps: 500,
+          status: "RECORDED",
+        },
+      });
+      await recomputeRequiresSawt(client.id, 2026, "Q2");
+
+      const ackStep = await prisma.workflowStep.findFirstOrThrow({
+        where: { filingId: filing.id, stepCode: "SAWT_ACK" },
+      });
+      const validationStep = await prisma.workflowStep.findFirstOrThrow({
+        where: { filingId: filing.id, stepCode: "SAWT_VALIDATION" },
+      });
+
+      // Attach validation's own document so the ONLY thing standing in the
+      // way is the step 13 -> 14 dependency itself.
+      const formData = new FormData();
+      formData.set("file", new File(["validation-bytes"], "validation.pdf", { type: "application/pdf" }));
+      formData.set("workflowStepId", validationStep.id);
+      formData.set("docSlotCode", "validation_email");
+      formData.set("documentDate", "2026-08-15");
+      await uploadDocument(formData);
+
+      await markStepWaitingExternal(ackStep.id); // step 13 waiting, not done
+      const stillBlocked = await markStepDone(validationStep.id);
+      expect(stillBlocked.ok).toBe(false);
+
+      // Step 10 (RECEIVE_TRRC) waiting blocks nothing downstream --
+      // marking it WAITING_EXTERNAL has no effect on step 14's outcome.
+      const trrcStep = await prisma.workflowStep.findFirstOrThrow({
+        where: { filingId: filing.id, stepCode: "RECEIVE_TRRC" },
+      });
+      await markStepWaitingExternal(trrcStep.id);
+      const stillBlockedAfterTrrcWaiting = await markStepDone(validationStep.id);
+      expect(stillBlockedAfterTrrcWaiting.ok).toBe(false);
+
+      // Now resolve step 13 -- step 14 should unblock.
+      const ackFormData = new FormData();
+      ackFormData.set("file", new File(["ack"], "ack.pdf", { type: "application/pdf" }));
+      ackFormData.set("workflowStepId", ackStep.id);
+      ackFormData.set("docSlotCode", "acknowledgement");
+      ackFormData.set("documentDate", "2026-08-15");
+      await uploadDocument(ackFormData);
+      const ackDone = await markStepDone(ackStep.id);
+      expect(ackDone.ok).toBe(true);
+
+      const nowAllowed = await markStepDone(validationStep.id);
+      expect(nowAllowed.ok).toBe(true);
+    });
   });
 });

@@ -1,5 +1,24 @@
 # SPEC: BIR 8% Freelancer Practice Manager (MVP)
 
+> ## ⚠ Superseded sections — added 2026-09-20, evening (updated by the branch reconciliation pass)
+>
+> This is the **original design document** and is kept as history, not rewritten. Several sections below no longer reflect the current design, and are now also fully implemented that way in code — after two rework passes were reconciled onto a single branch (`DECISIONS.md` D31), decided and built agree again everywhere in this table. `PROJECT_MASTER.md` and `DECISIONS.md` are authoritative over this file wherever they disagree.
+>
+> | Section | Superseded by | Current design | Built here |
+> |---|---|---|---|
+> | **§5 `SalesTransaction`, §7.1 step 1–2's original table** — transaction entry sourced from 2307s | **D26** — gross sales are the client's declared quarterly figure (`QuarterlySales`); a 2307 reports withholding only, nothing else | Yes | **Yes** — `SalesTransaction` deleted; `/clients/[id]/income` is the entry screen |
+> | **§9 Books of Accounts** — this system generates the Cash Receipts Journal | **D25** — no books of accounts are generated at all | Yes | **Yes** — `lib/books/` and its models are deleted |
+> | **§10's three-check reconciliation** | **D26**, as a consequence — once income is declared-only, the certificate-vs-transaction checks have nothing left to compare | Yes | **Yes** — one annual certificates-vs-declared-sales check (`lib/reconciliation.ts`) |
+> | **§7.1's per-step doc-slot table** (every slot required, including steps 4, 12, 15, 16) | **D27** — blocks only on documents received from outside; steps 4/12/16 carry no slot, step 15 is optional | Yes | **Yes** — verified against `lib/actions/workflowSteps.ts` and the seeded `WorkflowStepTemplate` |
+> | **§7.1's step order** — step 1 `RECEIVE_2307`, step 2 `RECORD_CRJ` | **D28** — step 1 is Record quarterly sales, step 2 is Receive Form 2307 | Yes | **Yes** — `RECORD_CRJ` retired, `RECORD_SALES` is step 1, linking to `/clients/[id]/income` |
+> | **§3.1's election rule** — described but, historically, never actually enforced | Not superseded — this is §3.1's own design intent, finally carried out | Yes | **Yes** — `lib/workflow/election.ts`, wired into `markStepDone` |
+>
+> **Left alone deliberately, still current:** **§4**'s date-handling rules (the `getUTC*`/`manilaCalendarDay`/millisecond-arithmetic conventions), unchanged by any rework pass and still exactly how this codebase works.
+>
+> **Not in SPEC.md at all, because it postdates this document:** the `PREPARE_RETURN` step's source-of-figure field and optional client-confirmation-message slot (D26/D27), and the step 16 client email's conditional eAFS-forwarding line (D27) — see `PROJECT_MASTER.md`.
+>
+> This is a banner, not a rewrite — SPEC.md's body text below is untouched and increasingly historical. Read `CURRENT_STATE.md` for what's actually in the tree before building against any section above.
+
 > **How to use this file with Claude Code**
 > Place this at the repo root as `SPEC.md`. Start with:
 > `claude "Read SPEC.md. Build Phase 1 only. Ask me before deviating from the data model or the tax engine rules."`

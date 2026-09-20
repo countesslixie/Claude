@@ -1,6 +1,6 @@
 import { describe, it, expect, afterAll, vi } from "vitest";
 import { prisma } from "@/lib/prisma";
-import { assembleAndComputeFiling } from "@/lib/filingComputation";
+import { assembleAndComputeFiling, hasSalesRecordedForPeriod } from "@/lib/filingComputation";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
@@ -104,5 +104,50 @@ describe("assembleAndComputeFiling — QuarterlySales cumulative sums", () => {
     const result = await assembleAndComputeFiling(client.id, 2026, "Q2");
     expect(result.cumulativeGrossSalesCents).toBe(300_000_00);
     expect(result.cumulativeNonOperatingCents).toBe(8_000_00);
+  });
+
+  /**
+   * Rework brief #2 §3.1 — "no sales recorded" must be distinct from
+   * "cumulative total happens to be zero." A filing can carry a healthy
+   * cumulative total from earlier quarters while its OWN quarter is still
+   * blank, and that must read as "not entered yet," not as a real ₱0.00.
+   */
+  describe("hasSalesRecordedForPeriod", () => {
+    it("is false when this filing's own quarter has no row, even if earlier quarters do", async () => {
+      const client = await makeClient(`qs-hasrecorded-blank-${Date.now()}`);
+      await prisma.quarterlySales.create({
+        data: { clientId: client.id, taxableYear: 2026, quarter: "Q1", grossSalesCents: 100_000_00 },
+      });
+      // Q2's own row was never entered -- cumulative through Q2 is still
+      // nonzero (100,000 from Q1), but Q2 itself has nothing recorded.
+      const cumulative = await assembleAndComputeFiling(client.id, 2026, "Q2");
+      expect(cumulative.cumulativeGrossSalesCents).toBe(100_000_00);
+      expect(await hasSalesRecordedForPeriod(client.id, 2026, "Q2")).toBe(false);
+    });
+
+    it("is true once this filing's own quarter has a row, even ₱0", async () => {
+      const client = await makeClient(`qs-hasrecorded-zero-${Date.now()}`);
+      await prisma.quarterlySales.create({
+        data: { clientId: client.id, taxableYear: 2026, quarter: "Q2", grossSalesCents: 0 },
+      });
+      expect(await hasSalesRecordedForPeriod(client.id, 2026, "Q2")).toBe(true);
+    });
+
+    it("ANNUAL's own quarter is Q4, the one no quarterly filing covers", async () => {
+      const client = await makeClient(`qs-hasrecorded-annual-${Date.now()}`);
+      await prisma.quarterlySales.createMany({
+        data: [
+          { clientId: client.id, taxableYear: 2026, quarter: "Q1", grossSalesCents: 100_000_00 },
+          { clientId: client.id, taxableYear: 2026, quarter: "Q2", grossSalesCents: 100_000_00 },
+          { clientId: client.id, taxableYear: 2026, quarter: "Q3", grossSalesCents: 100_000_00 },
+        ],
+      });
+      expect(await hasSalesRecordedForPeriod(client.id, 2026, "ANNUAL")).toBe(false);
+
+      await prisma.quarterlySales.create({
+        data: { clientId: client.id, taxableYear: 2026, quarter: "Q4", grossSalesCents: 100_000_00 },
+      });
+      expect(await hasSalesRecordedForPeriod(client.id, 2026, "ANNUAL")).toBe(true);
+    });
   });
 });

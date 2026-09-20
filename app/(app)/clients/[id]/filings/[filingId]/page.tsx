@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { assembleAndComputeFiling } from "@/lib/filingComputation";
+import { assembleAndComputeFiling, hasSalesRecordedForPeriod } from "@/lib/filingComputation";
 import {
   acknowledgeReceiptsComplete,
   setCertificateCutoffOverride,
@@ -13,6 +13,7 @@ import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { CopyTextarea } from "@/components/copy-textarea";
 import { WorkflowStepCard, type StepCardData } from "@/components/workflow-step-card";
 import { NextActionControl } from "@/components/next-action-control";
 import { ComputationSheetPanel } from "@/components/computation-sheet-panel";
@@ -22,6 +23,8 @@ import { deriveStepAging } from "@/lib/workflow/aging";
 import { countSkippedSteps, filingStatusLabel, currentStepCode } from "@/lib/workflow/status";
 import { parseDocSlots, type DocSlotDef } from "@/lib/workflow/types";
 import { computeFilingCompleteness } from "@/lib/workflow/completeness";
+import { buildClientPackageEmail } from "@/lib/workflow/clientPackageEmail";
+import { ALL_PERIODS } from "@/lib/tax/periods";
 import type { FilingComputationResult } from "@/lib/tax/types";
 
 const CUTOFF_SOURCE_LABEL: Record<string, string> = {
@@ -65,6 +68,18 @@ export default async function FilingDetailPage({
   const sheet: FilingComputationResult = isFrozen
     ? (JSON.parse(filing.computationSnapshot as string) as FilingComputationResult)
     : await assembleAndComputeFiling(filing.clientId, filing.taxableYear, filing.period);
+  const hasSalesRecorded = await hasSalesRecordedForPeriod(filing.clientId, filing.taxableYear, filing.period);
+
+  // Step 16's email draft needs to know the next filing in this taxable
+  // year, if one already exists (rework brief #2 §5) — omitted when there
+  // isn't one (e.g. ANNUAL is the last period of its taxable year).
+  const nextPeriodIndex = ALL_PERIODS.indexOf(filing.period) + 1;
+  const nextPeriod = nextPeriodIndex < ALL_PERIODS.length ? ALL_PERIODS[nextPeriodIndex] : null;
+  const nextFiling = nextPeriod
+    ? await prisma.filing.findUnique({
+        where: { clientId_taxableYear_period: { clientId: filing.clientId, taxableYear: filing.taxableYear, period: nextPeriod } },
+      })
+    : null;
 
   const now = new Date();
   const allSteps: StepCardData[] = filing.workflowSteps.map((s) => {
@@ -111,8 +126,24 @@ export default async function FilingDetailPage({
   const nextStepCode = currentStepCode(filing.workflowSteps);
   const nextStep = nextStepCode ? allSteps.find((s) => s.stepCode === nextStepCode) : undefined;
 
-  // §5.3 — informational completeness note: every non-NA/SKIPPED step's
-  // missing required slots, never a block.
+  // Step 13 -> 14 (D29) — the one genuine sequencing dependency. Computed
+  // once here so both NextActionControl (if step 14 happens to be next)
+  // and its checklist card show the same reason.
+  const ackStep = filing.workflowSteps.find((s) => s.stepCode === "SAWT_ACK");
+  const validationDependencyReason =
+    ackStep && ackStep.status !== "DONE" && ackStep.status !== "NA" && ackStep.status !== "SKIPPED"
+      ? "Waiting on step 13's acknowledgement email — a validation email can't arrive before it."
+      : null;
+  const DEPENDENCY_REASON_BY_STEP_CODE: Record<string, string | null> = {
+    SAWT_VALIDATION: validationDependencyReason,
+  };
+
+  const eafsStep = filing.workflowSteps.find((s) => s.stepCode === "EAFS_SUBMIT");
+  const eafsConfirmationSaved = (eafsStep?.documents ?? []).some((d) => d.docSlotCode === "eafs_confirmation");
+
+  // §5.3 — informational "documents not yet attached" note (D27
+  // reconciliation, rework brief #2 §7): only DONE/IN_PROGRESS steps, all
+  // their empty slots (required or optional) — see lib/workflow/completeness.ts.
   const documentsByStepCode = new Map<string, { docSlotCode: string | null; deletedAt: Date | null }[]>();
   for (const s of filing.workflowSteps) {
     documentsByStepCode.set(
@@ -133,9 +164,31 @@ export default async function FilingDetailPage({
       );
 
   const daysToAdjustedDue = Math.ceil((filing.adjustedDueDate.getTime() - now.getTime()) / MS_PER_DAY);
-  const netLabel = sheet.isOverpayment
-    ? `Overpayment ${centsToPesos(sheet.overpaymentCents, { withSymbol: true })}`
-    : `Tax payable ${centsToPesos(sheet.taxPayableCents, { withSymbol: true })}`;
+  const netLabel = !hasSalesRecorded
+    ? `No sales recorded for ${filing.period} ${filing.taxableYear}`
+    : sheet.isOverpayment
+      ? `Overpayment ${centsToPesos(sheet.overpaymentCents, { withSymbol: true })}`
+      : `Tax payable ${centsToPesos(sheet.taxPayableCents, { withSymbol: true })}`;
+
+  const incomeHref = `/clients/${id}/income?year=${filing.taxableYear}`;
+
+  const clientFirstName = filing.client.registeredName.trim().split(/\s+/)[0] ?? filing.client.registeredName;
+  const clientEmail = buildClientPackageEmail({
+    clientRegisteredName: filing.client.registeredName,
+    clientFirstName,
+    period: filing.period,
+    taxableYear: filing.taxableYear,
+    filedAt: filing.filedAt,
+    grossSalesCents: sheet.cumulativeGrossSalesCents,
+    taxDueCents: sheet.incomeTaxDueCents,
+    cwtCents: sheet.cumulativeCwtCents,
+    isOverpayment: sheet.isOverpayment,
+    finalAmountCents: sheet.isOverpayment ? sheet.overpaymentCents : sheet.taxPayableCents,
+    hasCertificates: sheet.cumulativeCwtCents > 0,
+    eafsConfirmationSaved,
+    nextPeriodLabel: nextPeriod,
+    nextPeriodDueDate: nextFiling?.adjustedDueDate ?? null,
+  });
 
   async function submitAcknowledgement(formData: FormData) {
     "use server";
@@ -165,6 +218,132 @@ export default async function FilingDetailPage({
     "use server";
     await dismissCompletenessNote(filingId);
   }
+
+  // D30 — a document belongs to its step, not to the page. These three
+  // used to render as page-level panels at the bottom, detached from the
+  // steps they belong to ("Not sure what the bottom boxes are for").
+  const recordSalesExtra = (
+    <Link href={incomeHref}>
+      <Button type="button" size="sm" variant="secondary">
+        Go to income entry
+      </Button>
+    </Link>
+  );
+
+  const certificateCutoffExtra = (
+    <div className="rounded border border-slate-100 p-2">
+      <p className="text-xs font-medium text-slate-600">Certificate cutoff</p>
+      <p className="mt-1 text-xs text-slate-600">
+        Certificates received on or before{" "}
+        <span className="font-medium">
+          {sheet.certificateCutoffDate ? formatManilaDate(sheet.certificateCutoffDate) : "—"}
+        </span>{" "}
+        count toward this quarter&apos;s credit. Ones arriving later go to the next quarter instead — amended
+        returns aren&apos;t filed when a certificate shows up late.
+        {sheet.certificateCutoffSource && ` (${CUTOFF_SOURCE_LABEL[sheet.certificateCutoffSource]})`}
+      </p>
+      <form action={submitCutoffOverride} className="mt-2 flex items-end gap-2">
+        <div>
+          <label className="text-xs font-medium uppercase tracking-wide text-slate-400" htmlFor="cutoffOverride">
+            Manual override
+          </label>
+          <Input
+            id="cutoffOverride"
+            name="cutoffOverride"
+            type="date"
+            className="h-8 text-xs"
+            defaultValue={toManilaDateInputValue(filing.certificateCutoffOverride)}
+          />
+        </div>
+        <Button type="submit" size="sm" variant="secondary">
+          Set override
+        </Button>
+      </form>
+      {filing.certificateCutoffOverride && (
+        <form action={clearCutoffOverride} className="mt-2">
+          <Button type="submit" size="sm" variant="secondary">
+            Clear override
+          </Button>
+        </form>
+      )}
+    </div>
+  );
+
+  const clientConfirmationExtra = (
+    <div className="rounded border border-slate-100 p-2">
+      <p className="text-xs font-medium text-slate-600">Client confirmation</p>
+      {filing.receiptsAcknowledgedAt ? (
+        <div className="mt-1">
+          <p className="text-xs text-slate-600">Confirmed {formatManilaDate(filing.receiptsAcknowledgedAt)}.</p>
+          {filing.receiptsAcknowledgedSourceNote && (
+            <p className="mt-0.5 text-xs text-slate-600">Source: {filing.receiptsAcknowledgedSourceNote}</p>
+          )}
+          {filing.receiptsAcknowledgedNote && (
+            <p className="mt-0.5 text-xs text-slate-500">{filing.receiptsAcknowledgedNote}</p>
+          )}
+        </div>
+      ) : (
+        <form action={submitAcknowledgement} className="mt-1 flex flex-col gap-2">
+          <p className="text-xs text-slate-600">
+            Have you confirmed with the client that all receipts for this quarter are accounted for, including
+            any without a 2307?
+          </p>
+          <div>
+            <label className="text-xs font-medium uppercase tracking-wide text-slate-400" htmlFor="sourceNote">
+              Where the declared sales figure came from
+            </label>
+            <Input id="sourceNote" name="sourceNote" className="h-8 text-xs" placeholder="e.g. client's own summary, texted Sept 14" />
+          </div>
+          <Textarea name="note" placeholder="Optional note" rows={2} className="text-xs" />
+          <div>
+            <Button type="submit" size="sm">
+              Confirm
+            </Button>
+          </div>
+        </form>
+      )}
+    </div>
+  );
+
+  const prepareReturnExtra = (
+    <div className="flex flex-col gap-2">
+      <ComputationSheetPanel
+        breakdown={sheet.breakdown}
+        isOverpayment={sheet.isOverpayment}
+        overpaymentCents={sheet.overpaymentCents}
+        taxPayableCents={sheet.taxPayableCents}
+        formType={sheet.formType}
+        isFrozen={isFrozen}
+        hasSalesRecorded={hasSalesRecorded}
+        period={filing.period}
+        taxableYear={filing.taxableYear}
+        incomeHref={incomeHref}
+      />
+      {clientConfirmationExtra}
+    </div>
+  );
+
+  const sendClientPackageExtra = (
+    <div className="flex flex-col gap-3">
+      <a href={`/api/filings/${filing.id}/package`}>
+        <Button type="button" size="sm" variant="secondary">
+          Download package
+        </Button>
+      </a>
+      <div>
+        <p className="mb-1 text-xs font-medium text-slate-600">Draft email to client</p>
+        <p className="mb-1 text-xs text-slate-400">Subject: {clientEmail.subject}</p>
+        <CopyTextarea defaultValue={clientEmail.body} />
+      </div>
+    </div>
+  );
+
+  const EXTRA_BY_STEP_CODE: Record<string, React.ReactNode> = {
+    RECORD_SALES: recordSalesExtra,
+    RECEIVE_2307: certificateCutoffExtra,
+    PREPARE_RETURN: prepareReturnExtra,
+    SEND_CLIENT_PACKAGE: sendClientPackageExtra,
+  };
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -214,7 +393,13 @@ export default async function FilingDetailPage({
               <p className="text-sm font-medium text-slate-900">
                 Next: Step {nextStep.sequence} of {allSteps.length} — {nextStep.title}
               </p>
-              <NextActionControl stepId={nextStep.id} status={nextStep.status} />
+              <NextActionControl
+                stepId={nextStep.id}
+                status={nextStep.status}
+                requiredDocSlots={nextStep.requiredDocSlots}
+                documents={nextStep.documents}
+                dependencyBlockedReason={DEPENDENCY_REASON_BY_STEP_CODE[nextStep.stepCode] ?? null}
+              />
             </div>
           ) : (
             <p className="text-sm font-medium text-emerald-700">
@@ -332,108 +517,16 @@ export default async function FilingDetailPage({
         <CardBody>
           <div className="flex flex-col gap-2">
             {visibleSteps.map((step) => (
-              <WorkflowStepCard key={step.id} step={step} />
+              <WorkflowStepCard
+                key={step.id}
+                step={step}
+                extra={EXTRA_BY_STEP_CODE[step.stepCode]}
+                dependencyBlockedReason={DEPENDENCY_REASON_BY_STEP_CODE[step.stepCode] ?? null}
+              />
             ))}
           </div>
         </CardBody>
       </Card>
-
-      <Card className="mb-3">
-        <CardHeader>
-          <h2 className="text-sm font-semibold text-slate-900">Receipts confirmation (PREPARE_RETURN)</h2>
-        </CardHeader>
-        <CardBody>
-          {filing.receiptsAcknowledgedAt ? (
-            <div>
-              <p className="text-sm text-slate-700">
-                Confirmed {formatManilaDate(filing.receiptsAcknowledgedAt)}.
-              </p>
-              {filing.receiptsAcknowledgedSourceNote && (
-                <p className="mt-1 text-sm text-slate-600">
-                  Source: {filing.receiptsAcknowledgedSourceNote}
-                </p>
-              )}
-              {filing.receiptsAcknowledgedNote && (
-                <p className="mt-1 text-sm text-slate-500">{filing.receiptsAcknowledgedNote}</p>
-              )}
-            </div>
-          ) : (
-            <form action={submitAcknowledgement} className="flex flex-col gap-3">
-              <p className="text-sm text-slate-700">
-                Have you confirmed with the client that all receipts for this quarter are accounted
-                for, including any without a 2307?
-              </p>
-              <div>
-                <label className="text-xs font-medium uppercase tracking-wide text-slate-400" htmlFor="sourceNote">
-                  Where the declared sales figure came from
-                </label>
-                <Input id="sourceNote" name="sourceNote" placeholder="e.g. client's own summary, texted Sept 14" />
-              </div>
-              <Textarea name="note" placeholder="Optional note" rows={2} />
-              <div>
-                <Button type="submit" size="sm">
-                  Confirm
-                </Button>
-              </div>
-            </form>
-          )}
-        </CardBody>
-      </Card>
-
-      <Card className="mb-3">
-        <CardHeader>
-          <h2 className="text-sm font-semibold text-slate-900">Certificate cutoff</h2>
-        </CardHeader>
-        <CardBody>
-          <p className="text-sm text-slate-700">
-            Certificates received on or before{" "}
-            <span className="font-medium">
-              {sheet.certificateCutoffDate ? formatManilaDate(sheet.certificateCutoffDate) : "—"}
-            </span>{" "}
-            are claimed on this filing ({sheet.certificateCutoffSource
-              ? CUTOFF_SOURCE_LABEL[sheet.certificateCutoffSource]
-              : "unknown — frozen before this field existed"}
-            ).
-          </p>
-          <p className="mt-1 text-xs text-slate-400">
-            A certificate is claimed in the period whose cutoff it falls within — the bookkeeper does not
-            file amended returns when one arrives late (SPEC.md 3.5).
-          </p>
-          <form action={submitCutoffOverride} className="mt-3 flex items-end gap-2">
-            <div>
-              <label className="text-xs font-medium uppercase tracking-wide text-slate-400" htmlFor="cutoffOverride">
-                Manual override
-              </label>
-              <Input
-                id="cutoffOverride"
-                name="cutoffOverride"
-                type="date"
-                defaultValue={toManilaDateInputValue(filing.certificateCutoffOverride)}
-              />
-            </div>
-            <Button type="submit" size="sm" variant="secondary">
-              Set override
-            </Button>
-          </form>
-          {filing.certificateCutoffOverride && (
-            <form action={clearCutoffOverride} className="mt-2">
-              <Button type="submit" size="sm" variant="secondary">
-                Clear override
-              </Button>
-            </form>
-          )}
-        </CardBody>
-      </Card>
-
-      {/* §4.1/4.4 — derived output, collapsed below the checklist by default. */}
-      <ComputationSheetPanel
-        breakdown={sheet.breakdown}
-        isOverpayment={sheet.isOverpayment}
-        overpaymentCents={sheet.overpaymentCents}
-        taxPayableCents={sheet.taxPayableCents}
-        formType={sheet.formType}
-        isFrozen={isFrozen}
-      />
     </div>
   );
 }
