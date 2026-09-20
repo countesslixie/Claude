@@ -5,7 +5,9 @@ import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { StatusBadge, type StatusTone } from "@/components/status-badge";
 import { formatManilaDate } from "@/lib/dates";
-import { currentStepCode, countSkippedSteps, filingStatusLabel } from "@/lib/workflow/status";
+import { countSkippedSteps, filingStatusLabel } from "@/lib/workflow/status";
+import { WORKFLOW_GROUPS, currentGroupCode, summarizeGroup } from "@/lib/workflow/groups";
+import { deriveStepAging } from "@/lib/workflow/aging";
 import type { FilingStatus, WorkflowStepStatus } from "@/lib/workflow/types";
 
 const FILING_STATUS_TONE: Record<string, StatusTone> = {
@@ -19,10 +21,12 @@ const FILING_STATUS_TONE: Record<string, StatusTone> = {
 };
 
 /**
- * Filing cycle board (SPEC.md §11.2): kanban, columns = the 16 steps,
- * cards = client-period. "Which process am I in" at a glance. Filters
- * persist via the URL (client/year/status) — no client-side state, so a
- * bookmarked/shared link reproduces the same view (SPEC.md §11 design note).
+ * Filing cycle board (brief #4a, superseding SPEC.md §11.2's flat
+ * sixteen-column design): kanban, columns = the five groups, cards =
+ * client-period. Sixteen columns couldn't be read at a glance; five can.
+ * "Which process am I in" at a glance. Filters persist via the URL
+ * (client/year/status) — no client-side state, so a bookmarked/shared
+ * link reproduces the same view (SPEC.md §11 design note).
  */
 export default async function FilingsBoardPage({
   searchParams,
@@ -31,10 +35,7 @@ export default async function FilingsBoardPage({
 }) {
   const params = await searchParams;
 
-  const [templates, clients] = await Promise.all([
-    prisma.workflowStepTemplate.findMany({ where: { isActive: true }, orderBy: { sequence: "asc" } }),
-    prisma.client.findMany({ where: { isActive: true }, orderBy: { registeredName: "asc" } }),
-  ]);
+  const clients = await prisma.client.findMany({ where: { isActive: true }, orderBy: { registeredName: "asc" } });
 
   const filings = await prisma.filing.findMany({
     where: {
@@ -43,16 +44,60 @@ export default async function FilingsBoardPage({
       ...(params.taxableYear ? { taxableYear: Number(params.taxableYear) } : {}),
       ...(params.status ? { status: params.status as never } : {}),
     },
-    include: { client: true, workflowSteps: { select: { sequence: true, status: true, stepCode: true } } },
+    include: {
+      client: true,
+      workflowSteps: {
+        select: {
+          sequence: true,
+          status: true,
+          stepCode: true,
+          waitingOnLabel: true,
+          waitingSince: true,
+          expectedResponseDays: true,
+        },
+      },
+    },
     orderBy: [{ adjustedDueDate: "asc" }],
   });
 
-  const columns = templates.map((t) => ({
-    stepCode: t.stepCode,
-    title: t.title,
-    filings: filings.filter((f) => currentStepCode(f.workflowSteps) === t.stepCode),
+  // §2, §5 — a card sits in its earliest incomplete GROUP (group order,
+  // not raw step sequence — group 2/File isn't contiguous), carrying that
+  // group's waiting state so a filing awaiting only the TRRC reads as
+  // "File — waiting on BIR, 12d" rather than looking unfiled.
+  const now = new Date();
+  const cards = filings.map((f) => {
+    const groupCode = currentGroupCode(f.workflowSteps);
+    const group = groupCode ? WORKFLOW_GROUPS.find((g) => g.code === groupCode) : undefined;
+    const outstandingLabel = group
+      ? summarizeGroup(
+          group,
+          f.workflowSteps.map((s) => ({
+            stepCode: s.stepCode,
+            status: s.status,
+            waitingOnLabel: s.waitingOnLabel,
+            agingDaysWaiting:
+              s.status === "WAITING_EXTERNAL"
+                ? deriveStepAging({
+                    stepCode: s.stepCode,
+                    status: s.status,
+                    waitingSince: s.waitingSince,
+                    expectedResponseDays: s.expectedResponseDays,
+                    certificatesExpectedBy: f.certificatesExpectedBy,
+                    now,
+                  })?.daysWaiting ?? null
+                : null,
+          })),
+        ).outstandingLabel
+      : null;
+    return { ...f, groupCode, outstandingLabel };
+  });
+
+  const columns = WORKFLOW_GROUPS.map((g) => ({
+    code: g.code,
+    title: g.name,
+    filings: cards.filter((c) => c.groupCode === g.code),
   }));
-  const completeLane = filings.filter((f) => currentStepCode(f.workflowSteps) === null);
+  const completeLane = cards.filter((c) => c.groupCode === null);
 
   const taxableYears = Array.from(new Set(filings.map((f) => f.taxableYear))).sort((a, b) => b - a);
 
@@ -123,7 +168,7 @@ export default async function FilingsBoardPage({
       ) : (
         <div className="flex gap-3 overflow-x-auto pb-4">
           {columns.map((col) => (
-            <BoardColumn key={col.stepCode} title={col.title} filings={col.filings} />
+            <BoardColumn key={col.code} title={col.title} filings={col.filings} />
           ))}
           <BoardColumn title="Complete" filings={completeLane} />
         </div>
@@ -146,6 +191,7 @@ function BoardColumn({
     adjustedDueDate: Date;
     client: { registeredName: string };
     workflowSteps: Array<{ status: WorkflowStepStatus }>;
+    outstandingLabel: string | null;
   }>;
 }) {
   return (
@@ -168,6 +214,7 @@ function BoardColumn({
                 </StatusBadge>
                 <span className="text-xs text-slate-400">{formatManilaDate(f.adjustedDueDate)}</span>
               </div>
+              {f.outstandingLabel && <p className="mt-1 text-xs text-amber-700">{f.outstandingLabel}</p>}
             </div>
           </Link>
         ))}

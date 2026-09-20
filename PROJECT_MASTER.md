@@ -1,7 +1,7 @@
 # PROJECT_MASTER.md
 
 *Permanent project memory. Update only when something long-lived genuinely changes.*
-*Last reconciled: 2026-09-20, evening — branch reconciliation pass (brief #3).*
+*Last reconciled: 2026-09-20, evening — grouping pass (brief #4a), on top of the branch reconciliation pass (brief #3).*
 
 > Build status lives in CURRENT_STATE.md. This file is the intended application and the rules that govern it.
 
@@ -97,6 +97,24 @@ This is deliberately different in kind from the actions-she-performs slots D27 r
 - Sixteen steps. Step 1 **Record quarterly sales** (links to `/clients/[id]/income`), step 2 **Receive Form 2307 from client** (D28). Steps 11–14 (SAWT) conditional on `requiresSawt`.
 - Filing status is **derived** from its steps, never hand-set: all `DONE`/`NA`/`SKIPPED` → `COMPLETE`.
 - **`SKIPPED` requires a written reason** and stays visibly distinct from `NA`.
+
+### Workflow groups (D32)
+
+The sixteen steps are wrapped in **five groups** — Prepare, File, Pay, SAWT, Close — each with its own "Mark done" that resolves every unresolved step inside it at once. This changes nothing about what a step requires; it only changes where "done" is clicked and how the board's columns are laid out.
+
+| Group | Steps |
+|---|---|
+| 1 Prepare | 1 Record quarterly sales · 2 Receive Form 2307 · 3 Prepare computation · 4 Advise client |
+| 2 File | 5 File return · 6 Save submission screenshot · 7 Save filed form · 10 Receive TRRC |
+| 3 Pay | 8 Make payment · 9 Save proof of payment |
+| 4 SAWT | 11 Alphalist entry · 12 Email DAT · 13 Acknowledgement · 14 Validation |
+| 5 Close | 15 eAFS · 16 Email package to client |
+
+**Step numbers are not renumbered to make groups contiguous.** Group 2 (File) is deliberately not contiguous — the TRRC (step 10) sits with File rather than with Pay (group 3, steps 8–9) between them, because eBIRForms' TRRC confirms the *filing*, not the payment (`WorkflowStep.category` for step 10 has always been `FILING`). Step numbers record when things happen; groups record what they belong to. A filing can therefore sit at "File," waiting only on the TRRC, after "Pay" is already fully done — this is normal, not out-of-order, and raises no warning. The board's card for such a filing sits in its earliest incomplete *group* (group order, not step sequence) and carries that group's waiting state (e.g. "File — waiting on BIR, 12d") so it doesn't read as unfiled.
+
+**Blocking surfaces at group level, but the rule itself (D27) is unchanged.** A group's "Mark done" is disabled with a plain-language reason while any step inside it is missing a required document — the same seven blocking steps as before, reported once per group. Prepare and Close block on nothing today (Prepare gains a block once step 2's 2307 scan becomes required, a later brief). The election hard-blocker and the step 13→14 dependency (D29) are unaffected and still apply; expanding a group exposes every per-step control (attach, skip with reason, mark waiting) exactly as before grouping existed.
+
+Group membership is a fixed lookup table (`lib/workflow/groups.ts`), not the `category` field repurposed — `category` alone would put step 4 (`ADVISE_CLIENT`) and step 16 (`SEND_CLIENT_PACKAGE`), both `CLIENT_COMM`, in the same group despite belonging to different points in the cycle.
 
 ### Blocking — the rule (D27)
 

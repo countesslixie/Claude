@@ -97,6 +97,7 @@ export function currentStepCode(steps: { sequence: number; status: WorkflowStepS
   return active ? active.stepCode : null;
 }
 
-function isResolved(status: WorkflowStepStatus): boolean {
+/** DONE/NA/SKIPPED — a step that needs nothing further from anyone (SPEC.md 7.2). Shared with lib/workflow/groups.ts. */
+export function isResolved(status: WorkflowStepStatus): boolean {
   return status === "DONE" || status === "NA" || status === "SKIPPED";
 }

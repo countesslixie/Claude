@@ -15,13 +15,15 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { CopyTextarea } from "@/components/copy-textarea";
 import { WorkflowStepCard, type StepCardData } from "@/components/workflow-step-card";
+import { WorkflowGroupCard } from "@/components/workflow-group-card";
 import { NextActionControl } from "@/components/next-action-control";
 import { ComputationSheetPanel } from "@/components/computation-sheet-panel";
 import { centsToPesos } from "@/lib/money";
 import { formatManilaDate, toManilaDateInputValue } from "@/lib/dates";
 import { deriveStepAging } from "@/lib/workflow/aging";
 import { countSkippedSteps, filingStatusLabel, currentStepCode } from "@/lib/workflow/status";
-import { parseDocSlots, type DocSlotDef } from "@/lib/workflow/types";
+import { WORKFLOW_GROUPS, currentGroupCode, summarizeGroup, type GroupStepInput } from "@/lib/workflow/groups";
+import { parseDocSlots, type DocSlotDef, type WorkflowStepStatus } from "@/lib/workflow/types";
 import { computeFilingCompleteness } from "@/lib/workflow/completeness";
 import { buildClientPackageEmail } from "@/lib/workflow/clientPackageEmail";
 import { ALL_PERIODS } from "@/lib/tax/periods";
@@ -119,6 +121,28 @@ export default async function FilingDetailPage({
   const skippedCount = countSkippedSteps(filing.workflowSteps);
   const hiddenCount = allSteps.filter((s) => s.status === "NA" || s.status === "SKIPPED").length;
   const visibleSteps = showSkipped ? allSteps : allSteps.filter((s) => s.status !== "NA" && s.status !== "SKIPPED");
+
+  // Brief #4a — the sixteen steps wrapped in five groups (lib/workflow/groups.ts).
+  // Nothing about what a step does or requires changes here; this only
+  // rolls the same per-step data up into a group-level summary for the
+  // collapsed card header (progress, what's outstanding, whether "Mark
+  // done" is disabled).
+  const groupStepInputs: GroupStepInput[] = allSteps.map((s) => ({
+    stepCode: s.stepCode,
+    status: s.status as WorkflowStepStatus,
+    waitingOnLabel: s.waitingOnLabel,
+    agingDaysWaiting: s.agingDaysWaiting,
+    requiredDocSlots: s.requiredDocSlots,
+    documents: s.documents.map((d) => ({ docSlotCode: d.docSlotCode })),
+  }));
+  const activeGroupCode = currentGroupCode(
+    filing.workflowSteps.map((s) => ({ stepCode: s.stepCode, status: s.status })),
+  );
+  const groupSections = WORKFLOW_GROUPS.map((def) => ({
+    def,
+    summary: summarizeGroup(def, groupStepInputs),
+    steps: visibleSteps.filter((s) => def.stepCodes.includes(s.stepCode)),
+  }));
 
   // §4.2 — the page's primary job: what to do next, in words, with the
   // action adjacent. currentStepCode is the same "earliest unresolved
@@ -489,7 +513,9 @@ export default async function FilingDetailPage({
         </Card>
       )}
 
-      {/* §4.2 — the page's main content: all 16 steps, visible without scrolling at least in part. */}
+      {/* Brief #4a — the sixteen steps wrapped in five groups: one "Mark
+          done" per group instead of one per step. Opening a group still
+          exposes every per-step control that existed before grouping. */}
       <Card id="checklist" className="mb-3">
         <CardHeader className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-slate-900">Workflow ({visibleSteps.length}/{allSteps.length} steps shown)</h2>
@@ -516,13 +542,28 @@ export default async function FilingDetailPage({
         </CardHeader>
         <CardBody>
           <div className="flex flex-col gap-2">
-            {visibleSteps.map((step) => (
-              <WorkflowStepCard
-                key={step.id}
-                step={step}
-                extra={EXTRA_BY_STEP_CODE[step.stepCode]}
-                dependencyBlockedReason={DEPENDENCY_REASON_BY_STEP_CODE[step.stepCode] ?? null}
-              />
+            {groupSections.map(({ def, summary, steps }) => (
+              <WorkflowGroupCard
+                key={def.code}
+                filingId={filing.id}
+                groupCode={def.code}
+                name={def.name}
+                doneCount={summary.doneCount}
+                totalCount={summary.totalCount}
+                isComplete={summary.isComplete}
+                blockReason={summary.blockReason}
+                outstandingLabel={summary.outstandingLabel}
+                defaultOpen={def.code === activeGroupCode}
+              >
+                {steps.map((step) => (
+                  <WorkflowStepCard
+                    key={step.id}
+                    step={step}
+                    extra={EXTRA_BY_STEP_CODE[step.stepCode]}
+                    dependencyBlockedReason={DEPENDENCY_REASON_BY_STEP_CODE[step.stepCode] ?? null}
+                  />
+                ))}
+              </WorkflowGroupCard>
             ))}
           </div>
         </CardBody>

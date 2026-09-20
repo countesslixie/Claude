@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 *Instructions for Claude Code working on this repository.*
-*Last reconciled: 2026-09-20, evening — branch reconciliation pass (brief #3), against the tree.*
+*Last reconciled: 2026-09-20, evening — grouping pass (brief #4a), against the tree.*
 
 ---
 
@@ -45,7 +45,8 @@ Next.js 15 App Router · TypeScript strict · Prisma + SQLite (`data/app.db`) ·
 /lib/tax/                     computation engine — PURE, zero I/O
 /lib/workflow/                step template, state machine, due dates,
                                aging, docSlots.ts, completeness.ts,
-                               election.ts, clientPackageEmail.ts
+                               election.ts, clientPackageEmail.ts,
+                               groups.ts (the five-group rollup, D32)
 /lib/documents/                storage, naming, hashing, computationSheet.ts
                                (ensureComputationSheetSaved), computationSheetHtml.ts
 /lib/reconciliation.ts         the single annual certificates-vs-declared-sales check
@@ -53,7 +54,8 @@ Next.js 15 App Router · TypeScript strict · Prisma + SQLite (`data/app.db`) ·
 /lib/dates.ts                  manilaCalendarDay(), formatManilaDate()
 /components/                   next-action-control.tsx, computation-sheet-panel.tsx,
                                quarterly-sales-card.tsx, workflow-step-card.tsx,
-                               copy-textarea.tsx, ui/ (plain Tailwind primitives)
+                               workflow-group-card.tsx, copy-textarea.tsx,
+                               ui/ (plain Tailwind primitives)
 /prisma/                       schema, migrations, seed
 /storage/                      gitignored document vault
 /data/                         gitignored SQLite db
@@ -102,6 +104,18 @@ A missing quarter is zero, not an error — but a filing whose OWN quarter has n
 **A document belongs to its step, not to the page.** Anything belonging to a step renders inside that step's card (`components/workflow-step-card.tsx`), not as a page-level panel. **Never expose a raw step code** (`PREPARE_RETURN`) in a user-facing label.
 
 **The filing page combines two fixes for the same complaint** ("output shown ahead of the work it belongs to"): a next-action line and compact summary strip at the top (`components/next-action-control.tsx`) answer "what do I do now" without scrolling, and the computation sheet / certificate cutoff / client confirmation panels live inside their own step cards rather than as page-level panels at the bottom. Keep both — they answer different complaints from different test drives, not the same one twice.
+
+## The five groups (D32) — read this before touching the checklist or the board
+
+The sixteen steps are wrapped in five groups: **Prepare** (1–4), **File** (5, 6, 7, 10), **Pay** (8, 9), **SAWT** (11–14), **Close** (15, 16) — `lib/workflow/groups.ts`. One "Mark done" per group marks every unresolved step in it at once. This is grouping only: it changes nothing about what any step requires, blocks, or does. **The blocking rule above is unaffected** — it just gets reported once per group instead of once per step's button.
+
+**Group 2 (File) is deliberately not contiguous, and that is correct — do not "fix" it.** The TRRC (step 10) sits with File, not with Pay (group 3, steps 8–9) between them, because the TRRC is eBIRForms' confirmation that the return was *received* — it confirms the filing, not the payment (`WorkflowStep.category` for step 10 has always been `FILING`). **Step numbers record when things happen; groups record what they belong to.** Do not renumber the TRRC to make the groups contiguous — that would place it ahead of payment in the list and imply she waits for BIR's confirmation before paying, which she does not.
+
+**Group 3 (Pay) finishing before group 2 (File) is normal, not out-of-order.** She files, saves her evidence, pays, saves the proof — the TRRC lands days later. This must never raise a warning. On the board, a card sits in its earliest incomplete group *by group order*, not by raw step sequence, and carries that group's waiting state (e.g. "File — waiting on BIR, 12d") rather than reading as unfiled.
+
+**Group membership is its own fixed lookup table, not `category` repurposed.** `category` matches groups 2/3/4 (`FILING`/`PAYMENT`/`SAWT`) exactly, but steps 4 and 16 are both `category: CLIENT_COMM` while belonging to different groups (Prepare and Close respectively) — reusing `category` outright would have merged them.
+
+**Held for a later brief, once she's walked this structure — do not build yet:** step 2's 2307 scan becoming required and blocking; removing Mark Waiting from Prepare in favor of a derived client-data waiting state; a derived group-level waiting state generally (today, waiting is still per-step, surfaced only in the collapsed group's summary, unchanged from before grouping). See `CURRENT_STATE.md` for the fuller list.
 
 ## Coding conventions
 
@@ -178,8 +192,9 @@ Will hold real TINs and income data under the Data Privacy Act from November 202
 
 See `CURRENT_STATE.md`. In short:
 
-1. Act on whatever the ongoing test drive finds, step by step.
-2. Run `scripts/verify-real.ts` on a machine where the fixture exists; it has gone unexercised on more than one pass now.
-3. Build the **document archive browse view** — client → year, with a whole-year zip. It serves what she named as the most important thing the app does, and it is the only genuinely new build left in the backlog.
-4. **Before the live Q3 cycle:** a backup for `data/app.db`, and BIR verification of the seeded ATC codes.
-5. The live 1701Q is due **November 16, 2026**. Excel remains the master until she decides otherwise.
+1. Let her walk the five-group structure (brief #4a) before building the per-group refinements listed under "The five groups" above.
+2. Act on whatever the ongoing test drive finds, step by step.
+3. Run `scripts/verify-real.ts` on a machine where the fixture exists; it has gone unexercised on more than one pass now.
+4. Build the **document archive browse view** — client → year, with a whole-year zip. It serves what she named as the most important thing the app does, and it is the only genuinely new build left in the backlog.
+5. **Before the live Q3 cycle:** a backup for `data/app.db`, and BIR verification of the seeded ATC codes.
+6. The live 1701Q is due **November 16, 2026**. Excel remains the master until she decides otherwise.

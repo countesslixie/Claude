@@ -1,7 +1,7 @@
 # CURRENT_STATE.md
 
 *Living snapshot. Replace stale content rather than appending.*
-*Last reconciled: 2026-09-20, evening — branch reconciliation pass (brief #3), against the tree.*
+*Last reconciled: 2026-09-20, evening — grouping pass (brief #4a), against the tree.*
 
 ---
 
@@ -42,7 +42,7 @@ All four share one key: client × taxable year × period.
 
 ## Built and working
 
-**Phases 1–3** — Prisma schema and migrations, client CRUD, `ClientTaxYear`, `TaxRuleSet` and `Holiday` settings, single-password auth. Tax engine (`/lib/tax/`, pure, unaffected by either rework). Form 2307 register. Workflow engine, 16-step board, document vault with SHA-256 and enforced naming. Dashboard with six panels. Per-step due dates. Filing package zip.
+**Phases 1–3** — Prisma schema and migrations, client CRUD, `ClientTaxYear`, `TaxRuleSet` and `Holiday` settings, single-password auth. Tax engine (`/lib/tax/`, pure, unaffected by either rework). Form 2307 register. Workflow engine, document vault with SHA-256 and enforced naming. Dashboard with six panels. Per-step due dates. Filing package zip. (The board is now five columns, not sixteen — see brief #4a below.)
 
 **Declared-sales income model (D25/D26)** — `QuarterlySales` model, `Q1`–`Q4` as a distinct type from `Filing.period`. `SalesTransaction`, the CRJ generator (`lib/books/`), `ChartOfAccounts`/`JournalEntry`, `ImportBatch`/`ImportMappingProfile` all deleted — confirmed absent from the schema and the tree. Form2307 reduced to a credit record. Income entry UI at `/clients/[id]/income`, four cards (Q1–Q4) per taxable year. The reconciliation is a single annual certificates-vs-declared-sales check (`lib/reconciliation.ts`).
 
@@ -62,6 +62,15 @@ All four share one key: client × taxable year × period.
 **Kept from `peaceful-goldberg`, unaffected by the reconciliation:** the next-action line and summary strip at the top of the filing page (`components/next-action-control.tsx`), now also disabled with the same blocking reason as the checklist card below it rather than only failing after a click.
 
 **Validated against reality** — the claim, carried from `peaceful-goldberg`, that a real client's actual Q1 2026 figures reproduce through `computeFiling` to the centavo (gross ₱332,933.90, tax due ₱6,634.71, CWT ₱16,646.70, overpayment ₱10,011.99). **Not independently re-confirmed this pass** — see "Known limitations."
+
+**The sixteen steps wrapped in five groups (brief #4a, D32)** — Prepare, File, Pay, SAWT, Close (`lib/workflow/groups.ts`). Deliberately narrow: nothing about what a step requires, blocks, or does changed.
+- One "Mark done" per group (`lib/actions/workflowSteps.ts`'s `markGroupDone`), marking every unresolved step in the group at once by calling the existing per-step `markStepDone` in ascending sequence — so the election hard-blocker, the step 13→14 dependency, and `SEND_CLIENT_PACKAGE`'s package-readiness check all still apply exactly as before, unchanged and un-duplicated.
+- Groups 2/3/4 (File/Pay/SAWT) match the `FILING`/`PAYMENT`/`SAWT` categories exactly; steps 4 and 16 (both `CLIENT_COMM`) split across Prepare and Close respectively, so group membership is its own lookup table, not `category` repurposed.
+- Group 2 (File: steps 5, 6, 7, 10) is deliberately not contiguous — the TRRC sits with File, not Pay (group 3, steps 8–9), because it's eBIRForms' confirmation of the filing, not of the payment. Verified live: a filing that's filed and paid but still waiting on the TRRC sits on the board under "File — waiting on BIR, 12d," not looking unfiled, while Pay shows fully Done — completing Pay first raised no warning anywhere.
+- Filing detail page (`app/(app)/clients/[id]/filings/[filingId]/page.tsx`): the flat 16-step list is now five collapsible `WorkflowGroupCard`s, each showing progress, what's outstanding, and a disabled-with-reason "Mark done" while a required document is missing. The group containing the filing's next step opens by default; expanding any group exposes every per-step control (attach, skip with reason, mark waiting, start) unchanged. Steps within a group render in numeric order (confirmed: TRRC renders last inside File).
+- Board (`app/(app)/filings/page.tsx`): five columns, not sixteen. A card sits in its earliest incomplete group (group order, not step sequence) and carries that group's waiting label.
+- 16 new tests (`tests/workflow/groups.test.ts`, plus additions to `tests/actions/workflowSteps.test.ts`); full suite, typecheck, and build all verified — see "How to test" in CLAUDE.md for the pre-existing `verify-real.ts` gap, unrelated to this pass.
+- **Pending a further brief, not built here:** the bookkeeper's own refinements to what happens *inside* each group (step 2's 2307 scan becoming required, removing Mark Waiting from Prepare in favor of a derived client-data waiting state, the income screen rework, and the rest of CLAUDE.md's "held for the next brief" list) — this pass was grouping only, deliberately, so those refinements land against a structure she's actually walked.
 
 ---
 
@@ -121,9 +130,10 @@ All four share one key: client × taxable year × period.
 
 ## Next, in order
 
-1. Whatever the third test drive found, if it exists — act on it.
-2. Run `scripts/verify-real.ts` somewhere the fixture exists, to close the unexercised regression guard.
-3. Build the document archive browse view.
-4. **Before live data in November:** solve the `data/app.db` backup, and confirm the ATC codes against the current BIR list.
-5. **Decide on the live Q3 cycle** — certificates expected early November, 1701Q due **November 16, 2026** (statutory Nov 15 is a Sunday). The Excel files remain the master until that decision.
-6. Reassess the remaining Phase 4 items (calendar view) afterwards.
+1. Let the bookkeeper walk the five-group structure (brief #4a) before building any per-group refinement — see CLAUDE.md's "held for the next brief" list (step 2's 2307 scan becoming required, deriving Prepare's waiting state, the income screen rework, and the rest).
+2. Whatever the third test drive found, if it exists — act on it.
+3. Run `scripts/verify-real.ts` somewhere the fixture exists, to close the unexercised regression guard.
+4. Build the document archive browse view.
+5. **Before live data in November:** solve the `data/app.db` backup, and confirm the ATC codes against the current BIR list.
+6. **Decide on the live Q3 cycle** — certificates expected early November, 1701Q due **November 16, 2026** (statutory Nov 15 is a Sunday). The Excel files remain the master until that decision.
+7. Reassess the remaining Phase 4 items (calendar view) afterwards.

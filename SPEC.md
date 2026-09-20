@@ -1,6 +1,6 @@
 # SPEC: BIR 8% Freelancer Practice Manager (MVP)
 
-> ## ⚠ Superseded sections — added 2026-09-20, evening (updated by the branch reconciliation pass)
+> ## ⚠ Superseded sections — added 2026-09-20, evening (updated by the branch reconciliation pass; extended the same evening by brief #4a's grouping pass)
 >
 > This is the **original design document** and is kept as history, not rewritten. Several sections below no longer reflect the current design, and are now also fully implemented that way in code — after two rework passes were reconciled onto a single branch (`DECISIONS.md` D31), decided and built agree again everywhere in this table. `PROJECT_MASTER.md` and `DECISIONS.md` are authoritative over this file wherever they disagree.
 >
@@ -12,10 +12,12 @@
 > | **§7.1's per-step doc-slot table** (every slot required, including steps 4, 12, 15, 16) | **D27** — blocks only on documents received from outside; steps 4/12/16 carry no slot, step 15 is optional | Yes | **Yes** — verified against `lib/actions/workflowSteps.ts` and the seeded `WorkflowStepTemplate` |
 > | **§7.1's step order** — step 1 `RECEIVE_2307`, step 2 `RECORD_CRJ` | **D28** — step 1 is Record quarterly sales, step 2 is Receive Form 2307 | Yes | **Yes** — `RECORD_CRJ` retired, `RECORD_SALES` is step 1, linking to `/clients/[id]/income` |
 > | **§3.1's election rule** — described but, historically, never actually enforced | Not superseded — this is §3.1's own design intent, finally carried out | Yes | **Yes** — `lib/workflow/election.ts`, wired into `markStepDone` |
+> | **§7.1's flat sixteen-step list** (the table itself, and "steps are ordered but not rigidly gated" as the only structure above it) | **D32** — the sixteen steps are wrapped in five groups (Prepare, File, Pay, SAWT, Close); "Mark done" is per-group, not per-step; a step's own blocking rule (D27) is unchanged | Yes | **Yes** — `lib/workflow/groups.ts`, `lib/actions/workflowSteps.ts`'s `markGroupDone`, `components/workflow-group-card.tsx` |
+> | **§11 item 2** — "kanban with columns = the 16 steps" | **D32** — columns are the five groups; a card sits in its earliest incomplete group | Yes | **Yes** — `app/(app)/filings/page.tsx` |
 >
-> **Left alone deliberately, still current:** **§4**'s date-handling rules (the `getUTC*`/`manilaCalendarDay`/millisecond-arithmetic conventions), unchanged by any rework pass and still exactly how this codebase works.
+> **Left alone deliberately, still current:** **§4**'s date-handling rules (the `getUTC*`/`manilaCalendarDay`/millisecond-arithmetic conventions), unchanged by any rework pass and still exactly how this codebase works. **§7.1's per-step table itself (columns, step codes, doc slots)** is also still current — D32 wraps it in groups without changing any row.
 >
-> **Not in SPEC.md at all, because it postdates this document:** the `PREPARE_RETURN` step's source-of-figure field and optional client-confirmation-message slot (D26/D27), and the step 16 client email's conditional eAFS-forwarding line (D27) — see `PROJECT_MASTER.md`.
+> **Not in SPEC.md at all, because it postdates this document:** the `PREPARE_RETURN` step's source-of-figure field and optional client-confirmation-message slot (D26/D27), the step 16 client email's conditional eAFS-forwarding line (D27), and the five-group structure itself (D32) — see `PROJECT_MASTER.md`.
 >
 > This is a banner, not a rewrite — SPEC.md's body text below is untouched and increasingly historical. Read `CURRENT_STATE.md` for what's actually in the tree before building against any section above.
 

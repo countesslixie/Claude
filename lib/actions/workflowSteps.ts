@@ -9,6 +9,8 @@ import { isElectionBlocked } from "@/lib/workflow/election";
 import { ensureComputationSheetSaved } from "@/lib/documents/computationSheet";
 import { missingRequiredSlots, checkSendClientPackageReadiness } from "@/lib/workflow/docSlots";
 import { parseDocSlots } from "@/lib/workflow/types";
+import { WORKFLOW_GROUPS } from "@/lib/workflow/groups";
+import { isResolved } from "@/lib/workflow/status";
 
 export type StepActionResult = { ok: boolean; error?: string };
 
@@ -117,6 +119,44 @@ export async function markStepDone(stepId: string): Promise<StepActionResult> {
   if (step.stepCode === "PREPARE_RETURN") await ensureComputationSheetSaved(step.filingId);
   revalidatePath(`/clients/${step.filing.clientId}/filings/${step.filingId}`);
   revalidatePath("/filings");
+
+  return { ok: true };
+}
+
+/**
+ * Brief #4a — one "Mark done" per group, marking every unresolved step in
+ * that group at once (a clean quarter is five clicks, not sixteen). This
+ * calls the exact same markStepDone() as the per-step control above, in
+ * ascending sequence order, for every step in the group not already
+ * DONE/NA/SKIPPED — so every existing check (the election hard-blocker,
+ * the step 13 -> 14 dependency, SEND_CLIENT_PACKAGE's package-readiness
+ * check, and the required-doc-slot gate) still applies exactly as it did
+ * before grouping, with no logic duplicated here. Ascending order means a
+ * group holding both ends of the 13 -> 14 dependency (SAWT) always
+ * resolves 13 before attempting 14.
+ *
+ * Stops at the first step that can't be marked done and returns its
+ * error — the group's Done button is disabled ahead of time whenever a
+ * required document is missing (see lib/workflow/groups.ts's
+ * summarizeGroup), so reaching an error here in practice means one of the
+ * other checks (election, dependency, package readiness) applies, the
+ * same ones that were never surfaced as a pre-click disabled reason at
+ * the single-step level either.
+ */
+export async function markGroupDone(filingId: string, groupCode: string): Promise<StepActionResult> {
+  const group = WORKFLOW_GROUPS.find((g) => g.code === groupCode);
+  if (!group) return { ok: false, error: "Unknown group." };
+
+  const steps = await prisma.workflowStep.findMany({
+    where: { filingId, stepCode: { in: group.stepCodes } },
+    orderBy: { sequence: "asc" },
+  });
+
+  for (const step of steps) {
+    if (isResolved(step.status)) continue;
+    const result = await markStepDone(step.id);
+    if (!result.ok) return result;
+  }
 
   return { ok: true };
 }
