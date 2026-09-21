@@ -133,6 +133,17 @@ describe("workflow step actions", () => {
 
   it("§9.4/§5.4: marking PREPARE_RETURN done saves the app's own computation sheet into the vault, with no upload", async () => {
     const { filing } = await makeClientWithQ2Filing("p3-step-compsheet");
+
+    // Brief #4c -- step 3 requires steps 1/2 resolved first.
+    const recordSalesStep = await prisma.workflowStep.findFirstOrThrow({
+      where: { filingId: filing.id, stepCode: "RECORD_SALES" },
+    });
+    await markStepDone(recordSalesStep.id);
+    await skipStep(
+      (await prisma.workflowStep.findFirstOrThrow({ where: { filingId: filing.id, stepCode: "RECEIVE_2307" } })).id,
+      "No 2307s expected this quarter.",
+    );
+
     const step = await prisma.workflowStep.findFirstOrThrow({
       where: { filingId: filing.id, stepCode: "PREPARE_RETURN" },
     });
@@ -191,18 +202,14 @@ describe("workflow step actions", () => {
     it("non-blocking steps mark DONE freely, with or without their optional slot", async () => {
       const { filing } = await makeClientWithQ2Filing("p3-nonblocking");
 
-      for (const stepCode of ["RECORD_SALES", "ADVISE_CLIENT", "FILE_RETURN", "MAKE_PAYMENT", "PREPARE_RETURN"]) {
+      // RECORD_SALES and RECEIVE_2307 resolved first -- brief #4c requires
+      // both before PREPARE_RETURN (step 3) can be marked done, same as
+      // Prepare's own group-level "Mark done".
+      for (const stepCode of ["RECORD_SALES", "RECEIVE_2307", "ADVISE_CLIENT", "FILE_RETURN", "MAKE_PAYMENT", "PREPARE_RETURN"]) {
         const step = await prisma.workflowStep.findFirstOrThrow({ where: { filingId: filing.id, stepCode } });
         const result = await markStepDone(step.id);
         expect(result.ok).toBe(true);
       }
-
-      // RECEIVE_2307's 2307-scan slot is optional -- a client with no
-      // certificates at all still has to be able to pass through.
-      const receive2307 = await prisma.workflowStep.findFirstOrThrow({
-        where: { filingId: filing.id, stepCode: "RECEIVE_2307" },
-      });
-      expect((await markStepDone(receive2307.id)).ok).toBe(true);
 
       // EAFS_SUBMIT's confirmation is the one documented exception:
       // optional, never demanded, never blocking.
@@ -273,6 +280,58 @@ describe("workflow step actions", () => {
 
       const nowAllowed = await markStepDone(validationStep.id);
       expect(nowAllowed.ok).toBe(true);
+    });
+  });
+
+  describe("brief #4c: step 3's own markStepDone enforces steps 1/2 resolved (fixes a bypass of the group-level block)", () => {
+    it("markStepDone on PREPARE_RETURN directly is blocked while step 1 and step 2 are unresolved", async () => {
+      const { filing } = await makeClientWithQ2Filing("p4c-step3-direct-blocked");
+
+      const prepareReturnStep = await prisma.workflowStep.findFirstOrThrow({
+        where: { filingId: filing.id, stepCode: "PREPARE_RETURN" },
+      });
+
+      const blocked = await markStepDone(prepareReturnStep.id);
+      expect(blocked.ok).toBe(false);
+      expect(blocked.error).toMatch(/quarterly sales/i);
+
+      const stillPending = await prisma.workflowStep.findUniqueOrThrow({ where: { id: prepareReturnStep.id } });
+      expect(stillPending.status).not.toBe("DONE");
+    });
+
+    it("unblocks once step 1 is DONE and step 2 is DONE or SKIPPED, and step 4 is never gated by this rule", async () => {
+      const { filing } = await makeClientWithQ2Filing("p4c-step3-direct-unblocked");
+
+      const recordSalesStep = await prisma.workflowStep.findFirstOrThrow({
+        where: { filingId: filing.id, stepCode: "RECORD_SALES" },
+      });
+      await markStepDone(recordSalesStep.id);
+
+      // Step 3 is still blocked on step 2 alone.
+      const prepareReturnStep = await prisma.workflowStep.findFirstOrThrow({
+        where: { filingId: filing.id, stepCode: "PREPARE_RETURN" },
+      });
+      const stillBlocked = await markStepDone(prepareReturnStep.id);
+      expect(stillBlocked.ok).toBe(false);
+      expect(stillBlocked.error).not.toMatch(/quarterly sales/i);
+      expect(stillBlocked.error).toMatch(/2307/i);
+
+      await skipStep(
+        (await prisma.workflowStep.findFirstOrThrow({ where: { filingId: filing.id, stepCode: "RECEIVE_2307" } })).id,
+        "No 2307s expected this quarter.",
+      );
+
+      const nowAllowed = await markStepDone(prepareReturnStep.id);
+      expect(nowAllowed.ok).toBe(true);
+
+      // Step 4 (ADVISE_CLIENT) is unaffected by this rule -- markable
+      // done directly even with steps 1/2 left untouched.
+      const { filing: otherFiling } = await makeClientWithQ2Filing("p4c-step4-unaffected");
+      const adviseStep = await prisma.workflowStep.findFirstOrThrow({
+        where: { filingId: otherFiling.id, stepCode: "ADVISE_CLIENT" },
+      });
+      const step4Result = await markStepDone(adviseStep.id);
+      expect(step4Result.ok).toBe(true);
     });
   });
 

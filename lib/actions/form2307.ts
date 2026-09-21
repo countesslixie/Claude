@@ -6,7 +6,7 @@ import { certificateEntrySchema } from "@/lib/validation/form2307";
 import { getActorId } from "@/lib/actor";
 import { logActivity } from "@/lib/activityLog";
 import { manilaDateInputToJsDate } from "@/lib/dates";
-import { pesosToCents } from "@/lib/money";
+import { pesosToCents, percentToBps } from "@/lib/money";
 import { periodToSingleQuarterCovered } from "@/lib/tax/periods";
 import { recomputeRequiresSawt } from "@/lib/workflow/filingGeneration";
 import { recomputeReceive2307Status } from "@/lib/actions/workflowSteps";
@@ -27,7 +27,7 @@ const FIELDS = [
   "atcCode",
   "incomePayment",
   "taxWithheld",
-  "withholdingRateBps",
+  "withholdingRatePercent",
   "dateReceived",
   "notes",
 ] as const;
@@ -39,14 +39,6 @@ function rawFromFormData(formData: FormData) {
     values[key] = typeof v === "string" ? v : "";
   }
   return values;
-}
-
-/** Last day of the quarter matching quarterNumber (1-4) in taxableYear, via the day-0 trick. */
-function quarterNumberDateRange(taxableYear: number, quarterNumber: number): { from: Date; to: Date } {
-  const startMonth = (quarterNumber - 1) * 3;
-  const from = new Date(Date.UTC(taxableYear, startMonth, 1));
-  const to = new Date(Date.UTC(taxableYear, startMonth + 3, 0));
-  return { from, to };
 }
 
 async function assertFilingNotLocked(filingId: string): Promise<string | null> {
@@ -85,8 +77,9 @@ export async function addCertificate(
   if (lockedReason) return { error: lockedReason, values };
 
   const quarterCovered = periodToSingleQuarterCovered(filing.period);
-  const defaultRange = quarterNumberDateRange(filing.taxableYear, quarterCovered);
-  const withholdingRateBps = parsed.data.withholdingRateBps ?? filing.client.defaultWithholdingRateBps ?? 0;
+  const withholdingRateBps = parsed.data.withholdingRatePercent
+    ? percentToBps(parsed.data.withholdingRatePercent)
+    : filing.client.defaultWithholdingRateBps ?? 0;
 
   const actorId = await getActorId();
   const cert = await prisma.form2307.create({
@@ -96,8 +89,8 @@ export async function addCertificate(
       payorName: parsed.data.payorName,
       payorTin: parsed.data.payorTin ?? null,
       payorAddress: parsed.data.payorAddress ?? null,
-      periodFrom: parsed.data.periodFrom ? manilaDateInputToJsDate(parsed.data.periodFrom) : defaultRange.from,
-      periodTo: parsed.data.periodTo ? manilaDateInputToJsDate(parsed.data.periodTo) : defaultRange.to,
+      periodFrom: manilaDateInputToJsDate(parsed.data.periodFrom),
+      periodTo: manilaDateInputToJsDate(parsed.data.periodTo),
       quarterCovered,
       // D19 — never invent an ATC code; left empty and unverified when she hasn't supplied one.
       atcCode: parsed.data.atcCode ?? "",

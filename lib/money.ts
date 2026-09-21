@@ -53,6 +53,16 @@ export function bpsToPercentLabel(bps: Bps): string {
   return `${new Decimal(bps).dividedBy(100).toFixed(2)}%`;
 }
 
+/** Parses a user-entered percent string ("5" or "5.00") into basis points, e.g. "5" -> 500. */
+export function percentToBps(input: string | number): Bps {
+  const normalized = typeof input === "string" ? input.trim() : input;
+  if (normalized === "" || normalized === null || normalized === undefined) {
+    return 0;
+  }
+  const decimal = new Decimal(normalized);
+  return decimal.times(100).toDecimalPlaces(0, Decimal.ROUND_HALF_UP).toNumber();
+}
+
 export function addCents(...values: Cents[]): Cents {
   return values.reduce((sum, v) => sum + v, 0);
 }

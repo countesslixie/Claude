@@ -42,7 +42,6 @@ export function QuarterlySalesCard({
   initialValues?: {
     customers: CustomerRow[];
     nonOperatingIncome: string;
-    sourceNote: string;
     notes: string;
     noSalesThisQuarter: boolean;
   };
@@ -64,8 +63,7 @@ export function QuarterlySalesCard({
     setNoSales(state.values.noSalesThisQuarter);
   }, [state.values]);
 
-  const v = (key: "nonOperatingIncome" | "sourceNote" | "notes") =>
-    state.values?.[key] ?? initialValues?.[key] ?? "";
+  const v = (key: "nonOperatingIncome" | "notes") => state.values?.[key] ?? initialValues?.[key] ?? "";
   const errs = (key: string) => state.fieldErrors?.[key];
 
   const total = noSales ? 0 : rows.reduce((sum, r) => sum + parsePesos(r.amount), 0);
@@ -163,15 +161,6 @@ export function QuarterlySalesCard({
               {e}
             </p>
           ))}
-        </div>
-        <div className="flex flex-col gap-1 sm:col-span-2">
-          <Label htmlFor={`${quarter}-sourceNote`}>Where this figure came from</Label>
-          <Input
-            id={`${quarter}-sourceNote`}
-            name="sourceNote"
-            placeholder="e.g. client's own summary, texted Sept 14"
-            defaultValue={v("sourceNote")}
-          />
         </div>
         <div className="flex flex-col gap-1 sm:col-span-2">
           <Label htmlFor={`${quarter}-notes`}>Notes</Label>

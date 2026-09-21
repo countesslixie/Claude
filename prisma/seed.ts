@@ -206,31 +206,22 @@ const WORKFLOW_STEP_TEMPLATE: Array<{
     requiredDocSlots: [],
   },
   {
+    // Brief #4c — the client-confirmation-evidence slot and the
+    // source-of-figure field are both removed (bookkeeper's decision).
+    // Step 3 keeps only the yes/no receipts acknowledgement (optional
+    // free-text note, Filing.receiptsAcknowledgedNote) and the
+    // computation sheet it generates itself.
+    //
+    // draft_computation is deliberately NOT a slot here — the app
+    // writes its own computation sheet straight into the vault as a
+    // side effect of completing this step (lib/documents/
+    // computationSheet.ts, D27/rework brief §5.4), with no upload UI
+    // and nothing for this list to gate on.
     stepCode: "PREPARE_RETURN",
     sequence: 3,
     title: "Prepare computation + 1701Q/1701A",
     category: "PREP",
-    requiredDocSlots: [
-      // §5.6: optional evidence of where the declared sales figure came
-      // from — the client's own confirming message/email, if any. Never
-      // required; the acknowledgement itself (below) is evidence of a
-      // number about to be filed, not proof of advice given, and once
-      // income is declared-only (D26) it is the only control left in the
-      // system (D27's exception is different in kind: this records
-      // provenance, it doesn't ask her to prove she did something).
-      //
-      // draft_computation is deliberately NOT a slot here — the app
-      // writes its own computation sheet straight into the vault as a
-      // side effect of completing this step (lib/documents/
-      // computationSheet.ts, D27/rework brief §5.4), with no upload UI
-      // and nothing for this list to gate on.
-      {
-        slotCode: "client_confirmation_evidence",
-        label: "Client confirmation message/email (optional)",
-        required: false,
-        acceptedTypes: ["eml", "pdf", "jpg", "png"],
-      },
-    ],
+    requiredDocSlots: [],
   },
   {
     // No slot at all (D27) — advising the client is an action the
@@ -497,7 +488,6 @@ async function seedClientA(actorId: string) {
         quarter: QUARTER_LABELS[q.quarter - 1],
         grossSalesCents: grossCents,
         finalizedAt: new Date(`${q.date}T00:00:00.000Z`),
-        sourceNote: "Seeded historical data — consulting retainer from Acme Publishing Corp.",
         actorId,
         customers: { create: [{ customerName: "Acme Publishing Corp.", amountCents: grossCents }] },
       },
@@ -568,7 +558,6 @@ async function seedClientB(actorId: string) {
         quarter,
         grossSalesCents: grossCents,
         finalizedAt: new Date(),
-        sourceNote: "Seeded historical data — various direct clients, no withholding.",
         actorId,
         customers: { create: rows.map((r) => ({ customerName: r.name, amountCents: CENTS(r.pesos) })) },
       },
@@ -660,7 +649,6 @@ async function seedClientC(actorId: string) {
         quarter: QUARTER_LABELS[r.quarter - 1],
         grossSalesCents: grossCents,
         finalizedAt: new Date(`${r.date}T00:00:00.000Z`),
-        sourceNote: "Seeded historical data — IT consulting project for Northgate Solutions Inc.",
         actorId,
         customers: { create: [{ customerName: "Northgate Solutions Inc.", amountCents: grossCents }] },
       },
@@ -1051,7 +1039,6 @@ async function seedTY2026Cycle(actorId: string) {
           quarter: "Q1",
           grossSalesCents: q1GrossCents,
           finalizedAt: new Date(`${DUE.Q1.adjusted}T00:00:00.000Z`),
-          sourceNote: cfg.requiresSawt ? `Declared by ${cfg.payorName}'s client` : "Various direct clients",
           actorId,
           customers: {
             create: [
@@ -1183,7 +1170,6 @@ async function seedTY2026Cycle(actorId: string) {
           quarter: "Q2",
           grossSalesCents: q2GrossCents,
           finalizedAt: new Date(`${WORKING_CALENDAR.Q2.certificatesExpectedBy}T00:00:00.000Z`),
-          sourceNote: cfg.requiresSawt ? `Declared by ${cfg.payorName}'s client` : "Various direct clients",
           actorId,
           customers: {
             create: [

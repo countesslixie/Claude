@@ -69,6 +69,17 @@ export async function markStepDone(stepId: string): Promise<StepActionResult> {
     };
   }
 
+  // Brief #4c fix — the group-level block (brief #4b's prepareGroupBlockReason)
+  // only ever covered the group's own "Mark done" button; step 3's own
+  // per-step button had no such check and could be clicked directly while
+  // steps 1/2 were still unresolved. Enforced here, server-side, so it
+  // can't be bypassed by calling this action directly. Step 4 is
+  // unaffected — this brief scoped the fix to step 3 only.
+  if (step.stepCode === "PREPARE_RETURN") {
+    const reason = prepareGroupBlockReason(step.filing.workflowSteps);
+    if (reason) return { ok: false, error: reason };
+  }
+
   // Step 13 -> 14 (D29) — the one genuine sequencing dependency in the
   // workflow. Every other waiting step (notably RECEIVE_TRRC and
   // SAWT_VALIDATION itself) blocks nothing downstream.

@@ -26,23 +26,22 @@ export const quarterlySalesCustomerRowSchema = z.object({
 
 /**
  * D26/D33 (§5.5, brief #4b) — a quarter's gross sales is the sum of zero
- * or more per-customer rows, plus non-operating income and an optional
- * note on where the figures came from. This is the only place income
- * enters the system. `intent` distinguishes a draft save (stores the
- * rows, step 1 stays not-done) from a final save (marks step 1 done).
- * `noSalesThisQuarter` is a deliberate ₱0 — mutually exclusive with any
- * customer rows, which are ignored when it is set.
+ * or more per-customer rows, plus non-operating income and a free-text
+ * notes field. This is the only place income enters the system. `intent`
+ * distinguishes a draft save (stores the rows, step 1 stays not-done)
+ * from a final save (marks step 1 done). `noSalesThisQuarter` is a
+ * deliberate ₱0 — mutually exclusive with any customer rows, which are
+ * ignored when it is set.
+ *
+ * Brief #4c — the "where this figure came from" field is removed
+ * (bookkeeper's decision, supersedes the old locked source-of-figure
+ * rule). Notes stays.
  */
 export const quarterlySalesSchema = z.object({
   intent: z.enum(["draft", "final"]),
   noSalesThisQuarter: z.boolean().default(false),
   customers: z.array(quarterlySalesCustomerRowSchema),
   nonOperatingIncome: optionalPesos,
-  sourceNote: z
-    .string()
-    .trim()
-    .optional()
-    .transform((v) => (v === "" ? undefined : v)),
   notes: z
     .string()
     .trim()

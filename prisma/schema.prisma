@@ -251,8 +251,10 @@ model QuarterlySales {
   noSalesThisQuarter      Boolean @default(false)
   finalizedAt             DateTime?
 
-  sourceNote String? // how the figure was obtained from the client
-  notes      String?
+  // Brief #4c — the "where this figure came from" field is removed
+  // (bookkeeper's decision, supersedes the old locked source-of-figure
+  // rule); the column itself is dropped, not kept unused.
+  notes String?
 
   customers QuarterlySalesCustomer[]
 
@@ -400,14 +402,11 @@ model Filing {
   // PREPARE_RETURN step prompt: "Have you confirmed with the client that
   // all receipts for this quarter are accounted for, including any
   // without a 2307?" — recorded once, with who/when (SPEC.md 7.1 step 3).
+  // Brief #4c removed the source-of-figure field this once carried
+  // alongside it (receiptsAcknowledgedSourceNote, dropped) and the
+  // client-confirmation-evidence attachment slot on this step.
   receiptsAcknowledgedAt   DateTime?
   receiptsAcknowledgedNote String?
-
-  // PREPARE_RETURN acknowledgement, extended (§5.6): where the declared
-  // sales figure came from, and an optional slot for the client's own
-  // message/email stating it. Never blocks — evidence of a number that
-  // will be filed, not proof of advice given.
-  receiptsAcknowledgedSourceNote String?
 
   // Informational completeness note (§5.3) — lists documents not yet
   // attached across the filing's steps. Amber, never blocking. Dismissing

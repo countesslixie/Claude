@@ -4,6 +4,7 @@ import { useActionState, useState, useTransition } from "react";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { deleteCertificate, type CertificateFormState } from "@/lib/actions/form2307";
 import { skipStep } from "@/lib/actions/workflowSteps";
@@ -46,6 +47,8 @@ export function Receive2307StepCard({
   locked,
   addCertificateAction,
   toggleAllReceivedAction,
+  defaultPeriodFrom,
+  defaultPeriodTo,
 }: {
   stepId: string;
   sequence: number;
@@ -57,6 +60,9 @@ export function Receive2307StepCard({
   locked: boolean;
   addCertificateAction: (state: CertificateFormState, formData: FormData) => Promise<CertificateFormState>;
   toggleAllReceivedAction: (received: boolean) => Promise<void>;
+  /** Brief #4c — "Period covered" pre-fills with this filing's own quarter. */
+  defaultPeriodFrom: string;
+  defaultPeriodTo: string;
 }) {
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
@@ -158,43 +164,62 @@ export function Receive2307StepCard({
                   <p className="mt-1 text-xs text-amber-700">Scan required for this row.</p>
                 )}
                 {!locked && !openScanUpload.has(c.id) && (
-                  <button
-                    type="button"
-                    onClick={() => toggleSet(openScanUpload, setOpenScanUpload, c.id)}
-                    className="mt-1 text-xs text-slate-500 underline hover:text-slate-900"
-                  >
-                    {c.scans.length > 0 ? "Attach another" : "Attach scan"}
-                  </button>
-                )}
-                {!locked && openScanUpload.has(c.id) && (
-                  <form action={(fd) => handleScanUpload(c.id, fd)} className="mt-1 flex items-center gap-1.5">
-                    <Input type="file" name="file" required className="h-8 text-xs" />
-                    <Input
-                      type="date"
-                      name="documentDate"
-                      defaultValue={new Date().toISOString().split("T")[0]}
-                      className="h-8 w-36 text-xs"
-                    />
-                    <Button type="submit" size="sm" variant="secondary" disabled={isPending}>
-                      Upload
-                    </Button>
+                  <div className="mt-1 flex items-center gap-3">
                     <button
                       type="button"
                       onClick={() => toggleSet(openScanUpload, setOpenScanUpload, c.id)}
+                      className="text-xs text-slate-500 underline hover:text-slate-900"
+                    >
+                      {c.scans.length > 0 ? "Attach another" : "Attach scan"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => toggleSet(openMore, setOpenMore, c.id)}
                       className="text-xs text-slate-400 underline hover:text-slate-600"
                     >
-                      Cancel
+                      {openMore.has(c.id) ? "Hide details" : "More"}
                     </button>
-                  </form>
+                  </div>
                 )}
-
-                <button
-                  type="button"
-                  onClick={() => toggleSet(openMore, setOpenMore, c.id)}
-                  className="mt-1 text-xs text-slate-400 underline hover:text-slate-600"
-                >
-                  {openMore.has(c.id) ? "Hide details" : "More"}
-                </button>
+                {!locked && openScanUpload.has(c.id) && (
+                  <>
+                    <form action={(fd) => handleScanUpload(c.id, fd)} className="mt-1 flex items-center gap-1.5">
+                      <Input type="file" name="file" required className="h-8 text-xs" />
+                      <Input
+                        type="date"
+                        name="documentDate"
+                        defaultValue={new Date().toISOString().split("T")[0]}
+                        className="h-8 w-36 text-xs"
+                      />
+                      <Button type="submit" size="sm" variant="secondary" disabled={isPending}>
+                        Upload
+                      </Button>
+                      <button
+                        type="button"
+                        onClick={() => toggleSet(openScanUpload, setOpenScanUpload, c.id)}
+                        className="text-xs text-slate-400 underline hover:text-slate-600"
+                      >
+                        Cancel
+                      </button>
+                    </form>
+                    <button
+                      type="button"
+                      onClick={() => toggleSet(openMore, setOpenMore, c.id)}
+                      className="mt-1 text-xs text-slate-400 underline hover:text-slate-600"
+                    >
+                      {openMore.has(c.id) ? "Hide details" : "More"}
+                    </button>
+                  </>
+                )}
+                {locked && (
+                  <button
+                    type="button"
+                    onClick={() => toggleSet(openMore, setOpenMore, c.id)}
+                    className="mt-1 text-xs text-slate-400 underline hover:text-slate-600"
+                  >
+                    {openMore.has(c.id) ? "Hide details" : "More"}
+                  </button>
+                )}
                 {openMore.has(c.id) && (
                   <dl className="mt-1 grid grid-cols-2 gap-1 text-xs text-slate-500">
                     <div>
@@ -233,20 +258,78 @@ export function Receive2307StepCard({
                 <form action={addFormAction} className="mt-1 flex flex-col gap-2 rounded border border-slate-200 p-2">
                   {addState.error && <p className="text-xs text-red-600">{addState.error}</p>}
                   <div className="grid grid-cols-2 gap-2">
-                    <Input name="payorName" placeholder="Payor name" defaultValue={addState.values?.payorName} required />
-                    <Input name="dateReceived" type="date" defaultValue={addState.values?.dateReceived} required />
-                    <Input name="incomePayment" placeholder="Income amount (₱)" defaultValue={addState.values?.incomePayment} required />
-                    <Input name="taxWithheld" placeholder="Tax withheld (₱)" defaultValue={addState.values?.taxWithheld} required />
+                    <div className="flex flex-col gap-0.5">
+                      <Label htmlFor="cert-payorName">Payor name</Label>
+                      <Input id="cert-payorName" name="payorName" defaultValue={addState.values?.payorName} required />
+                    </div>
+                    <div className="flex flex-col gap-0.5">
+                      <Label htmlFor="cert-dateReceived">Date received</Label>
+                      <Input id="cert-dateReceived" name="dateReceived" type="date" defaultValue={addState.values?.dateReceived} required />
+                    </div>
+                    <div className="flex flex-col gap-0.5">
+                      <Label htmlFor="cert-incomePayment">Income amount (₱)</Label>
+                      <Input id="cert-incomePayment" name="incomePayment" defaultValue={addState.values?.incomePayment} required />
+                    </div>
+                    <div className="flex flex-col gap-0.5">
+                      <Label htmlFor="cert-taxWithheld">Tax withheld (₱)</Label>
+                      <Input id="cert-taxWithheld" name="taxWithheld" defaultValue={addState.values?.taxWithheld} required />
+                    </div>
+                    <div className="flex flex-col gap-0.5">
+                      <Label htmlFor="cert-periodFrom">Period covered — from</Label>
+                      <Input
+                        id="cert-periodFrom"
+                        name="periodFrom"
+                        type="date"
+                        defaultValue={addState.values?.periodFrom ?? defaultPeriodFrom}
+                        required
+                      />
+                    </div>
+                    <div className="flex flex-col gap-0.5">
+                      <Label htmlFor="cert-periodTo">Period covered — to</Label>
+                      <Input
+                        id="cert-periodTo"
+                        name="periodTo"
+                        type="date"
+                        defaultValue={addState.values?.periodTo ?? defaultPeriodTo}
+                        required
+                      />
+                    </div>
                   </div>
+                  {addState.fieldErrors && (
+                    <ul className="flex flex-col gap-0.5">
+                      {Object.entries(addState.fieldErrors).flatMap(([field, errs]) =>
+                        (errs ?? []).map((e) => (
+                          <li key={`${field}-${e}`} className="text-xs text-red-600">
+                            {e}
+                          </li>
+                        )),
+                      )}
+                    </ul>
+                  )}
                   <details>
                     <summary className="cursor-pointer text-xs text-slate-500">More fields</summary>
                     <div className="mt-1 grid grid-cols-2 gap-2">
-                      <Input name="payorTin" placeholder="Payor TIN" defaultValue={addState.values?.payorTin} />
-                      <Input name="payorAddress" placeholder="Payor address" defaultValue={addState.values?.payorAddress} />
-                      <Input name="atcCode" placeholder="ATC code (unverified)" defaultValue={addState.values?.atcCode} />
-                      <Input name="withholdingRateBps" type="number" placeholder="Rate (bps)" defaultValue={addState.values?.withholdingRateBps} />
-                      <Input name="periodFrom" type="date" defaultValue={addState.values?.periodFrom} />
-                      <Input name="periodTo" type="date" defaultValue={addState.values?.periodTo} />
+                      <div className="flex flex-col gap-0.5">
+                        <Label htmlFor="cert-payorTin">Payor TIN</Label>
+                        <Input id="cert-payorTin" name="payorTin" defaultValue={addState.values?.payorTin} />
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <Label htmlFor="cert-payorAddress">Payor address</Label>
+                        <Input id="cert-payorAddress" name="payorAddress" defaultValue={addState.values?.payorAddress} />
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <Label htmlFor="cert-atcCode">ATC code (unverified)</Label>
+                        <Input id="cert-atcCode" name="atcCode" defaultValue={addState.values?.atcCode} />
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <Label htmlFor="cert-withholdingRatePercent">Rate (%)</Label>
+                        <Input
+                          id="cert-withholdingRatePercent"
+                          name="withholdingRatePercent"
+                          placeholder="e.g. 5 or 5.00"
+                          defaultValue={addState.values?.withholdingRatePercent}
+                        />
+                      </div>
                     </div>
                   </details>
                   <div className="flex items-center gap-2">

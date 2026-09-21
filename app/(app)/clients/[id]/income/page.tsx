@@ -82,12 +82,11 @@ export default async function IncomePage({
         <td>{quarter}</td>
         <td>{customersLabel}</td>
         <td>{row ? centsToPesos(row.grossSalesCents, { withSymbol: true }) : "—"}</td>
-        <td>{row?.sourceNote ?? "—"}</td>
         <td>
           {locked && <span className="text-xs text-slate-400">filed</span>}
           {filing && (
             <Link href={`/clients/${id}/filings/${filing.id}`} className="ml-2 text-xs underline">
-              Filing
+              View filing
             </Link>
           )}
         </td>
@@ -166,7 +165,6 @@ export default async function IncomePage({
                 initialValues={{
                   customers: row ? row.customers.map((c) => ({ customerName: c.customerName, amount: centsToPesos(c.amountCents) })) : [],
                   nonOperatingIncome: row ? centsToPesos(row.nonOperatingIncomeCents) : "0",
-                  sourceNote: row?.sourceNote ?? "",
                   notes: row?.notes ?? "",
                   noSalesThisQuarter: row?.noSalesThisQuarter ?? false,
                 }}
@@ -208,7 +206,6 @@ export default async function IncomePage({
                 initialValues={{
                   customers: row ? row.customers.map((c) => ({ customerName: c.customerName, amount: centsToPesos(c.amountCents) })) : [],
                   nonOperatingIncome: row ? centsToPesos(row.nonOperatingIncomeCents) : "0",
-                  sourceNote: row?.sourceNote ?? "",
                   notes: row?.notes ?? "",
                   noSalesThisQuarter: row?.noSalesThisQuarter ?? false,
                 }}
@@ -229,7 +226,6 @@ export default async function IncomePage({
                 <th>Quarter</th>
                 <th>Customers</th>
                 <th>Total</th>
-                <th>Source</th>
                 <th></th>
               </tr>
             </thead>

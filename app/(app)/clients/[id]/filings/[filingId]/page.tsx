@@ -12,7 +12,6 @@ import { addCertificate } from "@/lib/actions/form2307";
 import { StatusBadge } from "@/components/status-badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { CopyTextarea } from "@/components/copy-textarea";
 import { WorkflowStepCard, type StepCardData } from "@/components/workflow-step-card";
@@ -25,11 +24,11 @@ import { centsToPesos } from "@/lib/money";
 import { formatManilaDate, toManilaDateInputValue } from "@/lib/dates";
 import { deriveStepAging } from "@/lib/workflow/aging";
 import { countSkippedSteps, filingStatusLabel, currentStepCode } from "@/lib/workflow/status";
-import { WORKFLOW_GROUPS, currentGroupCode, summarizeGroup, type GroupStepInput } from "@/lib/workflow/groups";
+import { WORKFLOW_GROUPS, currentGroupCode, summarizeGroup, prepareGroupBlockReason, type GroupStepInput } from "@/lib/workflow/groups";
 import { parseDocSlots, type DocSlotDef, type WorkflowStepStatus } from "@/lib/workflow/types";
 import { computeFilingCompleteness } from "@/lib/workflow/completeness";
 import { buildClientPackageEmail } from "@/lib/workflow/clientPackageEmail";
-import { ALL_PERIODS, ownSalesQuarterOf } from "@/lib/tax/periods";
+import { ALL_PERIODS, ownSalesQuarterOf, periodToSingleQuarterCovered, quarterNumberDateRange } from "@/lib/tax/periods";
 import type { FilingComputationResult } from "@/lib/tax/types";
 
 const STATUS_TONE: Record<string, "pending" | "progress" | "waiting" | "overdue" | "done"> = {
@@ -105,6 +104,11 @@ export default async function FilingDetailPage({
   }));
   const boundAddCertificate = addCertificate.bind(null, filing.id);
   const boundToggleAllReceived = setAllCertificatesReceived.bind(null, filing.id);
+
+  // Brief #4c — "Period covered" pre-fills with this filing's own
+  // quarter, the same range addCertificate falls back to if it were ever
+  // left blank (it no longer can be — see lib/validation/form2307.ts).
+  const defaultCertificatePeriod = quarterNumberDateRange(filing.taxableYear, periodToSingleQuarterCovered(filing.period));
 
   // Step 16's email draft needs to know the next filing in this taxable
   // year, if one already exists (rework brief #2 §5) — omitted when there
@@ -192,8 +196,15 @@ export default async function FilingDetailPage({
     ackStep && ackStep.status !== "DONE" && ackStep.status !== "NA" && ackStep.status !== "SKIPPED"
       ? "Waiting on step 13's acknowledgement email — a validation email can't arrive before it."
       : null;
+  // Brief #4c fix — step 3's own "Mark done" button needs the same
+  // steps-1/2 gate as Prepare's group-level button (brief #4b), so it
+  // can't be clicked directly to bypass it.
+  const prepareBlockReason = prepareGroupBlockReason(
+    filing.workflowSteps.map((s) => ({ stepCode: s.stepCode, status: s.status })),
+  );
   const DEPENDENCY_REASON_BY_STEP_CODE: Record<string, string | null> = {
     SAWT_VALIDATION: validationDependencyReason,
+    PREPARE_RETURN: prepareBlockReason,
   };
 
   const eafsStep = filing.workflowSteps.find((s) => s.stepCode === "EAFS_SUBMIT");
@@ -251,8 +262,7 @@ export default async function FilingDetailPage({
   async function submitAcknowledgement(formData: FormData) {
     "use server";
     const note = String(formData.get("note") ?? "");
-    const sourceNote = String(formData.get("sourceNote") ?? "");
-    await acknowledgeReceiptsComplete(filingId, note, sourceNote);
+    await acknowledgeReceiptsComplete(filingId, note);
   }
 
   async function submitAmendmentAck(alertId: string, formData: FormData) {
@@ -272,9 +282,6 @@ export default async function FilingDetailPage({
       {filing.receiptsAcknowledgedAt ? (
         <div className="mt-1">
           <p className="text-xs text-slate-600">Confirmed {formatManilaDate(filing.receiptsAcknowledgedAt)}.</p>
-          {filing.receiptsAcknowledgedSourceNote && (
-            <p className="mt-0.5 text-xs text-slate-600">Source: {filing.receiptsAcknowledgedSourceNote}</p>
-          )}
           {filing.receiptsAcknowledgedNote && (
             <p className="mt-0.5 text-xs text-slate-500">{filing.receiptsAcknowledgedNote}</p>
           )}
@@ -285,12 +292,6 @@ export default async function FilingDetailPage({
             Have you confirmed with the client that all receipts for this quarter are accounted for, including
             any without a 2307?
           </p>
-          <div>
-            <label className="text-xs font-medium uppercase tracking-wide text-slate-400" htmlFor="sourceNote">
-              Where the declared sales figure came from
-            </label>
-            <Input id="sourceNote" name="sourceNote" className="h-8 text-xs" placeholder="e.g. client's own summary, texted Sept 14" />
-          </div>
           <Textarea name="note" placeholder="Optional note" rows={2} className="text-xs" />
           <div>
             <Button type="submit" size="sm">
@@ -556,6 +557,8 @@ export default async function FilingDetailPage({
                         locked={isFilingLocked}
                         addCertificateAction={boundAddCertificate}
                         toggleAllReceivedAction={boundToggleAllReceived}
+                        defaultPeriodFrom={toManilaDateInputValue(defaultCertificatePeriod.from)}
+                        defaultPeriodTo={toManilaDateInputValue(defaultCertificatePeriod.to)}
                       />
                     );
                   }

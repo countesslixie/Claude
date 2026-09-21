@@ -109,6 +109,21 @@ export function salesQuarterEndDate(taxableYear: number, quarter: SalesQuarter):
 }
 
 /**
+ * The first and last calendar day of the raw 1-4 quarter number a
+ * certificate covers (Form2307.quarterCovered) — used to default a
+ * certificate's own "period covered" dates to the filing's quarter
+ * (brief #4c). Lives here, not in lib/actions/form2307.ts, because that
+ * file is "use server" and every export from it must be an async
+ * action.
+ */
+export function quarterNumberDateRange(taxableYear: number, quarterNumber: number): { from: Date; to: Date } {
+  const startMonth = (quarterNumber - 1) * 3;
+  const from = new Date(Date.UTC(taxableYear, startMonth, 1));
+  const to = new Date(Date.UTC(taxableYear, startMonth + 3, 0));
+  return { from, to };
+}
+
+/**
  * The inverse of ownSalesQuarterOf below: which filing period a declared
  * sales quarter belongs to (brief #4b) — Q1/Q2/Q3 map to their own
  * quarterly filing, Q4 has no filing of its own and maps to ANNUAL.

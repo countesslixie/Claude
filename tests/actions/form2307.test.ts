@@ -62,6 +62,10 @@ describe("step 2 — certificate entry (addCertificate/deleteCertificate)", () =
     fd.set("incomePayment", "10000");
     fd.set("taxWithheld", "500");
     fd.set("dateReceived", "2026-06-10");
+    // Brief #4c -- "Period covered" is now required, pre-filled by the
+    // form with the filing's own quarter; tests supply it directly.
+    fd.set("periodFrom", "2026-04-01");
+    fd.set("periodTo", "2026-06-30");
     for (const [k, v] of Object.entries(overrides)) fd.set(k, v);
     return fd;
   }

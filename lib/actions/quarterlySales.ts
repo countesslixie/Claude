@@ -17,7 +17,6 @@ export type QuarterlySalesFormState = {
   values?: {
     customers: { customerName: string; amount: string }[];
     nonOperatingIncome: string;
-    sourceNote: string;
     notes: string;
     noSalesThisQuarter: boolean;
   };
@@ -57,13 +56,11 @@ export async function saveQuarterlySales(
   const noSalesThisQuarter = formData.get("noSalesThisQuarter") === "on";
   const rows = rowsFromFormData(formData);
   const nonOperatingIncome = String(formData.get("nonOperatingIncome") ?? "");
-  const sourceNote = String(formData.get("sourceNote") ?? "");
   const notes = String(formData.get("notes") ?? "");
 
   const values = {
     customers: rows.length > 0 ? rows : [{ customerName: "", amount: "" }],
     nonOperatingIncome,
-    sourceNote,
     notes,
     noSalesThisQuarter,
   };
@@ -73,7 +70,6 @@ export async function saveQuarterlySales(
     noSalesThisQuarter,
     customers: rows,
     nonOperatingIncome,
-    sourceNote,
     notes,
   });
   if (!parsed.success) {
@@ -129,7 +125,6 @@ export async function saveQuarterlySales(
         nonOperatingIncomeCents,
         noSalesThisQuarter: parsed.data.noSalesThisQuarter,
         finalizedAt,
-        sourceNote: parsed.data.sourceNote ?? null,
         notes: parsed.data.notes ?? null,
         actorId,
       },
@@ -138,7 +133,6 @@ export async function saveQuarterlySales(
         nonOperatingIncomeCents,
         noSalesThisQuarter: parsed.data.noSalesThisQuarter,
         finalizedAt,
-        sourceNote: parsed.data.sourceNote ?? null,
         notes: parsed.data.notes ?? null,
         actorId,
       },

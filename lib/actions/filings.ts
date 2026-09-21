@@ -40,16 +40,15 @@ export async function generateFilingsAction(clientId: string, taxableYear: numbe
  * PREPARE_RETURN step prompt (SPEC.md WORKFLOW CHANGE item 4): "Have you
  * confirmed with the client that all receipts for this quarter are
  * accounted for, including any without a 2307?" Recorded once, with a
- * timestamp.
+ * timestamp and an optional free-text note.
  *
- * §5.6 — extended with where the declared sales figure came from. With
- * declared sales as the only income input (D26), this acknowledgement is
- * the only control left in the system; it must never block, since it is
- * evidence of a number that will be filed, not proof of advice given.
- * The client's own confirming message/email is an optional attachment on
- * this step's doc slot, not a field here.
+ * Brief #4c — the source-of-figure field and the optional
+ * client-confirmation-message attachment slot are both removed
+ * (bookkeeper's decision, supersedes the old "one control left in the
+ * system" framing). This acknowledgement is now just the yes/no
+ * confirmation plus an optional note; it still never blocks.
  */
-export async function acknowledgeReceiptsComplete(filingId: string, note: string, sourceNote: string): Promise<void> {
+export async function acknowledgeReceiptsComplete(filingId: string, note: string): Promise<void> {
   const before = await prisma.filing.findUnique({ where: { id: filingId } });
   if (!before) return;
 
@@ -59,7 +58,6 @@ export async function acknowledgeReceiptsComplete(filingId: string, note: string
     data: {
       receiptsAcknowledgedAt: new Date(),
       receiptsAcknowledgedNote: note || null,
-      receiptsAcknowledgedSourceNote: sourceNote || null,
       actorId,
     },
   });
