@@ -16,8 +16,8 @@
 
 import { computeFiling } from "../lib/tax/compute";
 import { sumCwtThroughPeriod, type CertificateForCwt } from "../lib/tax/cwt";
-import { periodStartDate, periodEndDate, cumulativeSalesQuartersThroughPeriod } from "../lib/tax/periods";
-import { manilaDateInputToJsDate, formatManilaDate } from "../lib/dates";
+import { periodStartDate, periodEndDate, cumulativeSalesQuartersThroughPeriod, priorPeriodsOf } from "../lib/tax/periods";
+import { formatManilaDate } from "../lib/dates";
 import { pesosToCents, centsToPesos } from "../lib/money";
 import type { Period, TaxpayerType, BreakdownLine, SalesQuarter } from "../lib/tax/types";
 
@@ -28,20 +28,28 @@ const INCOME_TAX_RATE_BPS = 800; // 8.00%
 const ALLOWABLE_DEDUCTION_PESOS = 250_000;
 
 /**
- * D26 — declared gross sales, one figure per sales quarter, the same
- * shape as the real QuarterlySales table this fixture stands in for.
- * A quarter you leave out of this record is treated as zero, exactly as
- * lib/filingComputation.ts treats a missing QuarterlySales row.
+ * D26/D33 — declared gross sales, one figure per sales quarter (the
+ * real QuarterlySales row's total — for a client with several customers
+ * that quarter, this is their sum; this fixture stands in for the
+ * already-summed figure, not the per-customer rows themselves, since
+ * lib/tax/compute.ts never sees customer rows). A quarter you leave out
+ * of this record is treated as zero, exactly as lib/filingComputation.ts
+ * treats a missing QuarterlySales row.
+ *
+ * D34 (brief #4b, supersedes D10) — each certificate now carries
+ * `claimedPeriod`, the filing period it was entered under (step 2),
+ * which is what decides its credit period. There is no cutoff date
+ * anymore; dateReceived is kept only as a recorded fact, shown for
+ * reference.
  */
 export interface RealFixture {
   taxpayerType: TaxpayerType;
   taxableYear: number;
   period: Period;
   quarterlySales: Partial<Record<SalesQuarter, { grossPesos: number; nonOperatingPesos?: number }>>;
-  certificates: Array<{ dateReceived: string; incomePaymentPesos: number; taxWithheldPesos: number }>;
+  certificates: Array<{ dateReceived: string; incomePaymentPesos: number; taxWithheldPesos: number; claimedPeriod: Period }>;
   priorYearExcessCreditPesos: number;
   priorPeriodPaymentsPesos: number;
-  certificateCutoffDate: string;
 }
 
 /**
@@ -115,7 +123,6 @@ async function main() {
 
   const periodStart = periodStartDate(f.taxableYear, f.period);
   const periodEnd = periodEndDate(f.taxableYear, f.period);
-  const cutoff = manilaDateInputToJsDate(f.certificateCutoffDate);
 
   // Declared gross sales (D26): the same cumulative quarter mapping the
   // real assembly layer uses (lib/filingComputation.ts) — Q1 sums Q1
@@ -142,28 +149,28 @@ async function main() {
     0,
   );
 
-  // CWT: cutoff-based, per SPEC.md 3.5 — NOT period end. Reuses the same
+  // CWT: credit period is the filing period the certificate was entered
+  // under (D34, brief #4b, supersedes D10) — reuses the same
   // sumCwtThroughPeriod() the real engine uses, so dedup/status filtering
   // behave identically here.
-  const certsForCwt: CertificateForCwt[] = f.certificates.map((c, i) => ({
+  const certsForCwt: CertificateForCwt[] = f.certificates.map((c: RealFixture["certificates"][number], i: number) => ({
     id: `fixture-${i}`,
     taxWithheldCents: pesosToCents(c.taxWithheldPesos),
-    dateReceived: manilaDateInputToJsDate(c.dateReceived),
     status: "RECORDED",
+    claimedOnFilingPeriod: c.claimedPeriod,
   }));
-  const excludedCerts = f.certificates.filter(
-    (c) => manilaDateInputToJsDate(c.dateReceived).getTime() > cutoff.getTime(),
-  );
+  const periodsThroughThis = new Set<Period>([...priorPeriodsOf(f.period), f.period]);
+  const excludedCerts = f.certificates.filter((c: RealFixture["certificates"][number]) => !periodsThroughThis.has(c.claimedPeriod));
   if (excludedCerts.length > 0) {
     console.warn(
-      `WARNING: ${excludedCerts.length} certificate(s) received after the cutoff ` +
-        `(${formatManilaDate(cutoff)}) and were excluded — they belong on a later filing:`,
+      `WARNING: ${excludedCerts.length} certificate(s) claimed on a period outside ${f.period} ` +
+        `${f.taxableYear}'s cumulative window and were excluded:`,
     );
     for (const c of excludedCerts) {
-      console.warn(`  - received ${c.dateReceived}: ₱${c.taxWithheldPesos.toLocaleString()} withheld`);
+      console.warn(`  - claimed on ${c.claimedPeriod}, received ${c.dateReceived}: ₱${c.taxWithheldPesos.toLocaleString()} withheld`);
     }
   }
-  const cumulativeCwtCents = sumCwtThroughPeriod(certsForCwt, cutoff);
+  const cumulativeCwtCents = sumCwtThroughPeriod(certsForCwt, f.period);
 
   const result = computeFiling({
     taxableYear: f.taxableYear,
@@ -178,15 +185,12 @@ async function main() {
     cumulativeCwtCents,
     priorPeriodPaymentsCents: pesosToCents(f.priorPeriodPaymentsPesos),
     priorYearExcessCreditCents: pesosToCents(f.priorYearExcessCreditPesos),
-    certificateCutoffDate: cutoff,
-    certificateCutoffSource: "MANUAL_OVERRIDE",
   });
 
   console.log("");
   console.log(`${f.taxpayerType} — TY${f.taxableYear} ${f.period} — Form ${result.formType}`);
   console.log(
-    `Period: ${formatManilaDate(periodStart)} – ${formatManilaDate(periodEnd)}   ` +
-      `Certificate cutoff: ${formatManilaDate(cutoff)}`,
+    `Period: ${formatManilaDate(periodStart)} – ${formatManilaDate(periodEnd)}`,
   );
   console.log("Compare row-by-row against BIR Form 1701Q Part IV on the return you filed.");
   console.log("");

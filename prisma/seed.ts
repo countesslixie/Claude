@@ -191,9 +191,11 @@ const WORKFLOW_STEP_TEMPLATE: Array<{
     // period end would flag the bookkeeper as "waiting" long before a
     // certificate could reasonably have arrived.
     //
-    // The 2307-scan slot is optional and non-blocking (D27, D28): a
-    // client with no certificates at all still has to be able to pass
-    // through this step, and some clients issue none whatsoever (D26).
+    // Brief #4b (D27/D34) — no step-level doc slot anymore: each
+    // certificate row entered under this step carries its own scan
+    // (Document.form2307Id), checked per-row rather than as one slot for
+    // the whole step. Done once "all certificates received" is ticked
+    // AND every row has its scan — the first blocking rule in Prepare.
     stepCode: "RECEIVE_2307",
     sequence: 2,
     title: "Receive Form 2307 from client",
@@ -201,9 +203,7 @@ const WORKFLOW_STEP_TEMPLATE: Array<{
     isWaitingState: true,
     waitingOnLabel: "Client",
     expectedResponseDays: 5,
-    requiredDocSlots: [
-      { slotCode: "form2307_scan", label: "2307 scan", required: false, acceptedTypes: ["pdf", "jpg", "png"] },
-    ],
+    requiredDocSlots: [],
   },
   {
     stepCode: "PREPARE_RETURN",
@@ -496,8 +496,10 @@ async function seedClientA(actorId: string) {
         taxableYear: 2025,
         quarter: QUARTER_LABELS[q.quarter - 1],
         grossSalesCents: grossCents,
+        finalizedAt: new Date(`${q.date}T00:00:00.000Z`),
         sourceNote: "Seeded historical data — consulting retainer from Acme Publishing Corp.",
         actorId,
+        customers: { create: [{ customerName: "Acme Publishing Corp.", amountCents: grossCents }] },
       },
     });
   }
@@ -544,24 +546,31 @@ async function seedClientB(actorId: string) {
   if (existingSales) return;
 
   // No withholding agents — a client with an empty 2307 register (§5.5).
-  // Declared per quarter, summed from what would have been separate
-  // receipts in the old per-transaction model: Q1 combines two.
-  const quarterlyGrossPesos: Record<(typeof QUARTER_LABELS)[number], number> = {
-    Q1: 80_000 + 60_000,
-    Q2: 90_000,
-    Q3: 75_000,
-    Q4: 100_000,
+  // Brief #4b (D33) — declared per customer per quarter; Q1 demonstrates
+  // two customer rows summing to one quarter total.
+  const quarterlyCustomers: Record<(typeof QUARTER_LABELS)[number], Array<{ name: string; pesos: number }>> = {
+    Q1: [
+      { name: "Direct client — Reyes Bakery", pesos: 80_000 },
+      { name: "Direct client — Villanueva Print Shop", pesos: 60_000 },
+    ],
+    Q2: [{ name: "Various direct clients", pesos: 90_000 }],
+    Q3: [{ name: "Various direct clients", pesos: 75_000 }],
+    Q4: [{ name: "Various direct clients", pesos: 100_000 }],
   };
 
   for (const quarter of QUARTER_LABELS) {
+    const rows = quarterlyCustomers[quarter];
+    const grossCents = rows.reduce((sum, r) => sum + CENTS(r.pesos), 0);
     await prisma.quarterlySales.create({
       data: {
         clientId: client.id,
         taxableYear: 2025,
         quarter,
-        grossSalesCents: CENTS(quarterlyGrossPesos[quarter]),
+        grossSalesCents: grossCents,
+        finalizedAt: new Date(),
         sourceNote: "Seeded historical data — various direct clients, no withholding.",
         actorId,
+        customers: { create: rows.map((r) => ({ customerName: r.name, amountCents: CENTS(r.pesos) })) },
       },
     });
   }
@@ -650,8 +659,10 @@ async function seedClientC(actorId: string) {
         taxableYear: 2025,
         quarter: QUARTER_LABELS[r.quarter - 1],
         grossSalesCents: grossCents,
+        finalizedAt: new Date(`${r.date}T00:00:00.000Z`),
         sourceNote: "Seeded historical data — IT consulting project for Northgate Solutions Inc.",
         actorId,
+        customers: { create: [{ customerName: "Northgate Solutions Inc.", amountCents: grossCents }] },
       },
     });
   }
@@ -781,6 +792,9 @@ async function instantiateWorkflowSteps(
       followUpCount = opts.followUpCount ?? 0;
     } else if (step.sequence <= opts.doneThroughSequence) {
       status = "DONE";
+    } else if (step.stepCode === "RECORD_SALES" || step.stepCode === "RECEIVE_2307") {
+      // Brief #4b — both self-complete and read "Waiting on client" until then.
+      status = "WAITING_EXTERNAL";
     }
 
     await prisma.workflowStep.create({
@@ -962,6 +976,50 @@ async function seedTY2026Cycle(actorId: string) {
       const q1GrossCents = CENTS(cfg.q1GrossPesos);
       const q1WhtCents = cfg.q1WhtCents;
 
+      const q1Snapshot = buildSnapshot({
+        formType: "F1701Q",
+        cumulativeGrossSalesCents: q1GrossCents,
+        cumulativeNonOperatingCents: 0,
+        allowableDeductionCents,
+        incomeTaxRateBps: 800,
+        incomeTaxDueCents: cfg.q1IncomeTaxDueCents,
+        cumulativeCwtCents: q1WhtCents,
+        priorPeriodPaymentsCents: 0,
+        priorYearExcessCreditCents: 0,
+      });
+
+      // Brief #4b (D34) — Filing created before its Form2307s so each
+      // certificate's claimedOnFilingId can point at it: that's what
+      // decides the certificate's credit period now, not dateReceived
+      // against a cutoff. Sequence 1 (RECORD_SALES) and 2 (RECEIVE_2307)
+      // are both DONE for this closed, fully-filed quarter, so
+      // certificatesAllReceivedAt is set to match.
+      const q1Filing = await prisma.filing.create({
+        data: {
+          clientId: client.id,
+          taxableYear: 2026,
+          period: "Q1",
+          formType: "F1701Q",
+          statutoryDueDate: new Date(`${DUE.Q1.statutory}T00:00:00.000Z`),
+          adjustedDueDate: new Date(`${DUE.Q1.adjusted}T00:00:00.000Z`),
+          certificatesExpectedBy: new Date(`${WORKING_CALENDAR.Q1.certificatesExpectedBy}T00:00:00.000Z`),
+          internalFilingTarget: new Date(`${WORKING_CALENDAR.Q1.internalFilingTarget}T00:00:00.000Z`),
+          certificatesAllReceivedAt: new Date(`${DUE.Q1.adjusted}T00:00:00.000Z`),
+          // status is derived below from the steps this filing actually
+          // ends up with, once instantiateWorkflowSteps has created them —
+          // never hand-typed (SPEC.md 7.2: a hardcoded literal here is
+          // exactly how the seed and deriveFilingStatus went out of sync).
+          requiresSawt: cfg.requiresSawt,
+          computationSnapshot: JSON.stringify(q1Snapshot),
+          filedAt: new Date(`${DUE.Q1.adjusted}T00:00:00.000Z`),
+          filingReferenceNumber: `EBIR-2026Q1-${cfg.clientCode.toUpperCase()}`,
+          amountPaidCents: q1Snapshot.taxPayableCents,
+          paymentDate: q1Snapshot.taxPayableCents > 0 ? new Date(`${DUE.Q1.adjusted}T00:00:00.000Z`) : null,
+          paymentChannel: q1Snapshot.taxPayableCents > 0 ? "GCash" : null,
+          actorId,
+        },
+      });
+
       // Form2307 — a credit record only (D26); declared sales are seeded
       // separately as QuarterlySales below, independent of it.
       if (cfg.requiresSawt) {
@@ -980,6 +1038,7 @@ async function seedTY2026Cycle(actorId: string) {
             withholdingRateBps: cfg.whtRateBps,
             dateReceived: new Date("2026-03-15T00:00:00.000Z"),
             status: "CLAIMED_ON_RETURN",
+            claimedOnFilingId: q1Filing.id,
             actorId,
           },
         });
@@ -991,45 +1050,17 @@ async function seedTY2026Cycle(actorId: string) {
           taxableYear: 2026,
           quarter: "Q1",
           grossSalesCents: q1GrossCents,
+          finalizedAt: new Date(`${DUE.Q1.adjusted}T00:00:00.000Z`),
           sourceNote: cfg.requiresSawt ? `Declared by ${cfg.payorName}'s client` : "Various direct clients",
           actorId,
-        },
-      });
-
-      const q1Snapshot = buildSnapshot({
-        formType: "F1701Q",
-        cumulativeGrossSalesCents: q1GrossCents,
-        cumulativeNonOperatingCents: 0,
-        allowableDeductionCents,
-        incomeTaxRateBps: 800,
-        incomeTaxDueCents: cfg.q1IncomeTaxDueCents,
-        cumulativeCwtCents: q1WhtCents,
-        priorPeriodPaymentsCents: 0,
-        priorYearExcessCreditCents: 0,
-      });
-
-      const q1Filing = await prisma.filing.create({
-        data: {
-          clientId: client.id,
-          taxableYear: 2026,
-          period: "Q1",
-          formType: "F1701Q",
-          statutoryDueDate: new Date(`${DUE.Q1.statutory}T00:00:00.000Z`),
-          adjustedDueDate: new Date(`${DUE.Q1.adjusted}T00:00:00.000Z`),
-          certificatesExpectedBy: new Date(`${WORKING_CALENDAR.Q1.certificatesExpectedBy}T00:00:00.000Z`),
-          internalFilingTarget: new Date(`${WORKING_CALENDAR.Q1.internalFilingTarget}T00:00:00.000Z`),
-          // status is derived below from the steps this filing actually
-          // ends up with, once instantiateWorkflowSteps has created them —
-          // never hand-typed (SPEC.md 7.2: a hardcoded literal here is
-          // exactly how the seed and deriveFilingStatus went out of sync).
-          requiresSawt: cfg.requiresSawt,
-          computationSnapshot: JSON.stringify(q1Snapshot),
-          filedAt: new Date(`${DUE.Q1.adjusted}T00:00:00.000Z`),
-          filingReferenceNumber: `EBIR-2026Q1-${cfg.clientCode.toUpperCase()}`,
-          amountPaidCents: q1Snapshot.taxPayableCents,
-          paymentDate: q1Snapshot.taxPayableCents > 0 ? new Date(`${DUE.Q1.adjusted}T00:00:00.000Z`) : null,
-          paymentChannel: q1Snapshot.taxPayableCents > 0 ? "GCash" : null,
-          actorId,
+          customers: {
+            create: [
+              {
+                customerName: cfg.requiresSawt ? cfg.payorName : "Various direct clients",
+                amountCents: q1GrossCents,
+              },
+            ],
+          },
         },
       });
 
@@ -1060,40 +1091,6 @@ async function seedTY2026Cycle(actorId: string) {
       const q1WhtCents = cfg.q1WhtCents;
       const cumGrossQ2 = q1GrossCents + q2GrossCents;
       const cumCwtQ2 = q1WhtCents + q2WhtCents;
-
-      // Form2307 — a credit record only (D26); declared sales are seeded
-      // separately as QuarterlySales below, independent of it.
-      if (cfg.requiresSawt) {
-        await prisma.form2307.create({
-          data: {
-            clientId: client.id,
-            taxableYear: 2026,
-            payorName: cfg.payorName,
-            payorTin: cfg.payorTin,
-            periodFrom: new Date("2026-04-01T00:00:00.000Z"),
-            periodTo: new Date("2026-06-15T00:00:00.000Z"),
-            quarterCovered: 2,
-            atcCode: cfg.atcCode,
-            incomePaymentCents: q2GrossCents,
-            taxWithheldCents: q2WhtCents,
-            withholdingRateBps: cfg.whtRateBps,
-            dateReceived: new Date("2026-06-15T00:00:00.000Z"),
-            status: cfg.q2.filed ? "CLAIMED_ON_RETURN" : "RECORDED",
-            actorId,
-          },
-        });
-      }
-
-      await prisma.quarterlySales.create({
-        data: {
-          clientId: client.id,
-          taxableYear: 2026,
-          quarter: "Q2",
-          grossSalesCents: q2GrossCents,
-          sourceNote: cfg.requiresSawt ? `Declared by ${cfg.payorName}'s client` : "Various direct clients",
-          actorId,
-        },
-      });
 
       // Q1's actual payment (0 if it was an overpayment) becomes Q2's priorPeriodPayments.
       const q1Snapshot = buildSnapshot({
@@ -1145,7 +1142,57 @@ async function seedTY2026Cycle(actorId: string) {
               ? new Date(`${DUE.Q2.adjusted}T00:00:00.000Z`)
               : null,
           paymentChannel: cfg.q2.filed && q2Snapshot.taxPayableCents > 0 ? "GCash" : null,
+          // Brief #4b — steps 1 and 2 (sequence 1, 2) are DONE for every
+          // client's Q2 here (doneThroughSequence is always >= 3), so
+          // certificatesAllReceivedAt is set to match, independent of
+          // whether the return itself (cfg.q2.filed) has been filed yet.
+          certificatesAllReceivedAt: new Date(`${WORKING_CALENDAR.Q2.certificatesExpectedBy}T00:00:00.000Z`),
           actorId,
+        },
+      });
+
+      // Form2307 — a credit record only (D26); declared sales are seeded
+      // separately as QuarterlySales below, independent of it. Entered
+      // under Q2's step 2 (D34): claimedOnFilingId points at q2Filing.
+      if (cfg.requiresSawt) {
+        await prisma.form2307.create({
+          data: {
+            clientId: client.id,
+            taxableYear: 2026,
+            payorName: cfg.payorName,
+            payorTin: cfg.payorTin,
+            periodFrom: new Date("2026-04-01T00:00:00.000Z"),
+            periodTo: new Date("2026-06-15T00:00:00.000Z"),
+            quarterCovered: 2,
+            atcCode: cfg.atcCode,
+            incomePaymentCents: q2GrossCents,
+            taxWithheldCents: q2WhtCents,
+            withholdingRateBps: cfg.whtRateBps,
+            dateReceived: new Date("2026-06-15T00:00:00.000Z"),
+            status: cfg.q2.filed ? "CLAIMED_ON_RETURN" : "RECORDED",
+            claimedOnFilingId: q2Filing.id,
+            actorId,
+          },
+        });
+      }
+
+      await prisma.quarterlySales.create({
+        data: {
+          clientId: client.id,
+          taxableYear: 2026,
+          quarter: "Q2",
+          grossSalesCents: q2GrossCents,
+          finalizedAt: new Date(`${WORKING_CALENDAR.Q2.certificatesExpectedBy}T00:00:00.000Z`),
+          sourceNote: cfg.requiresSawt ? `Declared by ${cfg.payorName}'s client` : "Various direct clients",
+          actorId,
+          customers: {
+            create: [
+              {
+                customerName: cfg.requiresSawt ? cfg.payorName : "Various direct clients",
+                amountCents: q2GrossCents,
+              },
+            ],
+          },
         },
       });
 

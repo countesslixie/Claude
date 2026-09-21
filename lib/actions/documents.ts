@@ -7,6 +7,7 @@ import { logActivity } from "@/lib/activityLog";
 import { buildStorageRelativePath, saveDocumentFile } from "@/lib/documents/storage";
 import { computeSha256 } from "@/lib/documents/storage";
 import { manilaDateInputToJsDate, formatManilaDate } from "@/lib/dates";
+import { recomputeReceive2307Status } from "@/lib/actions/workflowSteps";
 
 export type UploadDocumentResult = {
   ok: boolean;
@@ -50,6 +51,10 @@ export async function uploadDocument(formData: FormData): Promise<UploadDocument
   const docSlotCode = String(formData.get("docSlotCode") ?? "");
   const documentDateInput = String(formData.get("documentDate") ?? "");
   const notes = String(formData.get("notes") ?? "") || null;
+  // Brief #4b — step 2's per-certificate scan: when present, this
+  // document is the scan for one specific Form2307 row, not the step as
+  // a whole (there is no step-level 2307-scan slot anymore).
+  const form2307Id = String(formData.get("form2307Id") ?? "") || null;
 
   if (!workflowStepId || !docSlotCode) {
     return { ok: false, error: "Missing step or document slot." };
@@ -105,6 +110,7 @@ export async function uploadDocument(formData: FormData): Promise<UploadDocument
       filingId: filing.id,
       workflowStepId: step.id,
       docSlotCode,
+      form2307Id,
       category: (SLOT_CODE_TO_CATEGORY[docSlotCode] ?? "OTHER") as never,
       originalFilename: file.name,
       storedPath: relativePath,
@@ -119,6 +125,7 @@ export async function uploadDocument(formData: FormData): Promise<UploadDocument
 
   await logActivity({ entityType: "Document", entityId: created.id, action: "CREATE", after: created, actorId });
 
+  if (step.stepCode === "RECEIVE_2307") await recomputeReceive2307Status(filing.id);
   revalidatePath(`/clients/${client.id}/filings/${filing.id}`);
 
   return { ok: true, documentId: created.id, duplicateWarning };
@@ -126,7 +133,7 @@ export async function uploadDocument(formData: FormData): Promise<UploadDocument
 
 /** Soft-delete — financial/audit records are never hard-deleted (SPEC.md 14). */
 export async function deleteDocument(documentId: string, reason: string): Promise<void> {
-  const before = await prisma.document.findUnique({ where: { id: documentId } });
+  const before = await prisma.document.findUnique({ where: { id: documentId }, include: { workflowStep: true } });
   if (!before) return;
 
   const actorId = await getActorId();
@@ -145,6 +152,7 @@ export async function deleteDocument(documentId: string, reason: string): Promis
   });
 
   if (before.filingId) {
+    if (before.workflowStep?.stepCode === "RECEIVE_2307") await recomputeReceive2307Status(before.filingId);
     revalidatePath(`/clients/${before.clientId}/filings/${before.filingId}`);
   }
 }

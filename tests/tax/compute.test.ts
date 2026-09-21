@@ -31,10 +31,6 @@ function baseInput(overrides: Partial<FilingComputationInput>): FilingComputatio
     cumulativeCwtCents: 0,
     priorPeriodPaymentsCents: 0,
     priorYearExcessCreditCents: 0,
-    // P5: pass-through metadata, not exercised by these compute-math tests —
-    // see tests/tax/cwt.test.ts for resolveCertificateCutoffDate coverage.
-    certificateCutoffDate: new Date("2026-12-31"),
-    certificateCutoffSource: "TODAY",
     ...overrides,
   };
 }
@@ -249,60 +245,60 @@ describe("SPEC.md 16 item 4 — negative payable renders as overpayment, never n
 });
 
 describe("SPEC.md 16 item 5 — cumulative CWT never double-counts a certificate across periods", () => {
-  it("summing through Q2 includes the Q1 certificate once, not twice", () => {
+  it("summing through Q2 includes the Q1-claimed certificate once, not twice", () => {
     const certificates = [
-      { id: "c1", taxWithheldCents: P(1_000), dateReceived: new Date("2026-02-15"), status: "RECORDED" as const },
-      { id: "c2", taxWithheldCents: P(2_000), dateReceived: new Date("2026-05-15"), status: "RECORDED" as const },
+      { id: "c1", taxWithheldCents: P(1_000), status: "RECORDED" as const, claimedOnFilingPeriod: "Q1" as const },
+      { id: "c2", taxWithheldCents: P(2_000), status: "RECORDED" as const, claimedOnFilingPeriod: "Q2" as const },
     ];
-    const throughQ1 = sumCwtThroughPeriod(certificates, new Date("2026-03-31"));
-    const throughQ2 = sumCwtThroughPeriod(certificates, new Date("2026-06-30"));
+    const throughQ1 = sumCwtThroughPeriod(certificates, "Q1");
+    const throughQ2 = sumCwtThroughPeriod(certificates, "Q2");
     expect(throughQ1).toBe(P(1_000));
     expect(throughQ2).toBe(P(3_000)); // 1,000 + 2,000, not 1,000 + 1,000 + 2,000
   });
 
   it("only RECORDED/CLAIMED_ON_RETURN certificates count (per SPEC.md 3.2)", () => {
     const certificates = [
-      { id: "c1", taxWithheldCents: P(1_000), dateReceived: new Date("2026-01-10"), status: "RECEIVED" as const },
-      { id: "c2", taxWithheldCents: P(2_000), dateReceived: new Date("2026-01-15"), status: "RECORDED" as const },
-      { id: "c3", taxWithheldCents: P(3_000), dateReceived: new Date("2026-01-20"), status: "CLAIMED_ON_RETURN" as const },
+      { id: "c1", taxWithheldCents: P(1_000), status: "RECEIVED" as const, claimedOnFilingPeriod: "Q1" as const },
+      { id: "c2", taxWithheldCents: P(2_000), status: "RECORDED" as const, claimedOnFilingPeriod: "Q1" as const },
+      { id: "c3", taxWithheldCents: P(3_000), status: "CLAIMED_ON_RETURN" as const, claimedOnFilingPeriod: "Q1" as const },
     ];
-    const total = sumCwtThroughPeriod(certificates, new Date("2026-03-31"));
+    const total = sumCwtThroughPeriod(certificates, "Q1");
     expect(total).toBe(P(5_000)); // RECEIVED (not yet recorded) excluded
   });
 
   it("a duplicate array entry (same id twice) is only summed once", () => {
-    const cert = { id: "c1", taxWithheldCents: P(1_000), dateReceived: new Date("2026-01-10"), status: "RECORDED" as const };
-    const total = sumCwtThroughPeriod([cert, { ...cert }], new Date("2026-03-31"));
+    const cert = { id: "c1", taxWithheldCents: P(1_000), status: "RECORDED" as const, claimedOnFilingPeriod: "Q1" as const };
+    const total = sumCwtThroughPeriod([cert, { ...cert }], "Q1");
     expect(total).toBe(P(1_000)); // not 2,000
   });
 
-  it("a certificate arriving late (dateReceived in Q3) is excluded from a fresh Q1 recompute and included in Q3 exactly once", () => {
-    // Economically a Q1 certificate, but not physically received until August.
-    const lateArrivingQ1Cert = {
-      id: "late-q1",
+  it("D34 — a certificate entered under Q3's step 2 is excluded from Q1's cumulative and included in Q3 (and ANNUAL) exactly once", () => {
+    // Economically a Q1 certificate, but not entered until Q3's step 2
+    // (it physically arrived in August).
+    const lateArrivingCert = {
+      id: "late",
       taxWithheldCents: P(5_000),
-      dateReceived: new Date("2026-08-05"),
       status: "RECORDED" as const,
+      claimedOnFilingPeriod: "Q3" as const,
     };
-    const q3OnlyCert = {
+    const q3OwnCert = {
       id: "q3-cert",
       taxWithheldCents: P(2_000),
-      dateReceived: new Date("2026-08-20"),
       status: "RECORDED" as const,
+      claimedOnFilingPeriod: "Q3" as const,
     };
-    const allCerts = [lateArrivingQ1Cert, q3OnlyCert];
+    const allCerts = [lateArrivingCert, q3OwnCert];
 
-    // Recomputing Q1 today, with the late certificate now sitting in the
-    // system, still excludes it — filtering is on dateReceived, a fixed
-    // fact, not "as of when you ask." Q1's frozen snapshot is never
-    // retroactively altered by this recompute.
-    const q1Recompute = sumCwtThroughPeriod(allCerts, new Date("2026-03-31"));
-    expect(q1Recompute).toBe(0);
+    // Q1's cumulative excludes it — claimedOnFilingPeriod is a fixed
+    // fact set once, at entry, never reassigned (D11: no amended
+    // returns), so Q1's frozen snapshot is never retroactively altered.
+    const q1 = sumCwtThroughPeriod(allCerts, "Q1");
+    expect(q1).toBe(0);
 
     // Q3's cumulative includes it exactly once, in the period it was
-    // actually recorded.
-    const q3Cumulative = sumCwtThroughPeriod(allCerts, new Date("2026-09-30"));
-    expect(q3Cumulative).toBe(P(7_000));
+    // actually entered.
+    const q3 = sumCwtThroughPeriod(allCerts, "Q3");
+    expect(q3).toBe(P(7_000));
   });
 });
 

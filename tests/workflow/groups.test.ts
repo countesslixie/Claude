@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { WORKFLOW_GROUPS, groupForStepCode, currentGroupCode, summarizeGroup, type GroupStepInput } from "@/lib/workflow/groups";
+import {
+  WORKFLOW_GROUPS,
+  groupForStepCode,
+  currentGroupCode,
+  summarizeGroup,
+  prepareGroupBlockReason,
+  type GroupStepInput,
+} from "@/lib/workflow/groups";
 
 /**
  * Brief #4a — the sixteen steps wrapped in five groups. Grouping changes
@@ -83,8 +90,17 @@ describe("summarizeGroup", () => {
   const file = WORKFLOW_GROUPS.find((g) => g.code === "FILE")!;
   const sawt = WORKFLOW_GROUPS.find((g) => g.code === "SAWT")!;
 
-  it("§4 -- Prepare never blocks: no group in it has a required doc slot", () => {
+  it("brief #4b -- Prepare blocks until steps 1 (RECORD_SALES) and 2 (RECEIVE_2307) are resolved, not on a doc slot", () => {
     const steps: GroupStepInput[] = prepare.stepCodes.map((stepCode) => ({ stepCode, status: "PENDING" }));
+    const summary = summarizeGroup(prepare, steps);
+    expect(summary.blockReason).toMatch(/quarterly sales/i);
+  });
+
+  it("brief #4b -- Prepare unblocks once steps 1 and 2 are both resolved", () => {
+    const steps: GroupStepInput[] = prepare.stepCodes.map((stepCode) => ({
+      stepCode,
+      status: stepCode === "RECORD_SALES" || stepCode === "RECEIVE_2307" ? "DONE" : "PENDING",
+    }));
     const summary = summarizeGroup(prepare, steps);
     expect(summary.blockReason).toBeNull();
   });
@@ -164,14 +180,50 @@ describe("summarizeGroup", () => {
   });
 
   it("an optional slot never contributes to the block reason or the outstanding label", () => {
-    const steps: GroupStepInput[] = prepare.stepCodes.map((stepCode) => ({
+    const close = WORKFLOW_GROUPS.find((g) => g.code === "CLOSE")!;
+    const steps: GroupStepInput[] = close.stepCodes.map((stepCode) => ({
       stepCode,
       status: "PENDING",
-      requiredDocSlots: stepCode === "RECEIVE_2307" ? [OPTIONAL_SLOT("form2307_scan", "2307 scan")] : [],
+      requiredDocSlots: stepCode === "EAFS_SUBMIT" ? [OPTIONAL_SLOT("eafs_confirmation", "eAFS confirmation")] : [],
       documents: [],
     }));
-    const summary = summarizeGroup(prepare, steps);
+    const summary = summarizeGroup(close, steps);
     expect(summary.blockReason).toBeNull();
     expect(summary.outstandingLabel).toBeNull();
+  });
+});
+
+describe("prepareGroupBlockReason (brief #4b)", () => {
+  it("names both steps missing when neither is resolved", () => {
+    const reason = prepareGroupBlockReason([
+      { stepCode: "RECORD_SALES", status: "WAITING_EXTERNAL" },
+      { stepCode: "RECEIVE_2307", status: "WAITING_EXTERNAL" },
+    ]);
+    expect(reason).toMatch(/quarterly sales/i);
+    expect(reason).toMatch(/2307/i);
+  });
+
+  it("names only the unresolved step when the other is done", () => {
+    const reason = prepareGroupBlockReason([
+      { stepCode: "RECORD_SALES", status: "DONE" },
+      { stepCode: "RECEIVE_2307", status: "WAITING_EXTERNAL" },
+    ]);
+    expect(reason).not.toMatch(/quarterly sales/i);
+    expect(reason).toMatch(/2307/i);
+  });
+
+  it("is null once step 1 is DONE and step 2 is DONE or SKIPPED", () => {
+    expect(
+      prepareGroupBlockReason([
+        { stepCode: "RECORD_SALES", status: "DONE" },
+        { stepCode: "RECEIVE_2307", status: "DONE" },
+      ]),
+    ).toBeNull();
+    expect(
+      prepareGroupBlockReason([
+        { stepCode: "RECORD_SALES", status: "DONE" },
+        { stepCode: "RECEIVE_2307", status: "SKIPPED" },
+      ]),
+    ).toBeNull();
   });
 });

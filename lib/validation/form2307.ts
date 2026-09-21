@@ -5,35 +5,39 @@ const pesos = z
   .trim()
   .regex(/^\d+(,\d{3})*(\.\d{1,2})?$/, "Enter a non-negative peso amount");
 
-export const form2307Schema = z.object({
+const optionalText = z
+  .string()
+  .trim()
+  .optional()
+  .transform((v) => (v === "" || v === undefined ? undefined : v));
+
+/**
+ * Brief #4b — one certificate row entered under a filing's step 2.
+ * Essential fields (payor, amounts, date received) are required; the
+ * remaining existing Form2307 fields (payor TIN/address, ATC code,
+ * withholding rate, the certificate's own period) sit behind "more" and
+ * are optional here — left blank, the action defaults them (period to
+ * the filing's own quarter, rate to the client's default, ATC code left
+ * empty and unverified per D19) rather than inventing a value.
+ * quarterCovered is no longer a form field at all: it's derived from
+ * the filing this certificate is entered under.
+ */
+export const certificateEntrySchema = z.object({
   payorName: z.string().trim().min(1, "Required"),
-  payorTin: z
-    .string()
-    .trim()
-    .optional()
-    .transform((v) => (v === "" ? undefined : v)),
-  payorAddress: z
-    .string()
-    .trim()
-    .optional()
-    .transform((v) => (v === "" ? undefined : v)),
-  periodFrom: z.string().trim().min(1, "Required"),
-  periodTo: z.string().trim().min(1, "Required"),
-  quarterCovered: z.coerce.number().int().min(1).max(4),
-  atcCode: z.string().trim().min(1, "Required"),
   incomePayment: pesos,
   taxWithheld: pesos,
-  withholdingRateBps: z.coerce.number().int().min(0).max(10000),
-  dateReceived: z
+  dateReceived: z.string().trim().min(1, "Required"),
+  payorTin: optionalText,
+  payorAddress: optionalText,
+  atcCode: optionalText,
+  withholdingRateBps: z
     .string()
     .trim()
     .optional()
-    .transform((v) => (v === "" ? undefined : v)),
-  notes: z
-    .string()
-    .trim()
-    .optional()
-    .transform((v) => (v === "" ? undefined : v)),
+    .transform((v) => (v === "" || v === undefined ? undefined : Number(v))),
+  periodFrom: optionalText,
+  periodTo: optionalText,
+  notes: optionalText,
 });
 
-export type Form2307Input = z.infer<typeof form2307Schema>;
+export type CertificateEntryInput = z.infer<typeof certificateEntrySchema>;

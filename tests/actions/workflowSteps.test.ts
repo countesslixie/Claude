@@ -276,9 +276,22 @@ describe("workflow step actions", () => {
     });
   });
 
-  describe("brief #4a: markGroupDone", () => {
-    it("marks every unresolved step in the group done at once -- Prepare needs no documents", async () => {
-      const { filing } = await makeClientWithQ2Filing("p4-group-prepare");
+  describe("brief #4a/#4b: markGroupDone", () => {
+    it("brief #4b -- Prepare's Mark done is blocked until steps 1 and 2 are resolved", async () => {
+      const { filing } = await makeClientWithQ2Filing("p4-group-prepare-blocked");
+
+      const blocked = await markGroupDone(filing.id, "PREPARE");
+      expect(blocked.ok).toBe(false);
+      expect(blocked.error).toMatch(/quarterly sales/i);
+
+      const recordSalesStep = await prisma.workflowStep.findFirstOrThrow({
+        where: { filingId: filing.id, stepCode: "RECORD_SALES" },
+      });
+      await markStepDone(recordSalesStep.id);
+      await skipStep(
+        (await prisma.workflowStep.findFirstOrThrow({ where: { filingId: filing.id, stepCode: "RECEIVE_2307" } })).id,
+        "No 2307s expected this quarter.",
+      );
 
       const result = await markGroupDone(filing.id, "PREPARE");
       expect(result.ok).toBe(true);
@@ -286,7 +299,7 @@ describe("workflow step actions", () => {
       const steps = await prisma.workflowStep.findMany({
         where: { filingId: filing.id, stepCode: { in: ["RECORD_SALES", "RECEIVE_2307", "PREPARE_RETURN", "ADVISE_CLIENT"] } },
       });
-      expect(steps.every((s) => s.status === "DONE")).toBe(true);
+      expect(steps.every((s) => s.status === "DONE" || s.status === "SKIPPED")).toBe(true);
     });
 
     it("is blocked while a required document is missing, and succeeds once it's attached -- the same rule as the per-step control", async () => {
@@ -393,6 +406,17 @@ describe("workflow step actions", () => {
 
     it("skips steps already DONE/NA/SKIPPED and leaves them untouched", async () => {
       const { filing } = await makeClientWithQ2Filing("p4-group-skip-resolved");
+
+      // Steps 1 and 2 must be resolved first (brief #4b) before Prepare's
+      // own Mark done will run at all.
+      const recordSalesStep = await prisma.workflowStep.findFirstOrThrow({
+        where: { filingId: filing.id, stepCode: "RECORD_SALES" },
+      });
+      await markStepDone(recordSalesStep.id);
+      const receive2307Step = await prisma.workflowStep.findFirstOrThrow({
+        where: { filingId: filing.id, stepCode: "RECEIVE_2307" },
+      });
+      await skipStep(receive2307Step.id, "No 2307s expected this quarter.");
 
       const adviseStep = await prisma.workflowStep.findFirstOrThrow({ where: { filingId: filing.id, stepCode: "ADVISE_CLIENT" } });
       await skipStep(adviseStep.id, "Client already briefed verbally.");

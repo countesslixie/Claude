@@ -4,9 +4,9 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getActorId } from "@/lib/actor";
 import { logActivity } from "@/lib/activityLog";
-import { manilaDateInputToJsDate } from "@/lib/dates";
 import { generateFilingsForClientYear } from "@/lib/workflow/filingGeneration";
 import { ensureComputationSheetSaved } from "@/lib/documents/computationSheet";
+import { recomputeReceive2307Status } from "@/lib/actions/workflowSteps";
 
 export type GenerateFilingsResult =
   | { ok: true; createdCount: number; skippedCount: number }
@@ -106,6 +106,38 @@ export async function acknowledgeAmendmentAlert(alertId: string, note: string): 
 }
 
 /**
+ * Step 2's "All certificates received" checkbox (brief #4b, D34). Ticking
+ * it is one half of what marks step 2 DONE (the other half is every
+ * certificate row having its own scan — see
+ * lib/actions/workflowSteps.ts's recomputeReceive2307Status). Unticking
+ * reverts step 2 to not-done, so a certificate that arrives after ticking
+ * but before this filing is filed can still be added: untick, add the
+ * row and its scan, re-tick.
+ */
+export async function setAllCertificatesReceived(filingId: string, received: boolean): Promise<void> {
+  const before = await prisma.filing.findUnique({ where: { id: filingId } });
+  if (!before) return;
+
+  const actorId = await getActorId();
+  const updated = await prisma.filing.update({
+    where: { id: filingId },
+    data: { certificatesAllReceivedAt: received ? new Date() : null, actorId },
+  });
+
+  await logActivity({
+    entityType: "Filing",
+    entityId: filingId,
+    action: "UPDATE",
+    before,
+    after: updated,
+    actorId,
+  });
+
+  await recomputeReceive2307Status(filingId);
+  revalidatePath(`/clients/${before.clientId}/filings/${filingId}`);
+}
+
+/**
  * Dismisses the filing's completeness note (§5.3) — informational only,
  * never a block. Dismissing hides it on this filing; it does not
  * reappear on its own.
@@ -118,38 +150,6 @@ export async function dismissCompletenessNote(filingId: string): Promise<void> {
   const updated = await prisma.filing.update({
     where: { id: filingId },
     data: { completenessNoteDismissedAt: new Date(), actorId },
-  });
-
-  await logActivity({
-    entityType: "Filing",
-    entityId: filingId,
-    action: "UPDATE",
-    before,
-    after: updated,
-    actorId,
-  });
-
-  revalidatePath(`/clients/${before.clientId}/filings/${filingId}`);
-}
-
-/**
- * Sets or clears the manual certificate-cutoff override (SPEC.md 3.5,
- * Phase 2b P5). Always editable — this is a correction to which
- * certificates the filing claims, not part of the frozen
- * computationSnapshot, so it can be changed even after filing. Pass an
- * empty string to clear the override and fall back to the resolver's
- * filedAt/today rule.
- */
-export async function setCertificateCutoffOverride(filingId: string, dateInput: string): Promise<void> {
-  const before = await prisma.filing.findUnique({ where: { id: filingId } });
-  if (!before) return;
-
-  const override = dateInput ? manilaDateInputToJsDate(dateInput) : null;
-
-  const actorId = await getActorId();
-  const updated = await prisma.filing.update({
-    where: { id: filingId },
-    data: { certificateCutoffOverride: override, actorId },
   });
 
   await logActivity({

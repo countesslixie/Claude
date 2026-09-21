@@ -1,9 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import {
-  resolveCertificateCutoffForFilingPeriod,
-  getAllCertificatesThisYear,
-  selectUnbatchedClaimableCertificates,
-} from "./eligibleCertificates";
+import { getAllCertificatesThisYear, selectUnbatchedClaimableCertificates } from "./eligibleCertificates";
 import { buildKeyingWorksheet, type KeyingWorksheet } from "./keyingWorksheet";
 import type { Period } from "@/lib/tax/types";
 
@@ -20,9 +16,8 @@ export async function assembleKeyingWorksheet(
   period: Period,
 ): Promise<KeyingWorksheet> {
   const client = await prisma.client.findUniqueOrThrow({ where: { id: clientId } });
-  const cutoffDate = await resolveCertificateCutoffForFilingPeriod(clientId, taxableYear, period);
   const allCertificates = await getAllCertificatesThisYear(clientId, taxableYear);
-  const eligible = selectUnbatchedClaimableCertificates(allCertificates, period, cutoffDate);
+  const eligible = selectUnbatchedClaimableCertificates(allCertificates, period);
 
   const atcCodes = await prisma.atcCode.findMany({
     where: { code: { in: [...new Set(eligible.map((c) => c.atcCode))] } },

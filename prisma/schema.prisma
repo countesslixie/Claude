@@ -228,6 +228,16 @@ model Client {
 // return of its own and is picked up by the ANNUAL return (see
 // lib/tax/quarterlySales.ts's cumulative mapping). A missing row for a
 // quarter is treated as zero, not an error.
+//
+// Brief #4b (D33) — gross sales is now the sum of zero or more per-customer
+// rows (QuarterlySalesCustomer). grossSalesCents stays on this row as the
+// figure the tax engine reads, but it is derived/recomputed from the
+// customer rows on every write, never typed directly. noSalesThisQuarter
+// records a deliberate "no sales this quarter" ₱0, distinct from a
+// quarter with no row at all (hasSalesRecordedForPeriod). finalizedAt is
+// set the first time this quarter is Saved for real (not as a draft) and,
+// once set, is never cleared by further edits — it drives step 1's
+// derived Done status.
 model QuarterlySales {
   id       String @id @default(cuid())
   clientId String
@@ -238,9 +248,13 @@ model QuarterlySales {
 
   grossSalesCents         Int
   nonOperatingIncomeCents Int @default(0)
+  noSalesThisQuarter      Boolean @default(false)
+  finalizedAt             DateTime?
 
   sourceNote String? // how the figure was obtained from the client
   notes      String?
+
+  customers QuarterlySalesCustomer[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -248,6 +262,23 @@ model QuarterlySales {
 
   @@unique([clientId, taxableYear, quarter])
   @@index([clientId, taxableYear])
+}
+
+// Brief #4b (D33) — one row per customer contributing to a quarter's gross
+// sales. The quarter's grossSalesCents is the sum of these rows; rows are
+// freely added/removed and fully replaced on every save of their quarter.
+model QuarterlySalesCustomer {
+  id               String         @id @default(cuid())
+  quarterlySalesId String
+  quarterlySales   QuarterlySales @relation(fields: [quarterlySalesId], references: [id], onDelete: Cascade)
+
+  customerName String
+  amountCents  Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([quarterlySalesId])
 }
 
 // One row per client per taxable year. Anchor for annual state.
@@ -293,12 +324,22 @@ model Form2307 {
   taxWithheldCents   Int
   withholdingRateBps Int
 
+  // Kept as a recorded fact about the certificate (D33/D34 — brief #4b).
+  // It is no longer what decides which filing's credit it counts toward —
+  // see claimedOnFilingId below (D10 superseded).
   dateReceived DateTime?
   status       Form2307Status @default(RECEIVED)
 
   documentId      String?
   primaryDocument Document? @relation("Form2307PrimaryDocument", fields: [documentId], references: [id])
 
+  // D34 (brief #4b, supersedes D10) — set once, at entry, to the filing
+  // whose step 2 this certificate was entered under. This is now what
+  // decides the certificate's credit period: it counts cumulatively from
+  // that filing's period onward (lib/tax/cwt.ts), never reassigned by
+  // dateReceived or a cutoff date. Locked once that filing's step 5
+  // (FILE_RETURN) is DONE — a certificate arriving after filing is
+  // entered under the next open filing instead (D11: no amended returns).
   claimedOnFilingId String?
   claimedOnFiling   Filing?    @relation(fields: [claimedOnFilingId], references: [id])
   sawtBatchId       String?
@@ -342,12 +383,12 @@ model Filing {
 
   computationSnapshot Json? // FROZEN once filedAt is set; never rewritten silently
 
-  // Manual correction to which certificates this filing claims (SPEC.md
-  // 3.5 CWT cutoff rule, Phase 2b P5). Always editable, even on a frozen
-  // filing — it does not itself freeze anything; it only feeds
-  // resolveCertificateCutoffDate(), which always prefers it over filedAt
-  // or "today" when set.
-  certificateCutoffOverride DateTime?
+  // Brief #4b (D34) — step 2's "All certificates received" checkbox.
+  // Step 2 (RECEIVE_2307) is DONE only once this is set AND every
+  // certificate entered under this filing (Form2307.claimedOnFilingId)
+  // has its own scan attached; unticking reverts step 2 to not-done so a
+  // late-arriving certificate can be added before filing.
+  certificatesAllReceivedAt DateTime?
 
   filedAt               DateTime?
   filingReferenceNumber String?

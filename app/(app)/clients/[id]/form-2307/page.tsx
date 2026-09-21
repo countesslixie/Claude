@@ -35,10 +35,10 @@ export default async function Form2307RegisterPage({
   const taxableYear = year ? Number(year) : currentTaxableYearManila();
   const period: Period = ALL_PERIODS.includes(periodParam as Period) ? (periodParam as Period) : "Q1";
   const quarters = periodToQuarters(period);
-  const newFormQuarter = quarters[0];
 
   const certificates = await prisma.form2307.findMany({
     where: { clientId: id, taxableYear, quarterCovered: { in: [...quarters] }, deletedAt: null },
+    include: { claimedOnFiling: { select: { id: true, period: true } } },
     orderBy: { dateReceived: "asc" },
   });
 
@@ -52,8 +52,10 @@ export default async function Form2307RegisterPage({
             Form 2307 register — {client.registeredName}
           </h1>
           <p className="text-sm text-slate-500">
-            A 2307 is a credit record — what one payor paid and withheld. It never contributes to gross
-            sales; declared income is entered separately on the{" "}
+            Read-only. Certificates are entered under step 2 of the filing they belong to (brief #4b) —
+            open a filing and go to &quot;Receive Form 2307&quot; to add or remove one. A 2307 is a credit
+            record — what one payor paid and withheld. It never contributes to gross sales; declared
+            income is entered separately on the{" "}
             <Link href={`/clients/${id}/income`} className="underline">
               income page
             </Link>
@@ -63,9 +65,6 @@ export default async function Form2307RegisterPage({
         <div className="flex gap-2">
           <Link href={`/clients/${id}/sawt-worksheet?year=${taxableYear}&period=${period}`}>
             <Button variant="secondary">Keying worksheet</Button>
-          </Link>
-          <Link href={`/clients/${id}/form-2307/new?year=${taxableYear}&quarter=${newFormQuarter}`}>
-            <Button>New Form 2307</Button>
           </Link>
         </div>
       </div>
@@ -102,6 +101,7 @@ export default async function Form2307RegisterPage({
               <th>Tax withheld</th>
               <th>Rate</th>
               <th>Status</th>
+              <th>Entered under</th>
             </tr>
           </thead>
           <tbody>
@@ -109,18 +109,27 @@ export default async function Form2307RegisterPage({
               <tr key={c.id}>
                 <td>{formatManilaDate(c.dateReceived)}</td>
                 <td>{c.payorName}</td>
-                <td className="font-mono text-xs">{c.atcCode}</td>
+                <td className="font-mono text-xs">{c.atcCode || "—"}</td>
                 <td>{centsToPesos(c.incomePaymentCents, { withSymbol: true })}</td>
                 <td>{centsToPesos(c.taxWithheldCents, { withSymbol: true })}</td>
                 <td>{bpsToPercentLabel(c.withholdingRateBps)}</td>
                 <td>
                   <StatusBadge tone={STATUS_TONE[c.status] ?? "pending"}>{c.status}</StatusBadge>
                 </td>
+                <td>
+                  {c.claimedOnFiling ? (
+                    <Link href={`/clients/${id}/filings/${c.claimedOnFiling.id}`} className="underline">
+                      {c.claimedOnFiling.period}
+                    </Link>
+                  ) : (
+                    "—"
+                  )}
+                </td>
               </tr>
             ))}
             {certificates.length === 0 && (
               <tr>
-                <td colSpan={7} className="py-8 text-center text-sm text-slate-400">
+                <td colSpan={8} className="py-8 text-center text-sm text-slate-400">
                   No Form 2307 certificates for this period.
                 </td>
               </tr>

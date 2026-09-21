@@ -4,10 +4,11 @@ import { prisma } from "@/lib/prisma";
 import { assembleAndComputeFiling, hasSalesRecordedForPeriod } from "@/lib/filingComputation";
 import {
   acknowledgeReceiptsComplete,
-  setCertificateCutoffOverride,
+  setAllCertificatesReceived,
   acknowledgeAmendmentAlert,
   dismissCompletenessNote,
 } from "@/lib/actions/filings";
+import { addCertificate } from "@/lib/actions/form2307";
 import { StatusBadge } from "@/components/status-badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -16,6 +17,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { CopyTextarea } from "@/components/copy-textarea";
 import { WorkflowStepCard, type StepCardData } from "@/components/workflow-step-card";
 import { WorkflowGroupCard } from "@/components/workflow-group-card";
+import { RecordSalesStepCard } from "@/components/record-sales-step-card";
+import { Receive2307StepCard, type CertificateRow } from "@/components/receive-2307-step-card";
 import { NextActionControl } from "@/components/next-action-control";
 import { ComputationSheetPanel } from "@/components/computation-sheet-panel";
 import { centsToPesos } from "@/lib/money";
@@ -26,14 +29,8 @@ import { WORKFLOW_GROUPS, currentGroupCode, summarizeGroup, type GroupStepInput 
 import { parseDocSlots, type DocSlotDef, type WorkflowStepStatus } from "@/lib/workflow/types";
 import { computeFilingCompleteness } from "@/lib/workflow/completeness";
 import { buildClientPackageEmail } from "@/lib/workflow/clientPackageEmail";
-import { ALL_PERIODS } from "@/lib/tax/periods";
+import { ALL_PERIODS, ownSalesQuarterOf } from "@/lib/tax/periods";
 import type { FilingComputationResult } from "@/lib/tax/types";
-
-const CUTOFF_SOURCE_LABEL: Record<string, string> = {
-  MANUAL_OVERRIDE: "manual override",
-  FILED_AT: "filed date",
-  TODAY: "today — live preview, not yet filed",
-};
 
 const STATUS_TONE: Record<string, "pending" | "progress" | "waiting" | "overdue" | "done"> = {
   NOT_STARTED: "pending",
@@ -71,6 +68,43 @@ export default async function FilingDetailPage({
     ? (JSON.parse(filing.computationSnapshot as string) as FilingComputationResult)
     : await assembleAndComputeFiling(filing.clientId, filing.taxableYear, filing.period);
   const hasSalesRecorded = await hasSalesRecordedForPeriod(filing.clientId, filing.taxableYear, filing.period);
+
+  // Brief #4b — step 1's own card shows this filing's own quarter total
+  // once saved (draft or final), not the cumulative figure above.
+  const ownSalesRow = await prisma.quarterlySales.findUnique({
+    where: {
+      clientId_taxableYear_quarter: { clientId: filing.clientId, taxableYear: filing.taxableYear, quarter: ownSalesQuarterOf(filing.period) },
+    },
+  });
+
+  // Brief #4b (D34) — a filing is "filed" for locking purposes once its
+  // own step 5 (FILE_RETURN) is DONE: the income quarter and step 2's
+  // certificate list both lock at that point.
+  const isFilingLocked = filing.workflowSteps.some((s) => s.stepCode === "FILE_RETURN" && s.status === "DONE");
+
+  // Brief #4b — step 2's certificate rows, entered under this filing.
+  const certificates = await prisma.form2307.findMany({
+    where: { claimedOnFilingId: filing.id, deletedAt: null },
+    include: { documents: { where: { deletedAt: null } } },
+    orderBy: { dateReceived: "asc" },
+  });
+  const certificateRows: CertificateRow[] = certificates.map((c) => ({
+    id: c.id,
+    payorName: c.payorName,
+    payorTin: c.payorTin,
+    payorAddress: c.payorAddress,
+    incomePaymentCents: c.incomePaymentCents,
+    taxWithheldCents: c.taxWithheldCents,
+    dateReceived: formatManilaDate(c.dateReceived),
+    atcCode: c.atcCode,
+    withholdingRateBps: c.withholdingRateBps,
+    periodFrom: formatManilaDate(c.periodFrom),
+    periodTo: formatManilaDate(c.periodTo),
+    notes: c.notes,
+    scans: c.documents.map((d) => ({ id: d.id, originalFilename: d.originalFilename })),
+  }));
+  const boundAddCertificate = addCertificate.bind(null, filing.id);
+  const boundToggleAllReceived = setAllCertificatesReceived.bind(null, filing.id);
 
   // Step 16's email draft needs to know the next filing in this taxable
   // year, if one already exists (rework brief #2 §5) — omitted when there
@@ -194,7 +228,7 @@ export default async function FilingDetailPage({
       ? `Overpayment ${centsToPesos(sheet.overpaymentCents, { withSymbol: true })}`
       : `Tax payable ${centsToPesos(sheet.taxPayableCents, { withSymbol: true })}`;
 
-  const incomeHref = `/clients/${id}/income?year=${filing.taxableYear}`;
+  const incomeHref = `/clients/${id}/income?filingId=${filing.id}`;
 
   const clientFirstName = filing.client.registeredName.trim().split(/\s+/)[0] ?? filing.client.registeredName;
   const clientEmail = buildClientPackageEmail({
@@ -227,71 +261,10 @@ export default async function FilingDetailPage({
     await acknowledgeAmendmentAlert(alertId, note);
   }
 
-  async function submitCutoffOverride(formData: FormData) {
-    "use server";
-    const date = String(formData.get("cutoffOverride") ?? "");
-    await setCertificateCutoffOverride(filingId, date);
-  }
-
-  async function clearCutoffOverride() {
-    "use server";
-    await setCertificateCutoffOverride(filingId, "");
-  }
-
   async function submitDismissCompleteness() {
     "use server";
     await dismissCompletenessNote(filingId);
   }
-
-  // D30 — a document belongs to its step, not to the page. These three
-  // used to render as page-level panels at the bottom, detached from the
-  // steps they belong to ("Not sure what the bottom boxes are for").
-  const recordSalesExtra = (
-    <Link href={incomeHref}>
-      <Button type="button" size="sm" variant="secondary">
-        Go to income entry
-      </Button>
-    </Link>
-  );
-
-  const certificateCutoffExtra = (
-    <div className="rounded border border-slate-100 p-2">
-      <p className="text-xs font-medium text-slate-600">Certificate cutoff</p>
-      <p className="mt-1 text-xs text-slate-600">
-        Certificates received on or before{" "}
-        <span className="font-medium">
-          {sheet.certificateCutoffDate ? formatManilaDate(sheet.certificateCutoffDate) : "—"}
-        </span>{" "}
-        count toward this quarter&apos;s credit. Ones arriving later go to the next quarter instead — amended
-        returns aren&apos;t filed when a certificate shows up late.
-        {sheet.certificateCutoffSource && ` (${CUTOFF_SOURCE_LABEL[sheet.certificateCutoffSource]})`}
-      </p>
-      <form action={submitCutoffOverride} className="mt-2 flex items-end gap-2">
-        <div>
-          <label className="text-xs font-medium uppercase tracking-wide text-slate-400" htmlFor="cutoffOverride">
-            Manual override
-          </label>
-          <Input
-            id="cutoffOverride"
-            name="cutoffOverride"
-            type="date"
-            className="h-8 text-xs"
-            defaultValue={toManilaDateInputValue(filing.certificateCutoffOverride)}
-          />
-        </div>
-        <Button type="submit" size="sm" variant="secondary">
-          Set override
-        </Button>
-      </form>
-      {filing.certificateCutoffOverride && (
-        <form action={clearCutoffOverride} className="mt-2">
-          <Button type="submit" size="sm" variant="secondary">
-            Clear override
-          </Button>
-        </form>
-      )}
-    </div>
-  );
 
   const clientConfirmationExtra = (
     <div className="rounded border border-slate-100 p-2">
@@ -363,8 +336,6 @@ export default async function FilingDetailPage({
   );
 
   const EXTRA_BY_STEP_CODE: Record<string, React.ReactNode> = {
-    RECORD_SALES: recordSalesExtra,
-    RECEIVE_2307: certificateCutoffExtra,
     PREPARE_RETURN: prepareReturnExtra,
     SEND_CLIENT_PACKAGE: sendClientPackageExtra,
   };
@@ -555,14 +526,48 @@ export default async function FilingDetailPage({
                 outstandingLabel={summary.outstandingLabel}
                 defaultOpen={def.code === activeGroupCode}
               >
-                {steps.map((step) => (
-                  <WorkflowStepCard
-                    key={step.id}
-                    step={step}
-                    extra={EXTRA_BY_STEP_CODE[step.stepCode]}
-                    dependencyBlockedReason={DEPENDENCY_REASON_BY_STEP_CODE[step.stepCode] ?? null}
-                  />
-                ))}
+                {steps.map((step) => {
+                  // Brief #4b — steps 1 and 2 are self-completing and carry no
+                  // manual controls at all; they get their own bespoke cards
+                  // instead of the generic WorkflowStepCard.
+                  if (step.stepCode === "RECORD_SALES") {
+                    return (
+                      <RecordSalesStepCard
+                        key={step.id}
+                        sequence={step.sequence}
+                        title={step.title}
+                        status={step.status}
+                        totalCents={ownSalesRow ? ownSalesRow.grossSalesCents : null}
+                        incomeHref={incomeHref}
+                      />
+                    );
+                  }
+                  if (step.stepCode === "RECEIVE_2307") {
+                    return (
+                      <Receive2307StepCard
+                        key={step.id}
+                        stepId={step.id}
+                        sequence={step.sequence}
+                        title={step.title}
+                        status={step.status}
+                        skippedReason={step.skippedReason}
+                        certificates={certificateRows}
+                        allReceived={filing.certificatesAllReceivedAt != null}
+                        locked={isFilingLocked}
+                        addCertificateAction={boundAddCertificate}
+                        toggleAllReceivedAction={boundToggleAllReceived}
+                      />
+                    );
+                  }
+                  return (
+                    <WorkflowStepCard
+                      key={step.id}
+                      step={step}
+                      extra={EXTRA_BY_STEP_CODE[step.stepCode]}
+                      dependencyBlockedReason={DEPENDENCY_REASON_BY_STEP_CODE[step.stepCode] ?? null}
+                    />
+                  );
+                })}
               </WorkflowGroupCard>
             ))}
           </div>

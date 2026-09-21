@@ -1,7 +1,7 @@
 # CURRENT_STATE.md
 
 *Living snapshot. Replace stale content rather than appending.*
-*Last reconciled: 2026-09-20, evening — grouping pass (brief #4a), against the tree.*
+*Last reconciled: 2026-09-21 — Prepare group steps 1 and 2 rebuilt (brief #4b), against the tree.*
 
 ---
 
@@ -70,7 +70,17 @@ All four share one key: client × taxable year × period.
 - Filing detail page (`app/(app)/clients/[id]/filings/[filingId]/page.tsx`): the flat 16-step list is now five collapsible `WorkflowGroupCard`s, each showing progress, what's outstanding, and a disabled-with-reason "Mark done" while a required document is missing. The group containing the filing's next step opens by default; expanding any group exposes every per-step control (attach, skip with reason, mark waiting, start) unchanged. Steps within a group render in numeric order (confirmed: TRRC renders last inside File).
 - Board (`app/(app)/filings/page.tsx`): five columns, not sixteen. A card sits in its earliest incomplete group (group order, not step sequence) and carries that group's waiting label.
 - 16 new tests (`tests/workflow/groups.test.ts`, plus additions to `tests/actions/workflowSteps.test.ts`); full suite, typecheck, and build all verified — see "How to test" in CLAUDE.md for the pre-existing `verify-real.ts` gap, unrelated to this pass.
-- **Pending a further brief, not built here:** the bookkeeper's own refinements to what happens *inside* each group (step 2's 2307 scan becoming required, removing Mark Waiting from Prepare in favor of a derived client-data waiting state, the income screen rework, and the rest of CLAUDE.md's "held for the next brief" list) — this pass was grouping only, deliberately, so those refinements land against a structure she's actually walked.
+
+**Steps 1 and 2 rebuilt, self-completing, and Prepare's first real block (brief #4b, D33-D35, 2026-09-21)** — she walked the five-group structure and asked for this next:
+- **Step 1 (`RECORD_SALES`)** — declared sales is now per-customer rows (`QuarterlySalesCustomer`), summed into `QuarterlySales.grossSalesCents` on every save (`lib/actions/quarterlySales.ts`'s `saveQuarterlySales`), never itself typed. Rows add/remove freely. `noSalesThisQuarter` records a deliberate ₱0. Save as draft stores the rows without marking step 1 done; Save does both, reusing the existing `markStepDone` (so the election hard-blocker still applies). Once done, further edits never undo it — the quarter stays editable until its own filing's step 5 (`FILE_RETURN`) is `DONE`. The step 1 card (`components/record-sales-step-card.tsx`) has no manual controls left at all — status and the quarter's total are fully derived.
+- **The income page** (`app/(app)/clients/[id]/income`) now takes an optional `?filingId=`: opened from a filing, only that filing's own quarter is editable (`QuarterlySalesCard`, rebuilt for per-customer rows), every other quarter this taxable year renders as a read-only table (quarter, customers, total, source) with a link to its own filing; opened without one (e.g. from the client page), every quarter renders the same read-only way. A "Back to filing" button returns to where it was opened from.
+- **Step 2 (`RECEIVE_2307`)** — one row per certificate, entered here (`components/receive-2307-step-card.tsx`, `lib/actions/form2307.ts`'s `addCertificate`/`deleteCertificate`), not on a separate register screen. Each row: payor, income amount, tax withheld, date received, its own scan (`Document.form2307Id`); the rest of `Form2307`'s existing fields sit behind "more." `Filing.certificatesAllReceivedAt` backs the "All certificates received" checkbox. Step 2 is `DONE` only once that's ticked **and** every row has a scan (`lib/actions/workflowSteps.ts`'s `recomputeReceive2307Status`) — a genuine two-way toggle, unlike step 1: unticking reverts to not-done so a late arrival can be added before filing. Skip (with a written reason) is the only manual control left on this step.
+- **The old Form 2307 register** (`/clients/[id]/form-2307`) is now read-only — its entry form and `/form-2307/new` route are gone. It still shows the annual reconciliation and the SAWT keying-worksheet link, and each row now links to the filing it was claimed on.
+- **The certificate cutoff is gone (D34, supersedes D10).** `Filing.certificateCutoffOverride`, `resolveCertificateCutoffDate()`, and every `dateReceived`-vs-cutoff comparison are removed. A certificate now counts in the filing whose step 2 it was entered under (`Form2307.claimedOnFilingId`, set once, never reassigned) and every later period in the same taxable year (`lib/tax/cwt.ts`'s `sumCwtThroughPeriod`, now period-keyed, not date-keyed). Locked once that filing's step 5 is `DONE`. `dateReceived` is kept as a recorded fact only. Confirmed unaffected: the annual certificates-vs-declared-sales check (`lib/reconciliation.ts`) — it already ran over the whole taxable year. `lib/sawt/eligibleCertificates.ts` and `lib/actions/sawt.ts` were updated to the same period-keyed logic so SAWT batching stays consistent with the new rule.
+- **Prepare's own group "Mark done"** now only ever has steps 3-4 left (steps 1-2 self-complete) and is disabled, with a plain-language reason, until step 1 is Done and step 2 is Done or Skipped (`lib/workflow/groups.ts`'s `prepareGroupBlockReason`, enforced both client-side on the button and server-side in `markGroupDone`) — Prepare's first real block since grouping.
+- Seed updated: sample clients' `QuarterlySales` rows carry per-customer rows (one client's Q1 split into two, to demonstrate the feature); the TY2026 cycle's certificates carry `claimedOnFilingId` pointing at the filing they were seeded under, with `certificatesAllReceivedAt`/`finalizedAt` set to match steps 1/2 being Done.
+- New tests: per-customer sum, draft vs. Save, step 1/2 self-completion, step 2 blocking on a missing scan, step 2 locking after filing, Prepare disabled until 1/2 resolved (`tests/actions/quarterlySales.test.ts`, `tests/actions/form2307.test.ts`, additions to `tests/workflow/groups.test.ts` and `tests/actions/workflowSteps.test.ts`); `tests/tax/cwt.test.ts` and `tests/filingComputation/certificateAssignment.test.ts` (replacing the old cutoff test) rewritten for D34. Full suite, typecheck, and build all verified.
+- **`scripts/verify-real.ts`'s fixture shape changed** (D34): `certificateCutoffDate` is gone from `RealFixture`; each certificate now carries `claimedPeriod`. The gitignored fixture wasn't present in this checkout (as in prior passes) — say so explicitly rather than claiming the real Q1 2026 figures were freshly reproduced; whoever holds the fixture needs to add `claimedPeriod: "Q1"` to each certificate before it will run again.
 
 ---
 
@@ -81,6 +91,8 @@ All four share one key: client × taxable year × period.
 **Second — 2026-09-20, on `peaceful-goldberg`.** Walked all sixteen steps for the first time. Produced D25, D26 (income model), then D27–D30 (blocking rule, step order, waiting dependency, orphaned panels) from a follow-up walkthrough of that same build.
 
 **Third — status unknown to this pass.** Referenced as "in progress" in the brief that requested this reconciliation; nothing in the repo records its findings yet.
+
+**Fourth — 2026-09-21, the bookkeeper walked the five-group structure (brief #4a).** Produced brief #4b directly: per-customer income rows (D33), the certificate credit-period rule (D34, supersedes D10), and step 2 becoming a real block (D35) — see "Built and working" above.
 
 ---
 
@@ -124,15 +136,15 @@ All four share one key: client × taxable year × period.
 - **For a declared-income client nothing can be cross-checked against anything** except the annual certificates-vs-declared-sales check. The client's stated quarterly figure is the whole income record. A property of the engagement, not a defect — the `PREPARE_RETURN` acknowledgement's source-of-figure field is the one control that exists, and it is deliberately a record of provenance, not a gate.
 - **`@radix-ui/react-dialog`, `react-label`, `react-select`, and `react-slot` are installed dependencies with no import anywhere in the codebase.** `components/ui/*` are plain HTML elements wrapped with Tailwind classes via the `cva`/`cn` convention. "Tailwind + shadcn/ui" in the stack description is generous; verify before assuming any Radix behavior (portals, focus trapping, accessibility roles) is present.
 - **`data/app.db` has no backup.** Housekeeping while the data is seeded; a real single point of failure the day it is not.
-- **`scripts/verify-real.ts` did not run this pass** — the gitignored fixture it reads (`scripts/real-fixture.local.ts`) is not present in this checkout. The figures above are carried over from `peaceful-goldberg`'s own notes, not freshly confirmed. Low risk, since nothing in the reconciliation touched the tax engine, but the primary regression guard has now gone unexercised across at least two passes. Run it on a machine where the fixture lives.
+- **`scripts/verify-real.ts` did not run this pass** — the gitignored fixture it reads (`scripts/real-fixture.local.ts`) is not present in this checkout. The figures above are carried over from `peaceful-goldberg`'s own notes, not freshly confirmed. The primary regression guard has now gone unexercised across at least three passes, and this pass changed its input shape (D34, brief #4b): `RealFixture.certificateCutoffDate` is gone, and each certificate now needs a `claimedPeriod`. Run it on a machine where the fixture lives, and update the fixture's certificates to the new shape first.
 
 ---
 
 ## Next, in order
 
-1. Let the bookkeeper walk the five-group structure (brief #4a) before building any per-group refinement — see CLAUDE.md's "held for the next brief" list (step 2's 2307 scan becoming required, deriving Prepare's waiting state, the income screen rework, and the rest).
-2. Whatever the third test drive found, if it exists — act on it.
-3. Run `scripts/verify-real.ts` somewhere the fixture exists, to close the unexercised regression guard.
+1. Let the bookkeeper walk the rebuilt Prepare group (steps 1 and 2, brief #4b) before touching steps 3-16 or any other group.
+2. Act on whatever her walkthrough finds, step by step.
+3. Run `scripts/verify-real.ts` somewhere the fixture exists, to close the unexercised regression guard — note the fixture's shape changed this pass (D34: `claimedPeriod` per certificate, no more `certificateCutoffDate`), so it needs updating there too.
 4. Build the document archive browse view.
 5. **Before live data in November:** solve the `data/app.db` backup, and confirm the ATC codes against the current BIR list.
 6. **Decide on the live Q3 cycle** — certificates expected early November, 1701Q due **November 16, 2026** (statutory Nov 15 is a Sunday). The Excel files remain the master until that decision.

@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 *Instructions for Claude Code working on this repository.*
-*Last reconciled: 2026-09-20, evening — grouping pass (brief #4a), against the tree.*
+*Last reconciled: 2026-09-21 — Prepare group steps 1 and 2 rebuilt (brief #4b), against the tree.*
 
 ---
 
@@ -40,20 +40,25 @@ Next.js 15 App Router · TypeScript strict · Prisma + SQLite (`data/app.db`) ·
 
 ```
 /app                          routes
-/app/(app)/clients/[id]/income   declared quarterly sales entry (D26) — the
-                               only place income enters the system
+/app/(app)/clients/[id]/income   declared quarterly sales entry (D26/D33) —
+                               the only place income enters the system;
+                               ?filingId= anchors which quarter is editable
 /lib/tax/                     computation engine — PURE, zero I/O
 /lib/workflow/                step template, state machine, due dates,
                                aging, docSlots.ts, completeness.ts,
                                election.ts, clientPackageEmail.ts,
-                               groups.ts (the five-group rollup, D32)
+                               groups.ts (the five-group rollup, D32;
+                               prepareGroupBlockReason, brief #4b)
 /lib/documents/                storage, naming, hashing, computationSheet.ts
                                (ensureComputationSheetSaved), computationSheetHtml.ts
 /lib/reconciliation.ts         the single annual certificates-vs-declared-sales check
-/lib/actions/                  Server Actions — the I/O boundary
+/lib/actions/                  Server Actions — the I/O boundary. quarterlySales.ts
+                               (saveQuarterlySales, D33), form2307.ts
+                               (addCertificate/deleteCertificate, D34)
 /lib/dates.ts                  manilaCalendarDay(), formatManilaDate()
 /components/                   next-action-control.tsx, computation-sheet-panel.tsx,
-                               quarterly-sales-card.tsx, workflow-step-card.tsx,
+                               quarterly-sales-card.tsx, record-sales-step-card.tsx,
+                               receive-2307-step-card.tsx, workflow-step-card.tsx,
                                workflow-group-card.tsx, copy-textarea.tsx,
                                ui/ (plain Tailwind primitives)
 /prisma/                       schema, migrations, seed
@@ -73,6 +78,8 @@ Next.js 15 App Router · TypeScript strict · Prisma + SQLite (`data/app.db`) ·
 
 **Gross sales come from one place only: the client's declared figure for the quarter** (`QuarterlySales`). Certificates contribute nothing to gross sales.
 
+**A quarter's declared figure is the sum of per-customer rows (D33, brief #4b)** — `QuarterlySalesCustomer`, customer name + amount, added and removed freely. `QuarterlySales.grossSalesCents` is derived from these rows on every save (`lib/actions/quarterlySales.ts`'s `saveQuarterlySales`) — it is never itself an input field. `/lib/tax/` is unaffected: it still receives one summed gross figure per quarter. `noSalesThisQuarter` is a deliberate ₱0, distinct from a quarter with no row at all; `hasSalesRecordedForPeriod` is unaffected — it still keys on row existence. Draft (stores the rows, doesn't mark step 1 done) vs. Save (does both, via the same `markStepDone` the per-step control always used) — once step 1 is done, further edits never undo it, and the quarter stays editable until its own filing's step 5 (`FILE_RETURN`) is `DONE`.
+
 **A Form 2307 is authoritative for the withholding and nothing else.** It reports what one payor paid and withheld, and only ever sees income from payors who are withholding agents. Income from non-withholding clients and direct consumers appears on no certificate at all, and some clients issue no 2307 whatsoever.
 
 There is no "convert a 2307 into a transaction" flow and there must not be one — that conversion is exactly what D26 removed.
@@ -91,9 +98,11 @@ A missing quarter is zero, not an error — but a filing whose OWN quarter has n
 
 | Category | Behaviour | Steps |
 |---|---|---|
-| Documents she **receives** from outside | Blocks `DONE` until attached | 6, 7, 9, 10, 11 (both slots), 13, 14 |
+| Documents she **receives** from outside | Blocks `DONE` until attached | 2, 6, 7, 9, 10, 11 (both slots), 13, 14 |
 | Actions she **performs** elsewhere | No slot at all | 4, 12, 16 |
 | A document delivered **to someone else** | Optional, hidden, never blocking | 15 only |
+
+**Step 2 (D35, brief #4b) blocks on its own terms, not one step-level slot.** It holds a variable number of certificate rows (`Form2307`, `claimedOnFilingId` pointing at this filing), each with its own scan (`Document.form2307Id`). Step 2 is `DONE` only once `Filing.certificatesAllReceivedAt` is set **and** every row has a scan — implemented in `lib/actions/workflowSteps.ts`'s `recomputeReceive2307Status`, called after every certificate add/delete and every scan upload/removal. Unlike step 1, this is a genuine two-way toggle: unticking "all received" reverts step 2 to not-done, so a late-arriving certificate can be entered before this filing is filed. Step 2's own doc-slot in `WorkflowStepTemplate`/`WorkflowStep` is now empty (`[]`) — do not re-add a step-level slot for it.
 
 **Step 15 (eAFS) is a documented exception, not an oversight.** Its confirmation email goes to the client, not to the bookkeeper, and often never reaches her. Blocking would strand a filing on a file she cannot obtain; removing the slot would make a document she does sometimes receive impossible to keep. If you find one optional slot sitting among seven required ones, this is why. Leave it. Step 16's client email draft asks her to forward the eAFS confirmation, but only when it isn't already on file (`lib/workflow/clientPackageEmail.ts`) — the one moment in the cycle she's writing to that client anyway.
 
@@ -115,7 +124,9 @@ The sixteen steps are wrapped in five groups: **Prepare** (1–4), **File** (5, 
 
 **Group membership is its own fixed lookup table, not `category` repurposed.** `category` matches groups 2/3/4 (`FILING`/`PAYMENT`/`SAWT`) exactly, but steps 4 and 16 are both `category: CLIENT_COMM` while belonging to different groups (Prepare and Close respectively) — reusing `category` outright would have merged them.
 
-**Held for a later brief, once she's walked this structure — do not build yet:** step 2's 2307 scan becoming required and blocking; removing Mark Waiting from Prepare in favor of a derived client-data waiting state; a derived group-level waiting state generally (today, waiting is still per-step, surfaced only in the collapsed group's summary, unchanged from before grouping). See `CURRENT_STATE.md` for the fuller list.
+**Built in brief #4b (2026-09-21):** steps 1 and 2 are now self-completing, with step 2's scan requirement blocking (D33/D35) — see "The income model" and "The blocking rule" above. Prepare's own group-level "Mark done" is now disabled until both are resolved (`prepareGroupBlockReason` in `lib/workflow/groups.ts`), the first real block Prepare has ever had.
+
+**Still held for a later brief:** a derived group-level waiting state generally beyond steps 1/2 (waiting elsewhere in the workflow is still per-step, surfaced only in the collapsed group's summary, unchanged from before grouping). See `CURRENT_STATE.md` for the fuller list.
 
 ## Coding conventions
 
@@ -137,7 +148,7 @@ The sixteen steps are wrapped in five groups: **Prepare** (1–4), **File** (5, 
 ## Business rules you must not quietly change
 
 1. The 8% formula, the ₱250,000 deduction (full from Q1, never prorated, `PURELY_SELF_EMPLOYED` only), and the cumulative approach
-2. The CWT cutoff rule — `dateReceived` against a per-filing `certificateCutoffDate`, **never period end**
+2. The certificate credit-period rule (D34) — the filing it was entered under, locked once filed — and D11 (no amended returns), which is what makes that safe
 3. `computationSnapshot` immutability once filed; edits raise an `AmendmentAlert`
 4. Deadlines: Q1 May 15, Q2 Aug 15, Q3 Nov 15, Annual Apr 15. **No Q4 return exists.**
 5. eAFS = adjusted due date + 15 days; early filing does not move it
@@ -192,9 +203,9 @@ Will hold real TINs and income data under the Data Privacy Act from November 202
 
 See `CURRENT_STATE.md`. In short:
 
-1. Let her walk the five-group structure (brief #4a) before building the per-group refinements listed under "The five groups" above.
-2. Act on whatever the ongoing test drive finds, step by step.
-3. Run `scripts/verify-real.ts` on a machine where the fixture exists; it has gone unexercised on more than one pass now.
+1. Let her walk the rebuilt Prepare group (steps 1 and 2, brief #4b) before touching steps 3-16 or any other group.
+2. Act on whatever her walkthrough finds, step by step.
+3. Run `scripts/verify-real.ts` on a machine where the fixture exists; it has gone unexercised on more than one pass now, and this pass changed the fixture's shape (D34: `certificateCutoffDate` → per-certificate `claimedPeriod`) — anyone with the real fixture needs to update it to match.
 4. Build the **document archive browse view** — client → year, with a whole-year zip. It serves what she named as the most important thing the app does, and it is the only genuinely new build left in the backlog.
 5. **Before the live Q3 cycle:** a backup for `data/app.db`, and BIR verification of the seeded ATC codes.
 6. The live 1701Q is due **November 16, 2026**. Excel remains the master until she decides otherwise.

@@ -1,7 +1,7 @@
 # PROJECT_MASTER.md
 
 *Permanent project memory. Update only when something long-lived genuinely changes.*
-*Last reconciled: 2026-09-20, evening — grouping pass (brief #4a), on top of the branch reconciliation pass (brief #3).*
+*Last reconciled: 2026-09-21 — Prepare group steps 1 and 2 rebuilt (brief #4b), on top of the grouping pass (brief #4a).*
 
 > Build status lives in CURRENT_STATE.md. This file is the intended application and the rules that govern it.
 
@@ -59,13 +59,16 @@ One bookkeeper, alone, on a single laptop. Not deployed. Not client-facing.
 - **Prior-year excess credit appears in every cumulative period**, not only the first.
 - Mixed income earners file **1701**, not 1701A.
 
-### Income entry (D26)
+### Income entry (D26, D33)
 - **Gross sales come from one place only: the client's declared figure for the quarter.** Certificates contribute nothing to it.
+- **A quarter's declared figure is the sum of per-customer rows (D33, brief #4b)** — customer name + amount, added and removed freely. `QuarterlySales.grossSalesCents` is derived from these rows on every save, never itself typed. `/lib/tax/` still receives one summed gross figure per quarter — this is a change to how the figure is entered, not to what the engine computes.
 - **A 2307 is authoritative for the withholding and nothing else.** It reports what one payor paid and withheld, and only ever sees income from payors who are withholding agents. Income from non-withholding clients and direct consumers appears on no certificate. Some clients issue no 2307 at all and simply state a quarterly total.
 - Income and credit are independent inputs, exactly as the 1701Q treats them.
 - **`QuarterlySales.quarter` includes `Q4`; `Filing.period` does not.** There is no Q4 return — October–December income is picked up by the annual. Two types, two CHECK constraints. Do not merge them.
 - Cumulative mapping: `Q1`→Q1; `Q2`→Q1+Q2; `Q3`→Q1+Q2+Q3; `ANNUAL`→Q1+Q2+Q3+Q4.
 - A missing quarter is zero. A filing whose **own** quarter has no declared-sales row must **say so in words**, distinct from a cumulative total that happens to be zero from earlier quarters — a silent `₱0.00` reads as a real answer and it is not one.
+- **"No sales this quarter" is a deliberate ₱0** (`QuarterlySales.noSalesThisQuarter`), distinct from a quarter with no row at all — `hasSalesRecordedForPeriod` still keys on row existence and reads a deliberate no-sales quarter as recorded.
+- **Draft vs. Save (D33):** saving a draft stores the rows without marking step 1 done; Save does both. Once step 1 is done, further edits — draft or final — never undo it. A quarter stays editable until its own filing's step 5 (`FILE_RETURN`) is `DONE`.
 
 ### The `PREPARE_RETURN` acknowledgement — the only control in the system
 
@@ -74,10 +77,11 @@ Once income is declared-only, nothing in the system can be cross-checked against
 This is deliberately different in kind from the actions-she-performs slots D27 removed. The `advisory_evidence` slot she rejected asked her to prove she had *done* something (advised the client) — proof of her own work. This field records the *provenance of a number she is about to file* — evidence of the fact the number is based on, not evidence that she did her job. It must never block: some clients never send anything in writing at all, and stranding a filing on that would recreate exactly the demand-for-proof pattern D27 was written to eliminate.
 
 ### Creditable withholding (Form 2307)
-- Certificates are claimed in the period whose **`certificateCutoffDate`** they fall within, keyed on **`dateReceived`** — not on the period the income economically covers, and **not on period end**.
-- `certificateCutoffDate` = manual override if set, else `filedAt` if filed, else today (Manila).
-- **No amended returns.** Late-arriving certificates flow into the next open period.
-- The only reconciliation: certificate gross totals ≤ declared sales, **compared over the taxable year**, never per quarter — the cutoff rule deliberately shifts credits across quarter boundaries.
+- **A certificate counts in the filing whose step 2 it was entered under (D34, brief #4b, supersedes D10).** `Form2307.claimedOnFilingId` is set once, at entry, and never reassigned — `dateReceived` is kept as a recorded fact but no longer decides the credit period. `certificateCutoffDate`, the manual override, and the resolver function are gone.
+- **Step 2's list is locked once that filing's own return is filed** (step 5, `FILE_RETURN`, `DONE`). A certificate arriving after filing is entered under the next open filing instead — usually the next quarter or the Annual, her choice, made by which filing's step 2 she enters it under.
+- **No amended returns (D11).** This is what makes D34 safe — a filed period's certificate list can never be reopened to move a certificate into or out of it.
+- Cumulative crediting is otherwise unchanged: a certificate claimed on period P counts toward P and every later period in the same taxable year.
+- The only reconciliation: certificate gross totals ≤ declared sales, **compared over the taxable year**, never per quarter — unaffected by D34; it still runs over the whole year regardless of which quarter a certificate is claimed on.
 
 ### Deadlines
 - 1701Q: Q1 **May 15**, Q2 **Aug 15**, Q3 **Nov 15**. Annual: **Apr 15**.
@@ -94,7 +98,8 @@ This is deliberately different in kind from the actions-she-performs slots D27 r
 - VAT threshold ₱3,000,000. Warn at 80%, 95%, breach. **Flag only — never auto-compute a transition.**
 
 ### Workflow
-- Sixteen steps. Step 1 **Record quarterly sales** (links to `/clients/[id]/income`), step 2 **Receive Form 2307 from client** (D28). Steps 11–14 (SAWT) conditional on `requiresSawt`.
+- Sixteen steps. Step 1 **Record quarterly sales**, step 2 **Receive Form 2307 from client** (D28). Steps 11–14 (SAWT) conditional on `requiresSawt`.
+- **Steps 1 and 2 are self-completing (D33/D35, brief #4b) and carry no manual controls at all** — no Start, Mark waiting, Mark done, Skip on step 1; step 2 keeps only Skip (with a reason). Step 1's status is derived: "Waiting on client" until a final Save of the quarter's sales, then Done. Step 2's status is derived: "Waiting on client" until done or skipped, done once "all certificates received" is ticked and every certificate row has its own scan.
 - Filing status is **derived** from its steps, never hand-set: all `DONE`/`NA`/`SKIPPED` → `COMPLETE`.
 - **`SKIPPED` requires a written reason** and stays visibly distinct from `NA`.
 
@@ -112,19 +117,21 @@ The sixteen steps are wrapped in **five groups** — Prepare, File, Pay, SAWT, C
 
 **Step numbers are not renumbered to make groups contiguous.** Group 2 (File) is deliberately not contiguous — the TRRC (step 10) sits with File rather than with Pay (group 3, steps 8–9) between them, because eBIRForms' TRRC confirms the *filing*, not the payment (`WorkflowStep.category` for step 10 has always been `FILING`). Step numbers record when things happen; groups record what they belong to. A filing can therefore sit at "File," waiting only on the TRRC, after "Pay" is already fully done — this is normal, not out-of-order, and raises no warning. The board's card for such a filing sits in its earliest incomplete *group* (group order, not step sequence) and carries that group's waiting state (e.g. "File — waiting on BIR, 12d") so it doesn't read as unfiled.
 
-**Blocking surfaces at group level, but the rule itself (D27) is unchanged.** A group's "Mark done" is disabled with a plain-language reason while any step inside it is missing a required document — the same seven blocking steps as before, reported once per group. Prepare and Close block on nothing today (Prepare gains a block once step 2's 2307 scan becomes required, a later brief). The election hard-blocker and the step 13→14 dependency (D29) are unaffected and still apply; expanding a group exposes every per-step control (attach, skip with reason, mark waiting) exactly as before grouping existed.
+**Blocking surfaces at group level, but the underlying rule (D27) is unchanged for every group except Prepare.** A group's "Mark done" is disabled with a plain-language reason while any step inside it is missing a required document — the same blocking steps as before, reported once per group. **Prepare is the exception (brief #4b):** since steps 1 and 2 now self-complete and carry no doc slots of their own, Prepare's "Mark done" is disabled instead by `prepareGroupBlockReason()` — until step 1 is Done and step 2 is Done or Skipped — reported the same way, in the same place. Close still blocks on nothing. The election hard-blocker and the step 13→14 dependency (D29) are unaffected and still apply; expanding a group exposes every per-step control (attach, skip with reason, mark waiting) exactly as before grouping existed, except steps 1 and 2 themselves, which now have no such controls at all.
 
 Group membership is a fixed lookup table (`lib/workflow/groups.ts`), not the `category` field repurposed — `category` alone would put step 4 (`ADVISE_CLIENT`) and step 16 (`SEND_CLIENT_PACKAGE`), both `CLIENT_COMM`, in the same group despite belonging to different points in the cycle.
 
-### Blocking — the rule (D27)
+### Blocking — the rule (D27, D35)
 
 **The app blocks on documents it receives. It never asks the bookkeeper to prove she did something.**
 
 | Category | Behaviour | Steps |
 |---|---|---|
-| Documents she **receives** from outside | Blocks `DONE` until attached | 6, 7, 9, 10, 11 (both slots), 13, 14 |
+| Documents she **receives** from outside | Blocks `DONE` until attached | 2, 6, 7, 9, 10, 11 (both slots), 13, 14 |
 | Actions she **performs** elsewhere | No slot at all | 4, 12, 16 |
 | A document delivered **to someone else** | Optional, hidden, never blocking | 15 only |
+
+Step 2 (D35, brief #4b) blocks on its own terms — "all certificates received" ticked and every certificate row has its own scan attached — rather than one step-level slot, since it now holds a variable number of certificate rows instead of a single document.
 
 Step 15 (eAFS) is the documented exception: its confirmation goes to the client, not to her, and often never reaches her. Blocking would strand a filing on a file she cannot obtain. **Do not "fix" this inconsistency.**
 
@@ -182,7 +189,7 @@ Next.js 15 App Router · TypeScript strict · Prisma + SQLite (`data/app.db`) ·
 ## Do not change without discussing first
 
 1. The 8% formula, the ₱250,000 rule, the cumulative approach
-2. The CWT cutoff rule (`dateReceived` against `certificateCutoffDate`)
+2. The certificate credit-period rule (D34: the filing it was entered under, locked once filed) and D11 (no amended returns), which is what makes it safe
 3. `computationSnapshot` immutability and the `AmendmentAlert` pattern
 4. Money as integer centavos; no float arithmetic anywhere
 5. Rates, thresholds and deadlines living in `TaxRuleSet`, never hardcoded

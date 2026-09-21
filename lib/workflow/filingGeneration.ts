@@ -157,6 +157,11 @@ export async function instantiateWorkflowSteps(
     } else if (template.stepCode === "RECEIVE_2307") {
       status = "WAITING_EXTERNAL";
       waitingSince = opts.certificatesExpectedBy;
+    } else if (template.stepCode === "RECORD_SALES") {
+      // Brief #4b — self-completing, and reads "Waiting on client" from
+      // the moment the filing exists until a final Save (D33).
+      status = "WAITING_EXTERNAL";
+      waitingSince = new Date();
     }
 
     await prisma.workflowStep.create({

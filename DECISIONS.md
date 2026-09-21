@@ -35,9 +35,7 @@ Runs on one laptop: SQLite file, filesystem documents, single `.env` password.
 **❌ LARGELY SUPERSEDED 2026-09-20 by D26.** Two of the three panels presupposed a certificate-to-income conversion that no longer exists and were deleted; the CWT-vs-SAWT-batch panel was removed pending the SAWT module. One check replaces them: annual certificate gross totals against declared sales.
 
 **D10 — CWT cutoff is a per-filing `certificateCutoffDate`, not period end** *(2026-08)*
-*Why:* the bookkeeper receives Q2 certificates around Aug 5, after the June 30 quarter end. Keying off period end would push **every** certificate a quarter late, understating CWT and overstating tax payable in every period.
-*Resolution order:* manual override wins, else `filedAt`, else today (Manila).
-*Still current.* The control moved into step 2 and was rewritten in plain language on 2026-09-20; the rule itself is unchanged.
+**❌ SUPERSEDED 2026-09-21 by D34 (brief #4b).** A certificate's credit period is now decided by which filing's step 2 it was entered under, not by `dateReceived` against a cutoff date. `certificateCutoffDate`, the manual override field, and the resolver function are all removed.
 
 **D11 — No amended returns** *(2026-08)*
 *Implication:* late-arriving certificates flow into the next open period rather than reopening a filed one. This is what makes D10 workable.
@@ -91,6 +89,7 @@ Supersedes D15.
 
 **D26 — Gross sales are declared by the client per quarter. A 2307 is a credit record only.** *(2026-09-20, revised same day)*
 Supersedes D7. **Also supersedes the first version of D26 written earlier the same day**, which had gross receipts as *certificates plus declared amounts*. That was wrong and the bookkeeper corrected it.
+**⚠️ PARTIALLY SUPERSEDED 2026-09-21 by D33 (brief #4b).** "One figure per client per quarter" is superseded — a quarter's gross sales is now the sum of one or more per-customer rows. Everything else below (a 2307 contributes nothing to gross sales, income and credit are independent inputs, the `QuarterlySales.quarter`/`Filing.period` split, the tax engine reading one summed gross figure) is unchanged.
 
 *The rule:*
 - **Gross sales/receipts come from one place only: the client's declared figure for the quarter.** Certificates contribute nothing to it.
@@ -123,6 +122,8 @@ Supersedes the *"nothing blocks"* position taken earlier the same day, which was
 | Documents she **receives** from outside | Blocks `DONE` until attached | 6, 7, 9, 10, 11 (both slots), 13, 14 |
 | Actions she **performs** elsewhere | No slot at all | 4, 12, 16 |
 | A document delivered **to someone else** | Optional, hidden, never blocking | 15 only |
+
+**⚠️ Step 2's row updated 2026-09-21 by D35 (brief #4b).** Step 2 (RECEIVE_2307) was optional/non-blocking when this table was written (D26 had just made 2307 entry safe to skip). It now blocks — see D35 — once step 2 was rebuilt to hold the certificates themselves rather than pointing at a separate optional slot.
 
 *The blocking steps* are the submission screenshot, filed form, proof of payment, TRRC, alphalist report and DAT file, acknowledgement email and validation email. Marking one done without its file records something that did not happen — the step *is* the document.
 
@@ -196,3 +197,39 @@ The receipts confirmation, the certificate cutoff control and the computation sh
 *Blocking is unaffected — it only surfaces one level up.* A group's "Mark done" is disabled, with a plain-language reason next to it, while any step inside it is missing a required document — the same seven blocking steps as D27 (6, 7, 9, 10, 11 both slots, 13, 14), just reported once per group instead of once per button. Prepare and Close block on nothing, for now (Prepare gains a block in a later brief once step 2's 2307 scan becomes required). The election hard-blocker and the step 13→14 dependency (D29) are both unaffected; they still apply exactly as before, they just aren't part of the group's pre-click doc-slot message (neither was surfaced as a disabled-button reason at the single-step level before this pass either — this pass didn't add that, so it doesn't add it here).
 
 *What didn't change:* Filing.status is still derived from steps, never from groups — there is no hand-set or separately-derived group-level status anywhere. Waiting is unchanged: per-step "Mark waiting" stays inside the expanded group; only the *collapsed* summary is new, surfacing any step's waiting state at the group level. Every per-step control (attach, skip with reason, mark waiting) is unchanged and still reachable by expanding a group.
+
+---
+
+## 2026-09-21 — brief #4b (the bookkeeper walked the five-group structure; these three came out of that walkthrough)
+
+**D33 — A quarter's gross sales is the sum of per-customer rows, not one typed figure** *(2026-09-21)*
+Partially supersedes D26 — the "one figure per client per quarter" clause only. Everything else D26 established (a 2307 contributes nothing to gross sales, income and credit are independent inputs, the `QuarterlySales`/`Filing.period` split) is unchanged, and `/lib/tax/` is unaffected: the engine still receives one summed gross figure per quarter, computed from the rows rather than typed directly.
+
+*The rule:* a `QuarterlySalesCustomer` row per customer (name + amount); `QuarterlySales.grossSalesCents` is derived by summing them on every save, never itself an input. Rows are added and removed freely. The per-quarter fields (non-operating income, the source-of-figure note, notes) stay per quarter, not per customer — D26's `PREPARE_RETURN` source-of-figure control is unaffected.
+
+*"No sales this quarter" is a deliberate ₱0* — `QuarterlySales.noSalesThisQuarter` — distinct from a quarter with no row at all. `hasSalesRecordedForPeriod` (rework brief #2 §3.1) is unaffected: it still keys on row existence, and a deliberate no-sales quarter is a row, so it reads as "recorded," correctly.
+
+*Draft vs. Save:* Save as draft stores the rows without marking step 1 (`RECORD_SALES`) done; Save does both, by calling the same `markStepDone` the per-step control always used (so the election hard-blocker still applies). Once step 1 is done, further edits — draft or final — never undo it; the quarter stays editable until its own return is filed. This does not change what step 3 (`PREPARE_RETURN`) generates: the computation sheet always reads the live `QuarterlySales` figures at generation time, same as before, whether the quarter behind them is a draft or finalized.
+
+*Step 1's card is now fully derived* — no Start, Mark waiting, Mark done, Skip, or skip-reason box left on it at all; it shows "Waiting on client" until a final Save, then "Done," plus the quarter's total once saved, with one button through to income entry. The income page, opened from a filing (`?filingId=`), shows only that filing's own quarter as editable and every other quarter of the year as a read-only table (quarter, customers, total, source) with links to their own filings; opened without a filing, every quarter renders read-only the same way. A quarter is read-only once its own filing's step 5 (`FILE_RETURN`) is `DONE`.
+
+**D34 — A certificate's credit period is the filing it was entered under, locked once filed** *(2026-09-21)*
+Supersedes D10 entirely. `certificateCutoffDate`, `Filing.certificateCutoffOverride`, and `resolveCertificateCutoffDate()` are removed — from the screen and from `lib/tax/cwt.ts`'s cumulative CWT assembly, `lib/sawt/`'s eligibility selection, and `scripts/verify-real.ts`'s fixture shape.
+
+*The rule:* `Form2307.claimedOnFilingId` is set once, at entry (under a filing's step 2), and never reassigned. `sumCwtThroughPeriod` now takes each certificate's claimed *period* and a target period, and includes it if its claimed period is that period or an earlier one in the same taxable year — the same cumulative shape as before, just keyed on where it was entered rather than when it arrived. `dateReceived` is kept as a recorded fact on the certificate; it no longer decides anything.
+
+*Why this still works:* D11 (no amended returns) is unchanged, and is exactly what makes this safe — step 2's certificate list locks the moment its filing's step 5 (`FILE_RETURN`) is `DONE`, so a certificate can never be added to, or removed from, a period already filed. A certificate that arrives after filing is entered under whichever filing is next open (usually the next quarter or the Annual) — her choice, made simply by which filing's step 2 page she's on when she enters it; there is no dropdown to pick a period.
+
+*Confirmed unaffected:* the annual certificates-vs-declared-sales check (`lib/reconciliation.ts`) compares over the whole taxable year regardless of which quarter a certificate is claimed on, so this change doesn't touch it — a certificate entered under any quarter still counts toward the same annual total either way.
+
+**D35 — Step 2 blocks: "all certificates received" plus a scan on every row** *(2026-09-21)*
+Updates D27's table (step 2's row) and fits D27's own category rule — a 2307 is a document she receives from outside, so it belongs with the blocking steps, not the optional ones. It was optional at D27's writing because entry hadn't been rebuilt yet; it now has somewhere real to point at.
+
+*The rule:* step 2 (`RECEIVE_2307`) holds one row per certificate — payor, income amount, tax withheld, date received, and its own scan (`Document.form2307Id`), with the remaining existing `Form2307` fields (TIN, address, ATC code, rate, the certificate's own period) behind a "more" disclosure. `Filing.certificatesAllReceivedAt` records the "All certificates received" checkbox. Step 2 is `DONE` only when that checkbox is ticked **and** every row has a scan attached — the first blocking rule inside Prepare. Unlike step 1, this is a genuine two-way toggle: unticking (to add a late-arriving row before filing) reverts step 2 to "Waiting on client," not to some separate unresolved state.
+
+*Skip stays, by hand, with a reason* — for clients who never issue 2307s or a quarter with none. There remains no automatic "no 2307s" client setting; that was a deliberate choice, not an oversight (mirrors D26/D28's certificate-independence design).
+
+*The old separate Form 2307 register screen* (`/clients/[id]/form-2307`) is now read-only — entry moved into step 2. It still shows the annual certificates-vs-sales reconciliation and the SAWT keying-worksheet link, and each row links to the filing it was claimed on, but its own entry form and route (`/form-2307/new`) are gone.
+
+**Prepare's own "Mark done" is disabled until steps 1 and 2 are resolved** *(2026-09-21, same brief)*
+Steps 1 and 2 now complete themselves (D33/D35), so Prepare's group-level "Mark done" only ever has steps 3-4 left. It is disabled, with a plain-language reason, until step 1 is `DONE` and step 2 is `DONE` or `SKIPPED` — a return can't be prepared without the sales figure or the certificates. *Proposed by Claude and flagged to the bookkeeper; if she objects, it comes out.* Implemented as `prepareGroupBlockReason()` in `lib/workflow/groups.ts`, consulted by both the group card (client-side disable) and `markGroupDone` (server-side enforcement) — one function, not two copies that could drift.

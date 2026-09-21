@@ -1,9 +1,8 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { computeFiling } from "@/lib/tax/compute";
-import { sumCwtThroughPeriod, resolveCertificateCutoffDate } from "@/lib/tax/cwt";
+import { sumCwtThroughPeriod } from "@/lib/tax/cwt";
 import { periodEndDate, priorPeriodsOf, cumulativeSalesQuartersThroughPeriod, ownSalesQuarterOf } from "@/lib/tax/periods";
-import { nowManila } from "@/lib/dates";
 import type { FilingComputationResult, Period } from "@/lib/tax/types";
 
 /**
@@ -22,9 +21,6 @@ export async function assembleAndComputeFiling(
   const clientTaxYear = await prisma.clientTaxYear.findUnique({
     where: { clientId_taxableYear: { clientId, taxableYear } },
   });
-  const filing = await prisma.filing.findUnique({
-    where: { clientId_taxableYear_period: { clientId, taxableYear, period } },
-  });
 
   // Declared gross sales (D26) — one row per client per taxable year per
   // sales quarter, summed cumulatively through this filing's period
@@ -37,24 +33,21 @@ export async function assembleAndComputeFiling(
   const cumulativeGrossSalesCents = salesRows.reduce((sum, r) => sum + r.grossSalesCents, 0);
   const cumulativeNonOperatingCents = salesRows.reduce((sum, r) => sum + r.nonOperatingIncomeCents, 0);
 
-  const certificateCutoff = resolveCertificateCutoffDate({
-    filedAt: filing?.filedAt ?? null,
-    manualOverride: filing?.certificateCutoffOverride ?? null,
-    today: nowManila().startOf("day").toJSDate(),
-  });
-
+  // D34 (brief #4b, supersedes D10) — a certificate's credit period is
+  // the period of the filing whose step 2 it was entered under, not
+  // dateReceived against a cutoff date.
   const certificates = await prisma.form2307.findMany({
     where: { clientId, taxableYear, deletedAt: null },
+    include: { claimedOnFiling: { select: { period: true } } },
   });
   const cumulativeCwtCents = sumCwtThroughPeriod(
     certificates.map((c) => ({
       id: c.id,
       taxWithheldCents: c.taxWithheldCents,
-      dateReceived: c.dateReceived,
       status: c.status,
-      claimedOnFilingId: c.claimedOnFilingId,
+      claimedOnFilingPeriod: c.claimedOnFiling?.period ?? null,
     })),
-    certificateCutoff.date,
+    period,
   );
 
   const priorPeriods = priorPeriodsOf(period);
@@ -81,8 +74,6 @@ export async function assembleAndComputeFiling(
     cumulativeCwtCents,
     priorPeriodPaymentsCents,
     priorYearExcessCreditCents,
-    certificateCutoffDate: certificateCutoff.date,
-    certificateCutoffSource: certificateCutoff.source,
   });
 }
 

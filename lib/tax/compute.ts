@@ -116,8 +116,6 @@ export function computeFiling(input: FilingComputationInput): FilingComputationR
     isOverpayment: overpaymentCents > 0,
     overpaymentCents,
     breakdown,
-    certificateCutoffDate: input.certificateCutoffDate,
-    certificateCutoffSource: input.certificateCutoffSource,
   };
 }
 

@@ -9,7 +9,7 @@ import { isElectionBlocked } from "@/lib/workflow/election";
 import { ensureComputationSheetSaved } from "@/lib/documents/computationSheet";
 import { missingRequiredSlots, checkSendClientPackageReadiness } from "@/lib/workflow/docSlots";
 import { parseDocSlots } from "@/lib/workflow/types";
-import { WORKFLOW_GROUPS } from "@/lib/workflow/groups";
+import { WORKFLOW_GROUPS, prepareGroupBlockReason } from "@/lib/workflow/groups";
 import { isResolved } from "@/lib/workflow/status";
 
 export type StepActionResult = { ok: boolean; error?: string };
@@ -152,6 +152,16 @@ export async function markGroupDone(filingId: string, groupCode: string): Promis
     orderBy: { sequence: "asc" },
   });
 
+  // Brief #4b — Prepare's own Mark done only ever has steps 3-4 left
+  // (steps 1-2 self-complete), and is blocked server-side by the same
+  // rule the button is disabled by client-side (lib/workflow/groups.ts's
+  // prepareGroupBlockReason): a return can't be prepared without the
+  // sales figure or the certificates.
+  if (group.code === "PREPARE") {
+    const reason = prepareGroupBlockReason(steps);
+    if (reason) return { ok: false, error: reason };
+  }
+
   for (const step of steps) {
     if (isResolved(step.status)) continue;
     const result = await markStepDone(step.id);
@@ -159,6 +169,65 @@ export async function markGroupDone(filingId: string, groupCode: string): Promis
   }
 
   return { ok: true };
+}
+
+/**
+ * Brief #4b (D34) — step 2 (RECEIVE_2307) is self-completing: DONE once
+ * "all certificates received" is ticked (Filing.certificatesAllReceivedAt,
+ * set by lib/actions/filings.ts's setAllCertificatesReceived) AND every
+ * certificate entered under this filing (Form2307.claimedOnFilingId) has
+ * its own scan attached. Called after every certificate add/delete, scan
+ * upload/removal, and after the checkbox itself is toggled, so the step
+ * is always in sync with what's actually on file. Reverts to
+ * WAITING_EXTERNAL ("waiting on client") the moment either condition
+ * stops holding — this is a two-way toggle, not a one-time completion,
+ * so a certificate that arrives after ticking but before filing can
+ * still be added: untick, add the row and its scan, re-tick. A step
+ * already SKIPPED (the bookkeeper's own by-hand decision that this
+ * filing has none) is left untouched.
+ */
+export async function recomputeReceive2307Status(filingId: string): Promise<void> {
+  const filing = await prisma.filing.findUnique({ where: { id: filingId } });
+  if (!filing) return;
+
+  const step = await prisma.workflowStep.findFirst({ where: { filingId, stepCode: "RECEIVE_2307" } });
+  if (!step || step.status === "SKIPPED") return;
+
+  const certificates = await prisma.form2307.findMany({
+    where: { claimedOnFilingId: filingId, deletedAt: null },
+    include: { documents: { where: { deletedAt: null } } },
+  });
+  const everyRowHasScan = certificates.every((c) => c.documents.length > 0);
+  const isComplete = filing.certificatesAllReceivedAt != null && everyRowHasScan;
+
+  const actorId = await getActorId();
+
+  if (isComplete && step.status !== "DONE") {
+    const clientTaxYear = await prisma.clientTaxYear.findUnique({
+      where: { clientId_taxableYear: { clientId: filing.clientId, taxableYear: filing.taxableYear } },
+    });
+    // The election hard-blocker still applies (D27/D32) — an unconfirmed
+    // Q1 election leaves step 2 not-done rather than silently completing.
+    if (isElectionBlocked(filing.period, clientTaxYear?.electionStatus)) return;
+
+    const updated = await prisma.workflowStep.update({
+      where: { id: step.id },
+      data: { status: "DONE", completedAt: new Date(), startedAt: step.startedAt ?? new Date(), actorId },
+    });
+    await logActivity({ entityType: "WorkflowStep", entityId: step.id, action: "UPDATE", before: step, after: updated, actorId });
+    await recomputeFilingStatus(filingId, actorId);
+    revalidatePath(`/clients/${filing.clientId}/filings/${filingId}`);
+    revalidatePath("/filings");
+  } else if (!isComplete && step.status !== "WAITING_EXTERNAL") {
+    const updated = await prisma.workflowStep.update({
+      where: { id: step.id },
+      data: { status: "WAITING_EXTERNAL", waitingSince: step.waitingSince ?? new Date(), actorId },
+    });
+    await logActivity({ entityType: "WorkflowStep", entityId: step.id, action: "UPDATE", before: step, after: updated, actorId });
+    await recomputeFilingStatus(filingId, actorId);
+    revalidatePath(`/clients/${filing.clientId}/filings/${filingId}`);
+    revalidatePath("/filings");
+  }
 }
 
 export async function markStepInProgress(stepId: string): Promise<StepActionResult> {

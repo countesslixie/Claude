@@ -1,6 +1,6 @@
 import { describe, it, expect, afterAll, vi } from "vitest";
 import { prisma } from "@/lib/prisma";
-import { upsertQuarterlySales } from "@/lib/actions/quarterlySales";
+import { saveQuarterlySales } from "@/lib/actions/quarterlySales";
 import { assembleAndComputeFiling } from "@/lib/filingComputation";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
@@ -69,7 +69,13 @@ describe("AmendmentAlert wiring", () => {
 
     // Edit the gross amount — this changes Q1's cumulative gross, so the
     // live recomputation will diverge from the frozen snapshot.
-    const result = await upsertQuarterlySales(client.id, 2026, "Q1", {}, formDataOf({ grossSales: "400000" }));
+    const result = await saveQuarterlySales(
+      client.id,
+      2026,
+      "Q1",
+      {},
+      formDataOf({ intent: "final" }, [{ customerName: "Client X", amount: "400000" }]),
+    );
     expect(result.saved).toBe(true);
 
     const filingAfter = await prisma.filing.findUniqueOrThrow({ where: { id: filing.id } });
@@ -96,10 +102,22 @@ describe("AmendmentAlert wiring", () => {
     });
     createdClientIds.push(client.id);
 
-    const created = await upsertQuarterlySales(client.id, 2026, "Q2", {}, formDataOf({ grossSales: "50000" }));
+    const created = await saveQuarterlySales(
+      client.id,
+      2026,
+      "Q2",
+      {},
+      formDataOf({ intent: "final" }, [{ customerName: "Client Y", amount: "50000" }]),
+    );
     expect(created.saved).toBe(true);
 
-    const result = await upsertQuarterlySales(client.id, 2026, "Q2", {}, formDataOf({ grossSales: "75000" }));
+    const result = await saveQuarterlySales(
+      client.id,
+      2026,
+      "Q2",
+      {},
+      formDataOf({ intent: "final" }, [{ customerName: "Client Y", amount: "75000" }]),
+    );
     expect(result.saved).toBe(true);
 
     const alertCount = await prisma.amendmentAlert.count({
@@ -109,8 +127,15 @@ describe("AmendmentAlert wiring", () => {
   });
 });
 
-function formDataOf(values: Record<string, string>): FormData {
+function formDataOf(
+  values: Record<string, string>,
+  customers: { customerName: string; amount: string }[] = [],
+): FormData {
   const fd = new FormData();
   for (const [k, v] of Object.entries(values)) fd.set(k, v);
+  for (const row of customers) {
+    fd.append("customerName", row.customerName);
+    fd.append("amount", row.amount);
+  }
   return fd;
 }

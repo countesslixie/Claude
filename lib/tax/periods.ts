@@ -109,6 +109,43 @@ export function salesQuarterEndDate(taxableYear: number, quarter: SalesQuarter):
 }
 
 /**
+ * The inverse of ownSalesQuarterOf below: which filing period a declared
+ * sales quarter belongs to (brief #4b) — Q1/Q2/Q3 map to their own
+ * quarterly filing, Q4 has no filing of its own and maps to ANNUAL.
+ */
+export function filingPeriodForSalesQuarter(quarter: SalesQuarter): Period {
+  switch (quarter) {
+    case "Q1":
+      return "Q1";
+    case "Q2":
+      return "Q2";
+    case "Q3":
+      return "Q3";
+    case "Q4":
+      return "ANNUAL";
+  }
+}
+
+/**
+ * Form2307.quarterCovered is always a raw 1-4, unlike Filing.period. This
+ * is the single-quarter form of periodToQuarters above: Q1-Q3 map to
+ * their own quarter number; ANNUAL's own certificates (brief #4b: entered
+ * under the ANNUAL filing's step 2) are recorded against quarter 4.
+ */
+export function periodToSingleQuarterCovered(period: Period): number {
+  switch (period) {
+    case "Q1":
+      return 1;
+    case "Q2":
+      return 2;
+    case "Q3":
+      return 3;
+    case "ANNUAL":
+      return 4;
+  }
+}
+
+/**
  * The single QuarterlySales quarter that is genuinely "this filing's own"
  * — as opposed to cumulativeSalesQuartersThroughPeriod's whole
  * year-to-date set. Used to answer "has this specific period's own sales

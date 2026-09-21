@@ -40,6 +40,28 @@ export function groupForStepCode(stepCode: string): WorkflowGroupDef | undefined
 }
 
 /**
+ * Brief #4b — steps 1 and 2 now complete themselves (RECORD_SALES on a
+ * final Save of the quarter's sales; RECEIVE_2307 once "all certificates
+ * received" is ticked and every certificate row has its scan). Prepare's
+ * own "Mark done" therefore only ever has steps 3-4 left to resolve, and
+ * is disabled with a plain-language reason until both self-completing
+ * steps are resolved: a return can't be prepared without the sales
+ * figure or the certificates.
+ */
+export function prepareGroupBlockReason(steps: { stepCode: string; status: WorkflowStepStatus }[]): string | null {
+  const step1 = steps.find((s) => s.stepCode === "RECORD_SALES");
+  const step2 = steps.find((s) => s.stepCode === "RECEIVE_2307");
+  const step1Done = step1?.status === "DONE";
+  const step2Resolved = step2 ? isResolved(step2.status) : false;
+  if (step1Done && step2Resolved) return null;
+
+  const missing: string[] = [];
+  if (!step1Done) missing.push("quarterly sales are recorded (step 1)");
+  if (!step2Resolved) missing.push("Form 2307 receipt is resolved — received or skipped (step 2)");
+  return `Can't prepare a return until ${missing.join(" and ")}.`;
+}
+
+/**
  * The group a filing currently "sits at" for board/collapsed-summary
  * purposes: the earliest group (by group order, 1-5 — NOT by raw step
  * sequence, since group 2 isn't contiguous) with anything unresolved in
@@ -75,7 +97,7 @@ export interface GroupSummary {
   doneCount: number;
   totalCount: number;
   isComplete: boolean;
-  /** §4 — the group's Done control is disabled while this is non-null; names what's missing in plain words. Only reflects the same required-doc-slot rule as always (D27) — never the election check, the step 13->14 dependency, or SEND_CLIENT_PACKAGE's package-readiness check, all of which are unaffected and still surface as they did before this pass. */
+  /** §4 — the group's Done control is disabled while this is non-null; names what's missing in plain words. Reflects the required-doc-slot rule (D27) for every group except Prepare, which is gated by prepareGroupBlockReason (brief #4b) instead. Never the election check, the step 13->14 dependency, or SEND_CLIENT_PACKAGE's package-readiness check, all of which are unaffected and still surface as they did before this pass. */
   blockReason: string | null;
   /** §3 — what a collapsed group shows as outstanding, e.g. "waiting on proof of payment" or "waiting on BIR, 12d". null once the group is complete or nothing is outstanding yet. */
   outstandingLabel: string | null;
@@ -98,10 +120,13 @@ export function summarizeGroup(group: WorkflowGroupDef, steps: GroupStepInput[])
     if (isResolved(s.status)) continue;
     missingLabels.push(...missingRequiredSlots(s.requiredDocSlots ?? [], s.documents ?? []).map((slot) => slot.label));
   }
-  const blockReason =
+  const docSlotBlockReason =
     missingLabels.length > 0
       ? `Missing required document${missingLabels.length > 1 ? "s" : ""}: ${missingLabels.join(", ")}.`
       : null;
+  // Brief #4b — Prepare's block reason is the steps 1/2 gate above, not a
+  // missing document (neither step carries a required doc slot anymore).
+  const blockReason = group.code === "PREPARE" ? prepareGroupBlockReason(groupSteps) : docSlotBlockReason;
 
   let outstandingLabel: string | null = null;
   if (!isComplete) {

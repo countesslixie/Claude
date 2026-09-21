@@ -4,11 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getActorId } from "@/lib/actor";
 import { logActivity } from "@/lib/activityLog";
-import {
-  resolveCertificateCutoffForFilingPeriod,
-  getAllCertificatesThisYear,
-  selectUnbatchedClaimableCertificates,
-} from "@/lib/sawt/eligibleCertificates";
+import { getAllCertificatesThisYear, selectUnbatchedClaimableCertificates } from "@/lib/sawt/eligibleCertificates";
 import type { Period } from "@/lib/tax/types";
 
 export type GenerateSawtBatchResult = { ok: boolean; error?: string; batchedCount?: number };
@@ -26,9 +22,8 @@ export async function generateSawtBatch(
   taxableYear: number,
   period: Period,
 ): Promise<GenerateSawtBatchResult> {
-  const cutoffDate = await resolveCertificateCutoffForFilingPeriod(clientId, taxableYear, period);
   const allCertificates = await getAllCertificatesThisYear(clientId, taxableYear);
-  const toBatch = selectUnbatchedClaimableCertificates(allCertificates, period, cutoffDate);
+  const toBatch = selectUnbatchedClaimableCertificates(allCertificates, period);
 
   const actorId = await getActorId();
 
