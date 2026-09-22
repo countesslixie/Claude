@@ -10,6 +10,7 @@ import { pesosToCents, percentToBps } from "@/lib/money";
 import { periodToSingleQuarterCovered } from "@/lib/tax/periods";
 import { recomputeRequiresSawt } from "@/lib/workflow/filingGeneration";
 import { recomputeReceive2307Status } from "@/lib/actions/workflowSteps";
+import { setAllCertificatesReceived } from "@/lib/actions/filings";
 
 export type CertificateFormState = {
   error?: string;
@@ -28,7 +29,6 @@ const FIELDS = [
   "incomePayment",
   "taxWithheld",
   "withholdingRatePercent",
-  "dateReceived",
   "notes",
 ] as const;
 
@@ -97,7 +97,6 @@ export async function addCertificate(
       incomePaymentCents: pesosToCents(parsed.data.incomePayment),
       taxWithheldCents: pesosToCents(parsed.data.taxWithheld),
       withholdingRateBps,
-      dateReceived: manilaDateInputToJsDate(parsed.data.dateReceived),
       status: "RECORDED",
       claimedOnFilingId: filing.id,
       notes: parsed.data.notes ?? null,
@@ -138,7 +137,17 @@ export async function deleteCertificate(certificateId: string, reason: string): 
   const filing = await prisma.filing.findUnique({ where: { id: cert.claimedOnFilingId } });
   if (filing) {
     await recomputeRequiresSawt(filing.clientId, filing.taxableYear, filing.period);
-    await recomputeReceive2307Status(filing.id);
+
+    // Brief #4d — removing the last row on this filing goes back to the
+    // "no certificates yet" state (Add certificate / Skip, no checkbox);
+    // untick "all received" if it was ticked, since there's nothing left
+    // for it to describe.
+    const remaining = await prisma.form2307.count({ where: { claimedOnFilingId: filing.id, deletedAt: null } });
+    if (remaining === 0 && filing.certificatesAllReceivedAt != null) {
+      await setAllCertificatesReceived(filing.id, false);
+    } else {
+      await recomputeReceive2307Status(filing.id);
+    }
     revalidatePath(`/clients/${filing.clientId}/filings/${filing.id}`);
   }
 

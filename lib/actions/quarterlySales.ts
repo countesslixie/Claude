@@ -6,9 +6,10 @@ import { quarterlySalesSchema } from "@/lib/validation/quarterlySales";
 import { getActorId } from "@/lib/actor";
 import { logActivity } from "@/lib/activityLog";
 import { pesosToCents, centsToPesos } from "@/lib/money";
+import { formatManilaDate } from "@/lib/dates";
 import { checkAndRecordAmendments } from "@/lib/filingComputation";
 import { salesQuarterEndDate, filingPeriodForSalesQuarter } from "@/lib/tax/periods";
-import { markStepDone } from "@/lib/actions/workflowSteps";
+import { markStepDone, markStepWaitingExternal } from "@/lib/actions/workflowSteps";
 import type { SalesQuarter } from "@/lib/tax/types";
 
 export type QuarterlySalesFormState = {
@@ -21,8 +22,10 @@ export type QuarterlySalesFormState = {
     noSalesThisQuarter: boolean;
   };
   saved?: boolean;
-  /** True once this save marked step 1 (RECORD_SALES) done. */
+  /** True once this save leaves step 1 (RECORD_SALES) Done; false if it left it (or reverted it to) open. */
   finalized?: boolean;
+  /** Manila-formatted date of this save, for the "Draft saved .../Saved ..." label (brief #4d). */
+  savedAt?: string;
 };
 
 function rowsFromFormData(formData: FormData): { customerName: string; amount: string }[] {
@@ -39,10 +42,16 @@ function rowsFromFormData(formData: FormData): { customerName: string; amount: s
  * This is the only place income enters the system; a Form 2307 never
  * contributes to it (D26). `intent` is "draft" (stores the rows, leaves
  * step 1 not done) or "final" (stores the rows and marks step 1 done —
- * see lib/workflow/groups.ts's RECORD_SALES self-completion). Once step
- * 1 has been finalized once, further edits (draft or final) keep it
- * done; the quarter itself stays editable until its own return is filed
- * (step 5, FILE_RETURN, DONE), which this rejects outright.
+ * see lib/workflow/groups.ts's RECORD_SALES self-completion).
+ *
+ * Brief #4d — a quarter that's already final and is then edited and
+ * saved as a draft goes back to open: step 1 reverts to
+ * WAITING_EXTERNAL and finalizedAt is cleared. This supersedes brief
+ * #4b's original "once done, further edits never undo it" — the
+ * bookkeeper's walkthrough asked for a real Edit/Cancel flow on the
+ * income page, and a draft save has to mean draft. The quarter itself
+ * stays editable either way until its own return is filed (step 5,
+ * FILE_RETURN, DONE), which this rejects outright.
  */
 export async function saveQuarterlySales(
   clientId: string,
@@ -112,7 +121,10 @@ export async function saveQuarterlySales(
 
   const actorId = await getActorId();
   const now = new Date();
-  const finalizedAt = intent === "final" ? (existing?.finalizedAt ?? now) : (existing?.finalizedAt ?? null);
+  // Brief #4d — finalizedAt mirrors intent on every save: a draft save
+  // clears it even if the quarter was final before, since that's the
+  // whole point of the revert-to-draft flow below.
+  const finalizedAt = intent === "final" ? (existing?.finalizedAt ?? now) : null;
 
   const saved = await prisma.$transaction(async (tx) => {
     const row = await tx.quarterlySales.upsert({
@@ -176,21 +188,28 @@ export async function saveQuarterlySales(
   );
 
   let finalizedStep1 = false;
-  if (intent === "final" && filing) {
+  if (filing) {
     const step = await prisma.workflowStep.findFirst({ where: { filingId: filing.id, stepCode: "RECORD_SALES" } });
     if (step) {
-      if (step.status !== "DONE") {
-        const result = await markStepDone(step.id);
-        if (!result.ok) {
-          return { error: result.error, saved: true, values };
+      if (intent === "final") {
+        if (step.status !== "DONE") {
+          const result = await markStepDone(step.id);
+          if (!result.ok) {
+            return { error: result.error, saved: true, values };
+          }
         }
+        finalizedStep1 = true;
+      } else if (step.status === "DONE") {
+        // Brief #4d — saving as draft after Edit reverts a previously-
+        // final quarter: step 1 goes back to "waiting on client" the
+        // same way it reads before it's ever been saved final.
+        await markStepWaitingExternal(step.id);
       }
-      finalizedStep1 = true;
     }
   }
 
   revalidatePath(`/clients/${clientId}/income`);
   if (filing) revalidatePath(`/clients/${clientId}/filings/${filing.id}`);
 
-  return { saved: true, finalized: finalizedStep1, values };
+  return { saved: true, finalized: finalizedStep1, values, savedAt: formatManilaDate(saved.updatedAt) };
 }

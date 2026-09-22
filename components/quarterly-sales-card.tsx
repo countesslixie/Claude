@@ -29,12 +29,29 @@ function formatPesos(n: number): string {
  * derived from the rows, never itself an input. "No sales this quarter"
  * is a deliberate ₱0, distinct from leaving the quarter untouched. Save
  * as draft stores the rows without marking step 1 done; Save does both.
+ *
+ * Brief #4d — the card now shows plainly whether it's saved at all, and
+ * if so whether that save is a draft or final:
+ *   - nothing saved yet: no label, opens editable (unchanged).
+ *   - draft saved: "Draft saved [date] — not final. Step 1 is still
+ *     open.", opens editable (unchanged) — no Edit/Cancel toggle.
+ *   - final: "Saved [date] — step 1 is done.", opens READ-ONLY with an
+ *     Edit button. Edit reveals the same form with a Cancel button
+ *     added (discards unsaved changes, returns to read-only). Saving
+ *     the edit as a draft reverts step 1 to open and drops back to the
+ *     plain editable (no-toggle) state; saving it final keeps step 1
+ *     done and leaves the income page for the filing page.
+ * A final Save always returns to the filing page; Save as draft always
+ * stays here with a short confirmation instead.
  */
 export function QuarterlySalesCard({
   quarter,
   isQ4,
   action,
   initialValues,
+  initialFinalized,
+  initialSavedAt,
+  filingHref,
 }: {
   quarter: "Q1" | "Q2" | "Q3" | "Q4";
   isQ4: boolean;
@@ -45,6 +62,12 @@ export function QuarterlySalesCard({
     notes: string;
     noSalesThisQuarter: boolean;
   };
+  /** Whether step 1 is currently Done for this quarter (false if nothing's ever been saved, or it's only a draft). */
+  initialFinalized: boolean;
+  /** Manila-formatted date of the last save, or null if nothing's been saved yet. */
+  initialSavedAt: string | null;
+  /** Where a successful final Save returns to. */
+  filingHref: string;
 }) {
   const [state, formAction, isPending] = useActionState<QuarterlySalesFormState, FormData>(action, {
     values: initialValues,
@@ -54,6 +77,10 @@ export function QuarterlySalesCard({
     initialValues?.customers && initialValues.customers.length > 0 ? initialValues.customers : [EMPTY_ROW],
   );
   const [noSales, setNoSales] = useState(initialValues?.noSalesThisQuarter ?? false);
+  const [finalized, setFinalized] = useState(initialFinalized);
+  const [savedAt, setSavedAt] = useState(initialSavedAt);
+  const [overrideEditing, setOverrideEditing] = useState(false);
+  const [formKey, setFormKey] = useState(0);
 
   // Re-sync from the server's echoed values after every submit (success or
   // validation error) so a rejected save doesn't lose what she typed.
@@ -62,6 +89,23 @@ export function QuarterlySalesCard({
     setRows(state.values.customers.length > 0 ? state.values.customers : [EMPTY_ROW]);
     setNoSales(state.values.noSalesThisQuarter);
   }, [state.values]);
+
+  // Brief #4d — react to what this save actually left behind: final
+  // redirects to the filing page (a real navigation, not router.push —
+  // that raced against Next's own revalidation refresh of this same
+  // route and silently lost); draft (including a revert from final)
+  // updates the label and drops any Edit override.
+  useEffect(() => {
+    if (!state.saved) return;
+    if (state.savedAt) setSavedAt(state.savedAt);
+    if (state.finalized) {
+      setFinalized(true);
+      window.location.href = filingHref;
+    } else {
+      setFinalized(false);
+      setOverrideEditing(false);
+    }
+  }, [state, filingHref]);
 
   const v = (key: "nonOperatingIncome" | "notes") => state.values?.[key] ?? initialValues?.[key] ?? "";
   const errs = (key: string) => state.fieldErrors?.[key];
@@ -78,14 +122,61 @@ export function QuarterlySalesCard({
     setRows((r) => r.map((row, idx) => (idx === i ? { ...row, [field]: value } : row)));
   }
 
+  function handleCancel() {
+    const src = state.values ?? initialValues;
+    setRows(src?.customers && src.customers.length > 0 ? src.customers : [EMPTY_ROW]);
+    setNoSales(src?.noSalesThisQuarter ?? false);
+    setOverrideEditing(false);
+    // Uncontrolled inputs (nonOperatingIncome, notes) only pick up a new
+    // defaultValue on mount — force one so Cancel actually discards them.
+    setFormKey((k) => k + 1);
+  }
+
+  const savedLabel = savedAt
+    ? finalized
+      ? `Saved ${savedAt} — step 1 is done.`
+      : `Draft saved ${savedAt} — not final. Step 1 is still open.`
+    : null;
+
+  const showForm = !finalized || overrideEditing;
+
+  if (!showForm) {
+    return (
+      <div className="rounded-lg border border-slate-200 bg-white p-4">
+        <div className="mb-1 flex items-baseline justify-between">
+          <h2 className="text-sm font-semibold text-slate-900">{quarter}</h2>
+          <Button type="button" size="sm" variant="secondary" onClick={() => setOverrideEditing(true)}>
+            Edit
+          </Button>
+        </div>
+        {savedLabel && <p className="mb-2 text-xs font-medium text-slate-500">{savedLabel}</p>}
+        <p className="text-sm text-slate-700">
+          Quarter total: <span className="font-medium">₱{formatPesos(total)}</span>
+        </p>
+        <p className="mt-1 text-sm text-slate-600">
+          {noSales
+            ? "No sales this quarter"
+            : rows.filter((r) => r.customerName.trim() !== "").length > 0
+              ? rows
+                  .filter((r) => r.customerName.trim() !== "")
+                  .map((r) => r.customerName)
+                  .join(", ")
+              : "—"}
+        </p>
+      </div>
+    );
+  }
+
   return (
-    <form action={formAction} className="rounded-lg border border-slate-200 bg-white p-4">
+    <form key={formKey} action={formAction} className="rounded-lg border border-slate-200 bg-white p-4">
       <div className="mb-3 flex items-baseline justify-between">
         <h2 className="text-sm font-semibold text-slate-900">{quarter}</h2>
         {isQ4 && (
           <span className="text-xs text-slate-400">Picked up by the ANNUAL return — no quarterly return of its own</span>
         )}
       </div>
+
+      {savedLabel && <p className="mb-2 text-xs font-medium text-slate-500">{savedLabel}</p>}
 
       {state.error && <p className="mb-2 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{state.error}</p>}
 
@@ -175,10 +266,13 @@ export function QuarterlySalesCard({
         <Button type="submit" name="intent" value="final" size="sm" disabled={isPending}>
           {isPending ? "Saving…" : "Save"}
         </Button>
-        {state.saved && !isPending && (
-          <span className="text-xs text-emerald-600">
-            Saved.{state.finalized ? " Step 1 marked done." : ""}
-          </span>
+        {finalized && overrideEditing && (
+          <button type="button" onClick={handleCancel} className="text-xs text-slate-400 underline">
+            Cancel
+          </button>
+        )}
+        {state.saved && !isPending && !state.finalized && (
+          <span className="text-xs text-emerald-600">Draft saved.</span>
         )}
       </div>
     </form>

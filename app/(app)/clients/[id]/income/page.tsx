@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { QuarterlySalesCard } from "@/components/quarterly-sales-card";
 import { saveQuarterlySales } from "@/lib/actions/quarterlySales";
 import { centsToPesos } from "@/lib/money";
-import { currentTaxableYearManila } from "@/lib/dates";
+import { currentTaxableYearManila, formatManilaDate } from "@/lib/dates";
 import { ownSalesQuarterOf, filingPeriodForSalesQuarter } from "@/lib/tax/periods";
 import type { SalesQuarter } from "@/lib/tax/types";
 
@@ -20,6 +20,11 @@ const QUARTERS: SalesQuarter[] = ["Q1", "Q2", "Q3", "Q4"];
  * filing (e.g. from the client page), every quarter renders read-only
  * with a link to its filing if one exists — the simplest reasonable
  * version of "no filing context to anchor an editable quarter to."
+ *
+ * Brief #4d — a quarter that's already final (step 1/RECORD_SALES Done)
+ * but not yet filed now opens read-only with an Edit button, inside
+ * QuarterlySalesCard itself, distinct from `locked` (filed — no Edit
+ * button at all, unchanged from before).
  */
 export default async function IncomePage({
   params,
@@ -51,15 +56,22 @@ export default async function IncomePage({
 
   const filingsThisYear = await prisma.filing.findMany({
     where: { clientId: id, taxableYear },
-    include: { workflowSteps: { where: { stepCode: "FILE_RETURN" }, select: { status: true } } },
+    include: {
+      workflowSteps: { where: { stepCode: { in: ["FILE_RETURN", "RECORD_SALES"] } }, select: { stepCode: true, status: true } },
+    },
   });
   const filingByPeriod = new Map(filingsThisYear.map((f) => [f.period, f]));
 
   function lockInfoFor(quarter: SalesQuarter) {
     const period = filingPeriodForSalesQuarter(quarter);
     const f = filingByPeriod.get(period);
-    const locked = f?.workflowSteps[0]?.status === "DONE";
-    return { filing: f ?? null, locked };
+    const locked = f?.workflowSteps.find((s) => s.stepCode === "FILE_RETURN")?.status === "DONE";
+    // Brief #4d — step 1's own Done status decides whether this quarter
+    // opens read-only (final) or editable (draft/never saved), separate
+    // from `locked` (the return has been filed — a stronger, permanent
+    // state with no Edit button at all).
+    const finalized = f?.workflowSteps.find((s) => s.stepCode === "RECORD_SALES")?.status === "DONE";
+    return { filing: f ?? null, locked, finalized };
   }
 
   const editableQuarter: SalesQuarter | null = openFiling ? ownSalesQuarterOf(openFiling.period as never) : null;
@@ -135,7 +147,7 @@ export default async function IncomePage({
 
       {editableQuarter &&
         (() => {
-          const { locked, filing } = lockInfoFor(editableQuarter);
+          const { locked, finalized, filing } = lockInfoFor(editableQuarter);
           const row = byQuarter.get(editableQuarter);
           if (locked) {
             return (
@@ -168,6 +180,9 @@ export default async function IncomePage({
                   notes: row?.notes ?? "",
                   noSalesThisQuarter: row?.noSalesThisQuarter ?? false,
                 }}
+                initialFinalized={finalized}
+                initialSavedAt={row ? formatManilaDate(row.updatedAt) : null}
+                filingHref={filing ? `/clients/${id}/filings/${filing.id}` : `/clients/${id}/income`}
               />
             </div>
           );
@@ -177,7 +192,7 @@ export default async function IncomePage({
         <div className="mb-4 flex flex-col gap-4">
           {QUARTERS.map((quarter) => {
             const row = byQuarter.get(quarter);
-            const { locked, filing } = lockInfoFor(quarter);
+            const { locked, finalized, filing } = lockInfoFor(quarter);
             if (locked) {
               return (
                 <div key={quarter} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
@@ -209,6 +224,9 @@ export default async function IncomePage({
                   notes: row?.notes ?? "",
                   noSalesThisQuarter: row?.noSalesThisQuarter ?? false,
                 }}
+                initialFinalized={finalized}
+                initialSavedAt={row ? formatManilaDate(row.updatedAt) : null}
+                filingHref={filing ? `/clients/${id}/filings/${filing.id}` : `/clients/${id}/income`}
               />
             );
           })}

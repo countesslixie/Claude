@@ -19,23 +19,25 @@ const optionalPercent = z
   .refine((v) => v === undefined || /^\d+(\.\d{1,2})?$/.test(v), "Enter a non-negative percent");
 
 /**
- * Brief #4b/#4c — one certificate row entered under a filing's step 2.
- * Essential fields (payor, amounts, date received, the period the
- * certificate covers) are required; the remaining existing Form2307
- * fields (payor TIN/address, ATC code, withholding rate) sit behind
- * "more" and are optional here — left blank, the action defaults them
- * (rate to the client's default, ATC code left empty and unverified per
- * D19) rather than inventing a value. quarterCovered is no longer a
- * form field at all: it's derived from the filing this certificate is
- * entered under. `withholdingRatePercent` is entered as a percent
- * ("5" or "5.00") and converted to basis points at the action boundary
- * (lib/money.ts's percentToBps) — no float arithmetic.
+ * Brief #4b/#4c/#4d — one certificate row entered under a filing's step
+ * 2. Essential fields (payor, amounts, the period the certificate
+ * covers) are required; the remaining existing Form2307 fields (payor
+ * TIN/address, ATC code, withholding rate) sit behind "more" and are
+ * optional here — left blank, the action defaults them (rate to the
+ * client's default, ATC code left empty and unverified per D19) rather
+ * than inventing a value. quarterCovered is no longer a form field at
+ * all: it's derived from the filing this certificate is entered under.
+ * `withholdingRatePercent` is entered as a percent ("5" or "5.00") and
+ * converted to basis points at the action boundary (lib/money.ts's
+ * percentToBps) — no float arithmetic. Brief #4d removed dateReceived
+ * entirely — its last two readers (the SAWT keying worksheet's row
+ * order, the annual reconciliation's year attribution) were switched to
+ * read the filing this certificate was entered under instead.
  */
 export const certificateEntrySchema = z.object({
   payorName: z.string().trim().min(1, "Required"),
   incomePayment: pesos,
   taxWithheld: pesos,
-  dateReceived: z.string().trim().min(1, "Required"),
   periodFrom: z.string().trim().min(1, "Required"),
   periodTo: z.string().trim().min(1, "Required"),
   payorTin: optionalText,

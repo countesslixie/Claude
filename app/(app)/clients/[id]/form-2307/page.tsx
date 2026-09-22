@@ -4,7 +4,6 @@ import { prisma } from "@/lib/prisma";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/status-badge";
 import { centsToPesos, bpsToPercentLabel } from "@/lib/money";
-import { formatManilaDate } from "@/lib/dates";
 import { currentTaxableYearManila } from "@/lib/dates";
 import { getAnnualCertificatesVsSalesReconciliation } from "@/lib/reconciliation";
 import { ALL_PERIODS, periodToQuarters } from "@/lib/tax/periods";
@@ -39,7 +38,7 @@ export default async function Form2307RegisterPage({
   const certificates = await prisma.form2307.findMany({
     where: { clientId: id, taxableYear, quarterCovered: { in: [...quarters] }, deletedAt: null },
     include: { claimedOnFiling: { select: { id: true, period: true } } },
-    orderBy: { dateReceived: "asc" },
+    orderBy: [{ payorName: "asc" }, { payorTin: "asc" }],
   });
 
   const reconciliation = await getAnnualCertificatesVsSalesReconciliation(id, taxableYear);
@@ -94,7 +93,6 @@ export default async function Form2307RegisterPage({
         <table className="data-table">
           <thead>
             <tr>
-              <th>Received</th>
               <th>Payor</th>
               <th>ATC</th>
               <th>Income payment</th>
@@ -107,7 +105,6 @@ export default async function Form2307RegisterPage({
           <tbody>
             {certificates.map((c) => (
               <tr key={c.id}>
-                <td>{formatManilaDate(c.dateReceived)}</td>
                 <td>{c.payorName}</td>
                 <td className="font-mono text-xs">{c.atcCode || "—"}</td>
                 <td>{centsToPesos(c.incomePaymentCents, { withSymbol: true })}</td>
@@ -129,7 +126,7 @@ export default async function Form2307RegisterPage({
             ))}
             {certificates.length === 0 && (
               <tr>
-                <td colSpan={8} className="py-8 text-center text-sm text-slate-400">
+                <td colSpan={7} className="py-8 text-center text-sm text-slate-400">
                   No Form 2307 certificates for this period.
                 </td>
               </tr>

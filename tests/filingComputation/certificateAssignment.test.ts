@@ -74,7 +74,6 @@ describe("assembleAndComputeFiling — certificate credited to the filing it was
         incomePaymentCents: 10_000_00,
         taxWithheldCents: 500_00,
         withholdingRateBps: 500,
-        dateReceived: new Date("2026-04-05T00:00:00.000Z"),
         status: "RECORDED",
         claimedOnFilingId: q2Filing.id,
       },

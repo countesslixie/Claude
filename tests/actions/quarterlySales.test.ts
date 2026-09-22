@@ -9,8 +9,12 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 /**
  * Brief #4b (D33) — declared gross sales is now the sum of per-customer
  * rows, never itself typed; a quarter's own filing's step 1 (RECORD_SALES)
- * self-completes on a final Save and stays editable (without un-doing
- * step 1) until that filing's own return is filed.
+ * self-completes on a final Save and stays editable until that filing's
+ * own return is filed.
+ *
+ * Brief #4d supersedes #4b's original "once done, further edits never
+ * undo it": saving a final quarter as a draft afterward now reverts
+ * step 1 back to open, matching the income page's new Edit/Cancel flow.
  */
 describe("saveQuarterlySales", () => {
   const createdClientIds: string[] = [];
@@ -96,7 +100,7 @@ describe("saveQuarterlySales", () => {
     expect(step.status).not.toBe("DONE");
   });
 
-  it("Save marks step 1 done automatically, and editing afterward keeps it done", async () => {
+  it("Save marks step 1 done automatically, and re-saving final afterward keeps it done", async () => {
     const { client, filing } = await makeClientWithQ2Filing("qs-final");
 
     const result = await saveQuarterlySales(
@@ -107,20 +111,53 @@ describe("saveQuarterlySales", () => {
       formDataOf({ intent: "final" }, [{ customerName: "Client A", amount: "1000" }]),
     );
     expect(result.finalized).toBe(true);
+    expect(result.savedAt).toBeTruthy();
 
     let step = await prisma.workflowStep.findFirstOrThrow({ where: { filingId: filing.id, stepCode: "RECORD_SALES" } });
     expect(step.status).toBe("DONE");
 
-    // Editing it (even as a draft save) afterward keeps step 1 done.
+    // Re-saving final afterward keeps step 1 done.
     await saveQuarterlySales(
+      client.id,
+      2026,
+      "Q2",
+      {},
+      formDataOf({ intent: "final" }, [{ customerName: "Client A", amount: "2000" }]),
+    );
+    step = await prisma.workflowStep.findFirstOrThrow({ where: { filingId: filing.id, stepCode: "RECORD_SALES" } });
+    expect(step.status).toBe("DONE");
+  });
+
+  it("brief #4d: saving a final quarter as a draft afterward reverts step 1 to open", async () => {
+    const { client, filing } = await makeClientWithQ2Filing("qs-revert-to-draft");
+
+    const finalResult = await saveQuarterlySales(
+      client.id,
+      2026,
+      "Q2",
+      {},
+      formDataOf({ intent: "final" }, [{ customerName: "Client A", amount: "1000" }]),
+    );
+    expect(finalResult.finalized).toBe(true);
+    let step = await prisma.workflowStep.findFirstOrThrow({ where: { filingId: filing.id, stepCode: "RECORD_SALES" } });
+    expect(step.status).toBe("DONE");
+
+    const draftResult = await saveQuarterlySales(
       client.id,
       2026,
       "Q2",
       {},
       formDataOf({ intent: "draft" }, [{ customerName: "Client A", amount: "2000" }]),
     );
+    expect(draftResult.finalized).toBe(false);
+
     step = await prisma.workflowStep.findFirstOrThrow({ where: { filingId: filing.id, stepCode: "RECORD_SALES" } });
-    expect(step.status).toBe("DONE");
+    expect(step.status).toBe("WAITING_EXTERNAL");
+
+    const row = await prisma.quarterlySales.findUniqueOrThrow({
+      where: { clientId_taxableYear_quarter: { clientId: client.id, taxableYear: 2026, quarter: "Q2" } },
+    });
+    expect(row.finalizedAt).toBeNull();
   });
 
   it('"No sales this quarter" saves a deliberate ₱0, ignoring any typed rows', async () => {

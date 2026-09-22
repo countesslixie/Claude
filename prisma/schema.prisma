@@ -326,11 +326,14 @@ model Form2307 {
   taxWithheldCents   Int
   withholdingRateBps Int
 
-  // Kept as a recorded fact about the certificate (D33/D34 — brief #4b).
-  // It is no longer what decides which filing's credit it counts toward —
-  // see claimedOnFilingId below (D10 superseded).
-  dateReceived DateTime?
-  status       Form2307Status @default(RECEIVED)
+  // Brief #4d — dateReceived is removed entirely. It was kept in brief
+  // #4c because the SAWT keying worksheet's row order and the annual
+  // certificates-vs-declared-sales check both still read it; both were
+  // switched to read the filing it was entered under instead (the SAWT
+  // worksheet now sorts by payorName/payorTin; the reconciliation always
+  // used Form2307.taxableYear, itself set from the filing at entry, so it
+  // needed no code change — only the test proving it).
+  status Form2307Status @default(RECEIVED)
 
   documentId      String?
   primaryDocument Document? @relation("Form2307PrimaryDocument", fields: [documentId], references: [id])
@@ -399,14 +402,12 @@ model Filing {
   paymentDate     DateTime?
   paymentChannel  String?
 
-  // PREPARE_RETURN step prompt: "Have you confirmed with the client that
-  // all receipts for this quarter are accounted for, including any
-  // without a 2307?" — recorded once, with who/when (SPEC.md 7.1 step 3).
-  // Brief #4c removed the source-of-figure field this once carried
-  // alongside it (receiptsAcknowledgedSourceNote, dropped) and the
-  // client-confirmation-evidence attachment slot on this step.
-  receiptsAcknowledgedAt   DateTime?
-  receiptsAcknowledgedNote String?
+  // Brief #4d — the PREPARE_RETURN "client confirmation" box (a yes/no
+  // acknowledgement plus optional note) is removed entirely, the
+  // bookkeeper's own decision. It never blocked anything; step 3 is now
+  // just the computation sheet preview and the usual step controls. Both
+  // columns this once carried (receiptsAcknowledgedAt/Note) are dropped —
+  // brief #4c had already dropped a third, receiptsAcknowledgedSourceNote.
 
   // Informational completeness note (§5.3) — lists documents not yet
   // attached across the filing's steps. Amber, never blocking. Dismissing

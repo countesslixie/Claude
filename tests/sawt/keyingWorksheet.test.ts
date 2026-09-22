@@ -1,8 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { buildKeyingWorksheet, type CertificateForWorksheet } from "@/lib/sawt/keyingWorksheet";
 
-const D = (s: string) => new Date(`${s}T00:00:00.000Z`);
-
 function cert(overrides: Partial<CertificateForWorksheet> = {}): CertificateForWorksheet {
   return {
     id: "cert-1",
@@ -13,25 +11,38 @@ function cert(overrides: Partial<CertificateForWorksheet> = {}): CertificateForW
     atcDescription: "Professional fees — individual",
     incomePaymentCents: 100000,
     taxWithheldCents: 5000,
-    dateReceived: D("2026-04-10"),
     ...overrides,
   };
 }
 
 describe("buildKeyingWorksheet", () => {
-  it("rows are ordered by dateReceived, numbered from 1", () => {
+  it("brief #4d: rows are ordered by payorName, numbered from 1 (dateReceived is gone)", () => {
     const worksheet = buildKeyingWorksheet({
       clientName: "Test Client",
       clientTin: "123456789",
       taxableYear: 2026,
       period: "Q2",
       certificates: [
-        cert({ id: "later", dateReceived: D("2026-05-01") }),
-        cert({ id: "earlier", dateReceived: D("2026-04-01") }),
+        cert({ id: "later-alphabetically", payorName: "Zenith Corp." }),
+        cert({ id: "earlier-alphabetically", payorName: "Acme Publishing Corp." }),
       ],
     });
-    expect(worksheet.rows.map((r) => r.certificateId)).toEqual(["earlier", "later"]);
+    expect(worksheet.rows.map((r) => r.certificateId)).toEqual(["earlier-alphabetically", "later-alphabetically"]);
     expect(worksheet.rows.map((r) => r.rowNumber)).toEqual([1, 2]);
+  });
+
+  it("brief #4d: ties on payorName break on payorTin", () => {
+    const worksheet = buildKeyingWorksheet({
+      clientName: "Test Client",
+      clientTin: "123456789",
+      taxableYear: 2026,
+      period: "Q2",
+      certificates: [
+        cert({ id: "higher-tin", payorName: "Acme Publishing Corp.", payorTin: "999999999" }),
+        cert({ id: "lower-tin", payorName: "Acme Publishing Corp.", payorTin: "111111111" }),
+      ],
+    });
+    expect(worksheet.rows.map((r) => r.certificateId)).toEqual(["lower-tin", "higher-tin"]);
   });
 
   it("rowCount and totals are the two numbers to check against the module after entry", () => {

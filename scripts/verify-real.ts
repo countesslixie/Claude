@@ -39,15 +39,15 @@ const ALLOWABLE_DEDUCTION_PESOS = 250_000;
  * D34 (brief #4b, supersedes D10) — each certificate now carries
  * `claimedPeriod`, the filing period it was entered under (step 2),
  * which is what decides its credit period. There is no cutoff date
- * anymore; dateReceived is kept only as a recorded fact, shown for
- * reference.
+ * anymore. Brief #4d removed dateReceived from the app entirely — it's
+ * no longer part of this fixture either.
  */
 export interface RealFixture {
   taxpayerType: TaxpayerType;
   taxableYear: number;
   period: Period;
   quarterlySales: Partial<Record<SalesQuarter, { grossPesos: number; nonOperatingPesos?: number }>>;
-  certificates: Array<{ dateReceived: string; incomePaymentPesos: number; taxWithheldPesos: number; claimedPeriod: Period }>;
+  certificates: Array<{ incomePaymentPesos: number; taxWithheldPesos: number; claimedPeriod: Period }>;
   priorYearExcessCreditPesos: number;
   priorPeriodPaymentsPesos: number;
 }
@@ -167,7 +167,7 @@ async function main() {
         `${f.taxableYear}'s cumulative window and were excluded:`,
     );
     for (const c of excludedCerts) {
-      console.warn(`  - claimed on ${c.claimedPeriod}, received ${c.dateReceived}: ₱${c.taxWithheldPesos.toLocaleString()} withheld`);
+      console.warn(`  - claimed on ${c.claimedPeriod}: ₱${c.taxWithheldPesos.toLocaleString()} withheld`);
     }
   }
   const cumulativeCwtCents = sumCwtThroughPeriod(certsForCwt, f.period);

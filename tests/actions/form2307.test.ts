@@ -61,9 +61,9 @@ describe("step 2 — certificate entry (addCertificate/deleteCertificate)", () =
     fd.set("payorName", "Test Payor");
     fd.set("incomePayment", "10000");
     fd.set("taxWithheld", "500");
-    fd.set("dateReceived", "2026-06-10");
     // Brief #4c -- "Period covered" is now required, pre-filled by the
     // form with the filing's own quarter; tests supply it directly.
+    // Brief #4d removed dateReceived entirely.
     fd.set("periodFrom", "2026-04-01");
     fd.set("periodTo", "2026-06-30");
     for (const [k, v] of Object.entries(overrides)) fd.set(k, v);
@@ -123,6 +123,29 @@ describe("step 2 — certificate entry (addCertificate/deleteCertificate)", () =
     expect((await prisma.workflowStep.findUniqueOrThrow({ where: { id: step.id } })).status).toBe("DONE");
 
     await setAllCertificatesReceived(filing.id, false);
+    expect((await prisma.workflowStep.findUniqueOrThrow({ where: { id: step.id } })).status).toBe("WAITING_EXTERNAL");
+  });
+
+  it("brief #4d: removing the last certificate row unticks 'all received' and reverts step 2", async () => {
+    const { filing, step } = await makeClientWithQ2Filing("f2307-untick-on-delete");
+
+    await addCertificate(filing.id, {} as CertificateFormState, certFormData());
+    const cert = await prisma.form2307.findFirstOrThrow({ where: { claimedOnFilingId: filing.id, deletedAt: null } });
+
+    const formData = new FormData();
+    formData.set("file", new File(["scan-bytes"], "scan.pdf", { type: "application/pdf" }));
+    formData.set("workflowStepId", step.id);
+    formData.set("docSlotCode", "form2307_scan");
+    formData.set("form2307Id", cert.id);
+    formData.set("documentDate", "2026-06-10");
+    await uploadDocument(formData);
+    await setAllCertificatesReceived(filing.id, true);
+    expect((await prisma.workflowStep.findUniqueOrThrow({ where: { id: step.id } })).status).toBe("DONE");
+
+    await deleteCertificate(cert.id, "entered in error");
+
+    const updatedFiling = await prisma.filing.findUniqueOrThrow({ where: { id: filing.id } });
+    expect(updatedFiling.certificatesAllReceivedAt).toBeNull();
     expect((await prisma.workflowStep.findUniqueOrThrow({ where: { id: step.id } })).status).toBe("WAITING_EXTERNAL");
   });
 

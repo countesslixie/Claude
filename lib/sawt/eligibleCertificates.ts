@@ -21,7 +21,6 @@ export interface CertificateWithBatch {
   incomePaymentCents: number;
   taxWithheldCents: number;
   withholdingRateBps: number;
-  dateReceived: Date | null;
   status: string;
   claimedOnFilingId: string | null;
   /** D34 (brief #4b) — the period of the filing this certificate was entered under. */
@@ -36,7 +35,10 @@ export async function getAllCertificatesThisYear(
   const rows = await prisma.form2307.findMany({
     where: { clientId, taxableYear, deletedAt: null },
     include: { sawtBatch: { select: { id: true, period: true } }, claimedOnFiling: { select: { period: true } } },
-    orderBy: { dateReceived: "asc" },
+    // Brief #4d — dateReceived is gone; the keying worksheet re-sorts by
+    // payorName/payorTin itself (lib/sawt/keyingWorksheet.ts), so this
+    // order only matters for other callers of this list.
+    orderBy: [{ payorName: "asc" }, { payorTin: "asc" }],
   });
   return rows.map((r) => ({ ...r, claimedOnFilingPeriod: r.claimedOnFiling?.period ?? null }));
 }

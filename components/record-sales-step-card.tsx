@@ -11,6 +11,10 @@ import { centsToPesos } from "@/lib/money";
  * done, Skip, or skip-reason box. The status is derived: "Waiting on
  * client" until a final Save, then Done, and the quarter's total shows
  * once it's been saved (draft or final).
+ *
+ * Brief #4d — while a row exists but isn't final (status not DONE), the
+ * total is shown with a "Draft" tag beside it, so a draft figure can't
+ * be mistaken for a finished one.
  */
 export function RecordSalesStepCard({
   sequence,
@@ -27,6 +31,7 @@ export function RecordSalesStepCard({
   incomeHref: string;
 }) {
   const isDone = status === "DONE";
+  const isDraft = !isDone && totalCents != null;
 
   return (
     <div className="rounded-lg border border-slate-200 p-3">
@@ -38,7 +43,14 @@ export function RecordSalesStepCard({
       </div>
 
       <p className="mt-1 text-sm text-slate-700">
-        {totalCents != null ? `Total: ${centsToPesos(totalCents, { withSymbol: true })}` : "Not saved yet."}
+        {totalCents != null ? (
+          <>
+            Total: {centsToPesos(totalCents, { withSymbol: true })}
+            {isDraft && <span className="ml-1.5 text-xs font-medium uppercase tracking-wide text-amber-600">Draft</span>}
+          </>
+        ) : (
+          "Not saved yet."
+        )}
       </p>
 
       <div className="mt-2">

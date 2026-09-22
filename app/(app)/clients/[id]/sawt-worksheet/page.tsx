@@ -6,7 +6,7 @@ import { PrintButton } from "@/components/print-button";
 import { assembleKeyingWorksheet } from "@/lib/sawt/assembleKeyingWorksheet";
 import { generateSawtBatch } from "@/lib/actions/sawt";
 import { centsToPesos } from "@/lib/money";
-import { formatManilaDate, currentTaxableYearManila } from "@/lib/dates";
+import { currentTaxableYearManila } from "@/lib/dates";
 import { ALL_PERIODS } from "@/lib/tax/periods";
 import type { Period } from "@/lib/tax/types";
 
@@ -113,7 +113,6 @@ export default async function SawtWorksheetPage({
                 <th>Nature of Income Payment</th>
                 <th>Amount of Income Payment</th>
                 <th>Amount of Tax Withheld</th>
-                <th>Received</th>
               </tr>
             </thead>
             <tbody>
@@ -127,14 +126,12 @@ export default async function SawtWorksheetPage({
                   <td>{row.atcDescription || "—"}</td>
                   <td>{centsToPesos(row.incomePaymentCents, { withSymbol: true })}</td>
                   <td>{centsToPesos(row.taxWithheldCents, { withSymbol: true })}</td>
-                  <td>{formatManilaDate(row.dateReceived)}</td>
                 </tr>
               ))}
               <tr className="font-semibold">
                 <td colSpan={6}>Total ({worksheet.rowCount} rows)</td>
                 <td>{centsToPesos(worksheet.totals.incomePaymentCents, { withSymbol: true })}</td>
                 <td>{centsToPesos(worksheet.totals.taxWithheldCents, { withSymbol: true })}</td>
-                <td></td>
               </tr>
             </tbody>
           </table>

@@ -3,7 +3,6 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { assembleAndComputeFiling, hasSalesRecordedForPeriod } from "@/lib/filingComputation";
 import {
-  acknowledgeReceiptsComplete,
   setAllCertificatesReceived,
   acknowledgeAmendmentAlert,
   dismissCompletenessNote,
@@ -82,10 +81,11 @@ export default async function FilingDetailPage({
   const isFilingLocked = filing.workflowSteps.some((s) => s.stepCode === "FILE_RETURN" && s.status === "DONE");
 
   // Brief #4b — step 2's certificate rows, entered under this filing.
+  // Brief #4d — ordered by payor rather than dateReceived (removed).
   const certificates = await prisma.form2307.findMany({
     where: { claimedOnFilingId: filing.id, deletedAt: null },
     include: { documents: { where: { deletedAt: null } } },
-    orderBy: { dateReceived: "asc" },
+    orderBy: [{ payorName: "asc" }, { payorTin: "asc" }],
   });
   const certificateRows: CertificateRow[] = certificates.map((c) => ({
     id: c.id,
@@ -94,7 +94,6 @@ export default async function FilingDetailPage({
     payorAddress: c.payorAddress,
     incomePaymentCents: c.incomePaymentCents,
     taxWithheldCents: c.taxWithheldCents,
-    dateReceived: formatManilaDate(c.dateReceived),
     atcCode: c.atcCode,
     withholdingRateBps: c.withholdingRateBps,
     periodFrom: formatManilaDate(c.periodFrom),
@@ -259,12 +258,6 @@ export default async function FilingDetailPage({
     nextPeriodDueDate: nextFiling?.adjustedDueDate ?? null,
   });
 
-  async function submitAcknowledgement(formData: FormData) {
-    "use server";
-    const note = String(formData.get("note") ?? "");
-    await acknowledgeReceiptsComplete(filingId, note);
-  }
-
   async function submitAmendmentAck(alertId: string, formData: FormData) {
     "use server";
     const note = String(formData.get("note") ?? "");
@@ -276,49 +269,22 @@ export default async function FilingDetailPage({
     await dismissCompletenessNote(filingId);
   }
 
-  const clientConfirmationExtra = (
-    <div className="rounded border border-slate-100 p-2">
-      <p className="text-xs font-medium text-slate-600">Client confirmation</p>
-      {filing.receiptsAcknowledgedAt ? (
-        <div className="mt-1">
-          <p className="text-xs text-slate-600">Confirmed {formatManilaDate(filing.receiptsAcknowledgedAt)}.</p>
-          {filing.receiptsAcknowledgedNote && (
-            <p className="mt-0.5 text-xs text-slate-500">{filing.receiptsAcknowledgedNote}</p>
-          )}
-        </div>
-      ) : (
-        <form action={submitAcknowledgement} className="mt-1 flex flex-col gap-2">
-          <p className="text-xs text-slate-600">
-            Have you confirmed with the client that all receipts for this quarter are accounted for, including
-            any without a 2307?
-          </p>
-          <Textarea name="note" placeholder="Optional note" rows={2} className="text-xs" />
-          <div>
-            <Button type="submit" size="sm">
-              Confirm
-            </Button>
-          </div>
-        </form>
-      )}
-    </div>
-  );
-
+  // Brief #4d — step 3's "client confirmation" box (a yes/no
+  // acknowledgement plus optional note) is removed, the bookkeeper's own
+  // decision. Step 3 is now just the computation sheet preview.
   const prepareReturnExtra = (
-    <div className="flex flex-col gap-2">
-      <ComputationSheetPanel
-        breakdown={sheet.breakdown}
-        isOverpayment={sheet.isOverpayment}
-        overpaymentCents={sheet.overpaymentCents}
-        taxPayableCents={sheet.taxPayableCents}
-        formType={sheet.formType}
-        isFrozen={isFrozen}
-        hasSalesRecorded={hasSalesRecorded}
-        period={filing.period}
-        taxableYear={filing.taxableYear}
-        incomeHref={incomeHref}
-      />
-      {clientConfirmationExtra}
-    </div>
+    <ComputationSheetPanel
+      breakdown={sheet.breakdown}
+      isOverpayment={sheet.isOverpayment}
+      overpaymentCents={sheet.overpaymentCents}
+      taxPayableCents={sheet.taxPayableCents}
+      formType={sheet.formType}
+      isFrozen={isFrozen}
+      hasSalesRecorded={hasSalesRecorded}
+      period={filing.period}
+      taxableYear={filing.taxableYear}
+      incomeHref={incomeHref}
+    />
   );
 
   const sendClientPackageExtra = (

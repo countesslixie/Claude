@@ -13,8 +13,7 @@
  * - A sparse, unverified AtcCode table (SPEC.md 3.5) — do not add codes
  *   here without confirming them against the current BIR ATC list.
  * - The 16-step WorkflowStepTemplate (rework brief §5.1: advisory_evidence
- *   on ADVISE_CLIENT is optional, not required; PREPARE_RETURN carries an
- *   extra optional slot for the client's own confirmation message/email).
+ *   on ADVISE_CLIENT is optional, not required).
  * - Three fictitious clients spanning the full 2025 cycle (SPEC.md 14):
  *   one purely self-employed with 2307s (figures match SPEC.md Example A
  *   exactly), one purely self-employed without 2307s, and one mixed
@@ -206,11 +205,11 @@ const WORKFLOW_STEP_TEMPLATE: Array<{
     requiredDocSlots: [],
   },
   {
-    // Brief #4c — the client-confirmation-evidence slot and the
-    // source-of-figure field are both removed (bookkeeper's decision).
-    // Step 3 keeps only the yes/no receipts acknowledgement (optional
-    // free-text note, Filing.receiptsAcknowledgedNote) and the
-    // computation sheet it generates itself.
+    // Brief #4c removed the client-confirmation-evidence slot and the
+    // source-of-figure field (bookkeeper's decision). Brief #4d then
+    // removed the yes/no receipts acknowledgement itself — step 3 is now
+    // just the computation sheet it generates itself, plus the usual
+    // step controls.
     //
     // draft_computation is deliberately NOT a slot here — the app
     // writes its own computation sheet straight into the vault as a
@@ -475,7 +474,6 @@ async function seedClientA(actorId: string) {
         incomePaymentCents: grossCents,
         taxWithheldCents: whtCents,
         withholdingRateBps: 500,
-        dateReceived: new Date(`${q.date}T00:00:00.000Z`),
         status: "RECORDED",
         actorId,
       },
@@ -636,7 +634,6 @@ async function seedClientC(actorId: string) {
         incomePaymentCents: grossCents,
         taxWithheldCents: whtCents,
         withholdingRateBps: 1000,
-        dateReceived: new Date(`${r.date}T00:00:00.000Z`),
         status: "RECORDED",
         actorId,
       },
@@ -1024,7 +1021,6 @@ async function seedTY2026Cycle(actorId: string) {
             incomePaymentCents: q1GrossCents,
             taxWithheldCents: q1WhtCents,
             withholdingRateBps: cfg.whtRateBps,
-            dateReceived: new Date("2026-03-15T00:00:00.000Z"),
             status: "CLAIMED_ON_RETURN",
             claimedOnFilingId: q1Filing.id,
             actorId,
@@ -1155,7 +1151,6 @@ async function seedTY2026Cycle(actorId: string) {
             incomePaymentCents: q2GrossCents,
             taxWithheldCents: q2WhtCents,
             withholdingRateBps: cfg.whtRateBps,
-            dateReceived: new Date("2026-06-15T00:00:00.000Z"),
             status: cfg.q2.filed ? "CLAIMED_ON_RETURN" : "RECORDED",
             claimedOnFilingId: q2Filing.id,
             actorId,

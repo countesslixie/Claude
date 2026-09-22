@@ -25,7 +25,6 @@ export interface KeyingWorksheetRow {
   atcDescription: string;
   incomePaymentCents: number;
   taxWithheldCents: number;
-  dateReceived: Date | null;
 }
 
 export interface KeyingWorksheetTotals {
@@ -52,14 +51,13 @@ export interface CertificateForWorksheet {
   atcDescription: string;
   incomePaymentCents: number;
   taxWithheldCents: number;
-  dateReceived: Date | null;
 }
 
 /**
- * Rows are ordered by dateReceived, the same order the bookkeeper
- * registered each certificate — the order they'd naturally re-key in.
- * rowCount and totals are the two numbers to check against the module's
- * own totals after entry (SPEC.md 10).
+ * Brief #4d — dateReceived is gone; rows are ordered by payorName, then
+ * payorTin, a stable order the bookkeeper can key in without it
+ * shuffling between visits. rowCount and totals are the two numbers to
+ * check against the module's own totals after entry (SPEC.md 10).
  */
 export function buildKeyingWorksheet(input: {
   clientName: string;
@@ -69,9 +67,9 @@ export function buildKeyingWorksheet(input: {
   certificates: CertificateForWorksheet[];
 }): KeyingWorksheet {
   const sorted = [...input.certificates].sort((a, b) => {
-    const aTime = a.dateReceived?.getTime() ?? 0;
-    const bTime = b.dateReceived?.getTime() ?? 0;
-    return aTime - bTime;
+    const byName = a.payorName.localeCompare(b.payorName);
+    if (byName !== 0) return byName;
+    return (a.payorTin ?? "").localeCompare(b.payorTin ?? "");
   });
 
   const rows: KeyingWorksheetRow[] = sorted.map((c, i) => ({
@@ -84,7 +82,6 @@ export function buildKeyingWorksheet(input: {
     atcDescription: c.atcDescription,
     incomePaymentCents: c.incomePaymentCents,
     taxWithheldCents: c.taxWithheldCents,
-    dateReceived: c.dateReceived,
   }));
 
   const totals: KeyingWorksheetTotals = rows.reduce(

@@ -18,7 +18,6 @@ export interface CertificateRow {
   payorAddress: string | null;
   incomePaymentCents: number;
   taxWithheldCents: number;
-  dateReceived: string;
   atcCode: string;
   withholdingRateBps: number;
   periodFrom: string;
@@ -35,6 +34,13 @@ export interface CertificateRow {
  * D27 (a 2307 is a document she receives). Start/Mark waiting/Mark done
  * are gone; Skip (with a written reason) stays, for clients who never
  * issue 2307s or a quarter with none.
+ *
+ * Brief #4d — the checkbox and Skip are mutually exclusive on whether
+ * any certificate row exists yet: no rows shows Add certificate + Skip
+ * only (skipping makes no sense once certificates are entered); one or
+ * more rows shows the checkbox and hides Skip. Removing the last row
+ * (lib/actions/form2307.ts's deleteCertificate) goes back to the first
+ * state and unticks the checkbox if it was ticked.
  */
 export function Receive2307StepCard({
   stepId,
@@ -135,7 +141,7 @@ export function Receive2307StepCard({
                     <p className="text-sm text-slate-900">{c.payorName}</p>
                     <p className="text-xs text-slate-500">
                       {centsToPesos(c.incomePaymentCents, { withSymbol: true })} income ·{" "}
-                      {centsToPesos(c.taxWithheldCents, { withSymbol: true })} withheld · received {c.dateReceived}
+                      {centsToPesos(c.taxWithheldCents, { withSymbol: true })} withheld
                     </p>
                   </div>
                   {!locked && (
@@ -258,13 +264,9 @@ export function Receive2307StepCard({
                 <form action={addFormAction} className="mt-1 flex flex-col gap-2 rounded border border-slate-200 p-2">
                   {addState.error && <p className="text-xs text-red-600">{addState.error}</p>}
                   <div className="grid grid-cols-2 gap-2">
-                    <div className="flex flex-col gap-0.5">
+                    <div className="flex flex-col gap-0.5 col-span-2">
                       <Label htmlFor="cert-payorName">Payor name</Label>
                       <Input id="cert-payorName" name="payorName" defaultValue={addState.values?.payorName} required />
-                    </div>
-                    <div className="flex flex-col gap-0.5">
-                      <Label htmlFor="cert-dateReceived">Date received</Label>
-                      <Input id="cert-dateReceived" name="dateReceived" type="date" defaultValue={addState.values?.dateReceived} required />
                     </div>
                     <div className="flex flex-col gap-0.5">
                       <Label htmlFor="cert-incomePayment">Income amount (₱)</Label>
@@ -346,21 +348,26 @@ export function Receive2307StepCard({
             </div>
           )}
 
-          <label className="mt-3 flex items-center gap-1.5 text-sm text-slate-700">
-            <Checkbox
-              checked={allReceived}
-              disabled={isPending || locked}
-              onChange={(e) => handleToggleAllReceived(e.target.checked)}
-            />
-            All certificates received
-          </label>
-          {allReceived && !allHaveScans && (
-            <p className="mt-1 text-xs text-amber-700">Every row needs its own scan before this step can be Done.</p>
+          {certificates.length > 0 && (
+            <>
+              <label className="mt-3 flex items-center gap-1.5 text-sm text-slate-700">
+                <Checkbox
+                  checked={allReceived}
+                  disabled={isPending || locked}
+                  onChange={(e) => handleToggleAllReceived(e.target.checked)}
+                />
+                All certificates received
+              </label>
+              {allReceived && !allHaveScans && (
+                <p className="mt-1 text-xs text-amber-700">Every row needs its own scan before this step can be Done.</p>
+              )}
+            </>
           )}
         </>
       )}
 
-      {!locked && !isResolved && (
+      {/* Brief #4d — Skip only makes sense before any certificate is entered; once one exists, "All certificates received" replaces it. */}
+      {!locked && !isResolved && certificates.length === 0 && (
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           <Input
             placeholder="Skip reason"

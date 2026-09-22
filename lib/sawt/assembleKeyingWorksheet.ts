@@ -38,7 +38,6 @@ export async function assembleKeyingWorksheet(
       atcDescription: descriptionByCode.get(c.atcCode) ?? "",
       incomePaymentCents: c.incomePaymentCents,
       taxWithheldCents: c.taxWithheldCents,
-      dateReceived: c.dateReceived,
     })),
   });
 }
