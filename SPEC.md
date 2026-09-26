@@ -1,6 +1,6 @@
 # SPEC: BIR 8% Freelancer Practice Manager (MVP)
 
-> ## ⚠ Superseded sections — added 2026-09-20, evening (updated by the branch reconciliation pass; extended the same evening by brief #4a's grouping pass)
+> ## ⚠ Superseded sections — added 2026-09-20, evening (updated by the branch reconciliation pass; extended the same evening by brief #4a's grouping pass; extended again 2026-09-26 by the brief #4f documentation pass, covering briefs #4c–#4e)
 >
 > This is the **original design document** and is kept as history, not rewritten. Several sections below no longer reflect the current design, and are now also fully implemented that way in code — after two rework passes were reconciled onto a single branch (`DECISIONS.md` D31), decided and built agree again everywhere in this table. `PROJECT_MASTER.md` and `DECISIONS.md` are authoritative over this file wherever they disagree.
 >
@@ -14,10 +14,16 @@
 > | **§3.1's election rule** — described but, historically, never actually enforced | Not superseded — this is §3.1's own design intent, finally carried out | Yes | **Yes** — `lib/workflow/election.ts`, wired into `markStepDone` |
 > | **§7.1's flat sixteen-step list** (the table itself, and "steps are ordered but not rigidly gated" as the only structure above it) | **D32** — the sixteen steps are wrapped in five groups (Prepare, File, Pay, SAWT, Close); "Mark done" is per-group, not per-step; a step's own blocking rule (D27) is unchanged | Yes | **Yes** — `lib/workflow/groups.ts`, `lib/actions/workflowSteps.ts`'s `markGroupDone`, `components/workflow-group-card.tsx` |
 > | **§11 item 2** — "kanban with columns = the 16 steps" | **D32** — columns are the five groups; a card sits in its earliest incomplete group | Yes | **Yes** — `app/(app)/filings/page.tsx` |
+> | **§3.5's CWT cutoff rule** (the whole paragraph — manual override, `filedAt`-then-"today" resolution, period-end never used as cutoff) | **D34** (brief #4b) — a certificate's credit period is decided by the filing whose step 2 it was entered under, never by a resolved cutoff date; **D38** (brief #4d) then removed `dateReceived` itself, which this paragraph also assumes exists | Yes | **Yes** — `certificateCutoffDate`, the override, and the resolver are deleted; `Form2307` has no `dateReceived` column |
+> | **§5's `Form2307.dateReceived` field** | **D38** (brief #4d) | Yes | **Yes** — confirmed absent from `prisma/schema.prisma`, 2026-09-26 |
+> | **§5's `Filing.receiptsAcknowledgedAt`/`receiptsAcknowledgedNote` fields, and §7.1's step 3 acknowledgement paragraph they back** | **D37** (briefs #4c/#4d) — the source-of-figure field and the whole client-confirmation acknowledgement are removed outright, not merely reworded | Yes | **Yes** — confirmed absent from `prisma/schema.prisma`, 2026-09-26; step 3 now generates only the computation sheet |
+> | **§7.1's step 1–2 rows**, as already reordered by D28 — described there as ordinary steps, each with a single manually-attached doc slot | **D33** (step 1) and **D35** (step 2), brief #4b — both steps are self-completing, with no manual controls at all; step 2 holds a variable number of certificate rows itself rather than pointing at one slot | Yes | **Yes** — `components/record-sales-step-card.tsx`, `components/receive-2307-step-card.tsx` |
 >
 > **Left alone deliberately, still current:** **§4**'s date-handling rules (the `getUTC*`/`manilaCalendarDay`/millisecond-arithmetic conventions), unchanged by any rework pass and still exactly how this codebase works. **§7.1's per-step table itself (columns, step codes, doc slots)** is also still current — D32 wraps it in groups without changing any row.
 >
-> **Not in SPEC.md at all, because it postdates this document:** the `PREPARE_RETURN` step's source-of-figure field and optional client-confirmation-message slot (D26/D27), the step 16 client email's conditional eAFS-forwarding line (D27), and the five-group structure itself (D32) — see `PROJECT_MASTER.md`.
+> **Gone from the application entirely, not merely undocumented here:** the `PREPARE_RETURN` step's source-of-figure field and optional client-confirmation-message slot (present as of D26/D27, removed by D37 — briefs #4c/#4d), and `Form2307.dateReceived` (D38, brief #4d). The step 16 client email's conditional eAFS-forwarding line (D27) and the five-group structure itself (D32) are still current and simply postdate this document — see `PROJECT_MASTER.md`.
+>
+> **§16's acceptance tests, not individually edited here:** item 13 ("a step with an empty required doc slot cannot be set DONE") no longer describes steps 1 or 2, which now carry no doc slot at all and self-complete instead (D33/D35) — it still holds for the remaining blocking steps. Item 16 ("editing a transaction in a filed period raises an `AmendmentAlert`") predates D26 and uses `SalesTransaction`-era language for what is now editing declared sales — already covered by the `SalesTransaction` row above.
 >
 > This is a banner, not a rewrite — SPEC.md's body text below is untouched and increasingly historical. Read `CURRENT_STATE.md` for what's actually in the tree before building against any section above.
 

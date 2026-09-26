@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 *Instructions for Claude Code working on this repository.*
-*Last reconciled: 2026-09-21 — Prepare group steps 1 and 2 rebuilt (brief #4b), against the tree.*
+*Last reconciled: 2026-09-26 — documentation pass (brief #4f), bringing this file up to date through briefs #4c, #4d and #4e.*
 
 ---
 
@@ -11,7 +11,7 @@ A local-first Next.js application used by **one bookkeeper** to manage Philippin
 
 **It is a filing manager, not an accounting system.** It generates no books of accounts. There is no ledger — only a declared-income record sufficient to compute the return.
 
-`PROJECT_MASTER.md`, `CURRENT_STATE.md` and `DECISIONS.md` carry project context and are current as of 2026-09-20 evening. **`SPEC.md` is not** — it still describes the pre-rework system and contradicts the build in several places; see its dated banner for which sections a decision has superseded. Where SPEC.md disagrees with PROJECT_MASTER.md or DECISIONS.md, the latter win, and say so rather than following SPEC.md quietly.
+`PROJECT_MASTER.md`, `CURRENT_STATE.md` and `DECISIONS.md` carry project context and are current as of 2026-09-26. **`SPEC.md` is not** — it still describes the pre-rework system and contradicts the build in several places; see its dated banner for which sections a decision has superseded. Where SPEC.md disagrees with PROJECT_MASTER.md or DECISIONS.md, the latter win, and say so rather than following SPEC.md quietly.
 
 ## A note on how this branch came to be
 
@@ -90,7 +90,7 @@ Cumulative mapping: `Q1`→Q1 · `Q2`→Q1+Q2 · `Q3`→Q1+Q2+Q3 · `ANNUAL`→Q
 
 A missing quarter is zero, not an error — but a filing whose OWN quarter has no `QuarterlySales` row must **say so in words**, distinct from a cumulative total that happens to be zero (`lib/filingComputation.ts`'s `hasSalesRecordedForPeriod`, keyed on `lib/tax/periods.ts`'s `ownSalesQuarterOf`). A silent `₱0.00` reads as a real answer and it is not one.
 
-**The `PREPARE_RETURN` acknowledgement's source-of-figure field is the one control left in the system.** Once income is declared-only, nothing can be cross-checked against anything (the only surviving reconciliation, `lib/reconciliation.ts`, is annual certificates-vs-declared-sales — a sanity check, not a source-level one). The acknowledgement records *where* the declared figure came from (a text field) and carries an *optional* attachment slot for the client's own confirming message, if she has one. This is deliberately different in kind from the `advisory_evidence` slot the bookkeeper rejected: that one asked her to prove she'd given advice; this one records the provenance of a number she is about to file. **It must never block** — see DECISIONS.md D26/D27.
+**There is no control of any kind over a declared income figure — say so plainly, don't invent a replacement.** Step 3 used to carry an acknowledgement that partially closed this gap: a required source-of-figure text field, plus an optional attachment for the client's own confirming message. Both are gone (briefs #4c and #4d, DECISIONS.md D37) — the bookkeeper made both calls deliberately, having watched the field in actual use. Once income is declared-only, nothing can be cross-checked against anything at the source level; the only surviving reconciliation, `lib/reconciliation.ts`, is annual certificates-vs-declared-sales — a sanity check, not a source-level one, and it was never a substitute for the field that's now gone. The per-quarter Notes field (`QuarterlySales.notes`) still exists and can hold anything she chooses to write, but nothing asks for an entry and nothing requires one.
 
 ## The blocking rule — read this before touching the workflow
 
@@ -112,7 +112,9 @@ A missing quarter is zero, not an error — but a filing whose OWN quarter has n
 
 **A document belongs to its step, not to the page.** Anything belonging to a step renders inside that step's card (`components/workflow-step-card.tsx`), not as a page-level panel. **Never expose a raw step code** (`PREPARE_RETURN`) in a user-facing label.
 
-**The filing page combines two fixes for the same complaint** ("output shown ahead of the work it belongs to"): a next-action line and compact summary strip at the top (`components/next-action-control.tsx`) answer "what do I do now" without scrolling, and the computation sheet / certificate cutoff / client confirmation panels live inside their own step cards rather than as page-level panels at the bottom. Keep both — they answer different complaints from different test drives, not the same one twice.
+**The filing page combines two fixes for the same complaint** ("output shown ahead of the work it belongs to"): a next-action line and compact summary strip at the top (`components/next-action-control.tsx`) answer "what do I do now" without scrolling, and anything belonging to a step lives inside that step's own card rather than as a page-level panel at the bottom. Keep both — they answer different complaints from different test drives, not the same one twice. (The certificate cutoff and client confirmation panels these two fixes originally described are both gone — see D34 and D37 — but the two fixes and the reasoning for keeping them separate still stand.)
+
+**A disabled control explains itself on hover, not with standing text (brief #4e).** A blocked "Mark done" — per step or per group — carries its reason as a `title` tooltip only. Do not reintroduce a standing red or amber paragraph under a group header, under a per-step button, or under the next-action banner — that was the exact noise brief #4e removed, after it turned out to be rendering in three places at once for the same rule. The short amber "waiting on …" summary beside a group's name is the one piece of standing status text that stays.
 
 ## The five groups (D32) — read this before touching the checklist or the board
 
@@ -124,9 +126,9 @@ The sixteen steps are wrapped in five groups: **Prepare** (1–4), **File** (5, 
 
 **Group membership is its own fixed lookup table, not `category` repurposed.** `category` matches groups 2/3/4 (`FILING`/`PAYMENT`/`SAWT`) exactly, but steps 4 and 16 are both `category: CLIENT_COMM` while belonging to different groups (Prepare and Close respectively) — reusing `category` outright would have merged them.
 
-**Built in brief #4b (2026-09-21):** steps 1 and 2 are now self-completing, with step 2's scan requirement blocking (D33/D35) — see "The income model" and "The blocking rule" above. Prepare's own group-level "Mark done" is now disabled until both are resolved (`prepareGroupBlockReason` in `lib/workflow/groups.ts`), the first real block Prepare has ever had.
+**Built in brief #4b (2026-09-21):** steps 1 and 2 are now self-completing, with step 2's scan requirement blocking (D33/D35) — see "The income model" and "The blocking rule" above. Prepare's own group-level "Mark done" is now disabled until both are resolved (`prepareGroupBlockReason` in `lib/workflow/groups.ts`), the first real block Prepare has ever had. **Prepare's own collapsed-summary label was fixed in brief #4e** to name the specific thing outstanding ("waiting on quarterly sales" / "waiting on Form 2307" / both) instead of a generic "waiting on Client, 0d" — see "The blocking rule" above for the standing-text removal this was part of.
 
-**Still held for a later brief:** a derived group-level waiting state generally beyond steps 1/2 (waiting elsewhere in the workflow is still per-step, surfaced only in the collapsed group's summary, unchanged from before grouping). See `CURRENT_STATE.md` for the fuller list.
+**Still held for a later brief:** a derived group-level waiting state generally beyond Prepare (waiting elsewhere in the workflow is still per-step, surfaced only in the collapsed group's summary, unchanged from before grouping). See `CURRENT_STATE.md` for the fuller list.
 
 ## Coding conventions
 
@@ -168,11 +170,11 @@ Centered container ~1100px. Tables with aligned columns, not edge-pinned cards. 
 
 **Density is not the goal; being operable is.** "Dense over pretty" was taken too far and produced a first test drive that stopped at step 4 of 16.
 
-**Lead with the work, not the output.** The filing page opens with a next-action line naming the next step, then a compact summary strip, then the checklist — the computation sheet, certificate cutoff, and client confirmation sit collapsed inside the steps they belong to (step 2, step 3), not as full-width panels ahead of or detached from the checklist.
+**Lead with the work, not the output.** The filing page opens with a next-action line naming the next step, then a compact summary strip, then the checklist — anything a step produces or needs (the computation sheet, step 2's certificate rows) sits collapsed inside the step it belongs to, not as a full-width panel ahead of or detached from the checklist. (The certificate cutoff control and the client confirmation panel this once also named are both gone — see D34 and D37 in DECISIONS.md.)
 
 ## Security
 
-Will hold real TINs and income data under the Data Privacy Act from November 2026. **There is none in the application today** — the three clients are fictitious seed data. One real client's Q1 figures live in `scripts/real-fixture.local.ts`, gitignored, never pushed — not present in every checkout (this pass's checkout did not have it; say so explicitly if yours doesn't either, rather than reporting `verify-real.ts`'s figures as confirmed). Single `.env` password is adequate for localhost and nothing more. Never commit `data/`, `storage/`, or any `*.local.ts` fixture.
+Will hold real TINs and income data under the Data Privacy Act from November 2026. **There is none in the application today** — the three clients are fictitious seed data. One real client's Q1 figures are reproduced in `tests/tax/realFilingQ1_2026.test.ts` (brief #4e, DECISIONS.md D42) — a committed test, amounts and taxpayer type only, no client name, TIN, payor name, or address. The earlier arrangement (a gitignored `scripts/real-fixture.local.ts`, read by `scripts/verify-real.ts`) is gone; confirmed 2026-09-26 that fixture had never actually existed on any reachable machine, including the bookkeeper's own laptop. Single `.env` password is adequate for localhost and nothing more. Never commit `data/`, `storage/`, or any `*.local.ts` fixture.
 
 ## How to approach changes
 
@@ -203,9 +205,8 @@ Will hold real TINs and income data under the Data Privacy Act from November 202
 
 See `CURRENT_STATE.md`. In short:
 
-1. Let her walk the rebuilt Prepare group (steps 1 and 2, brief #4b) before touching steps 3-16 or any other group.
-2. Act on whatever her walkthrough finds, step by step.
-3. Run `scripts/verify-real.ts` on a machine where the fixture exists; it has gone unexercised on more than one pass now, and this pass changed the fixture's shape (D34: `certificateCutoffDate` → per-certificate `claimedPeriod`) — anyone with the real fixture needs to update it to match.
-4. Build the **document archive browse view** — client → year, with a whole-year zip. It serves what she named as the most important thing the app does, and it is the only genuinely new build left in the backlog.
-5. **Before the live Q3 cycle:** a backup for `data/app.db`, and BIR verification of the seeded ATC codes.
-6. The live 1701Q is due **November 16, 2026**. Excel remains the master until she decides otherwise.
+1. Let her walk steps 3 and 4 of the Prepare group (computation, advising the client) before touching the other four groups — steps 1 and 2 have now been walked and fixed across briefs #4c–#4e.
+2. Act on whatever that walkthrough finds, step by step.
+3. Build the **document archive browse view** — client → year, with a whole-year zip. It serves what she named as the most important thing the app does, and it is the only genuinely new build left in the backlog.
+4. **Before the live Q3 cycle:** back up `data/app.db`, `storage/`, and the `.env` file (she raised this 2026-09-26, deferring the how until real data exists), and confirm the ATC codes against BIR.
+5. The live 1701Q is due **November 16, 2026**. Excel remains the master until she decides otherwise.
