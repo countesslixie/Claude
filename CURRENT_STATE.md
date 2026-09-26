@@ -23,7 +23,7 @@
 
 | Layer | Authored? | Role |
 |---|---|---|
-| Income record | Yes | One declared gross-sales figure per client per quarter. The only place money enters. |
+| Income record | Yes | The client's declared gross sales per quarter — the sum of per-customer rows, derived, never typed directly (D33). The only place money enters. |
 | Computation | **Never** | Pure derivation. 8% cumulative. |
 | Checklist | Marks only | A map of where you are. Blocks only on documents received from outside (D27). |
 | Document archive | Yes | For a declared-income client, substantially the whole substantive record. |
@@ -44,7 +44,7 @@ All four share one key: client × taxable year × period.
 
 **The corrected blocking rule (D27–D30)**, re-applied onto the income model above:
 - Steps 6, 7, 9, 10, 11 (both slots), 13, 14 block `DONE` on a missing document; steps 4, 12, 16 carry no slot at all; step 15 (eAFS) is optional and collapsed behind a disclosure.
-- Step 1 is `RECORD_SALES` ("Record quarterly sales"), linking to `/clients/[id]/income` — the real declared-sales form, since it exists on this base (unlike on `laughing-darwin`, where it pointed at the pre-existing transactions page for lack of anything better). Step 2 is `RECEIVE_2307`, its own certificate-scan slot made optional.
+- Step 1 is `RECORD_SALES` ("Record quarterly sales"), linking to `/clients/[id]/income` — the real declared-sales form, since it exists on this base (unlike on `laughing-darwin`, where it pointed at the pre-existing transactions page for lack of anything better). Step 2 is `RECEIVE_2307`, its own certificate-scan slot made optional — superseded by D35, see brief #4b below.
 - Step 13 → 14 is a single explicit dependency check in `markStepDone`.
 - Step 3 (`PREPARE_RETURN`) generates its own computation sheet as HTML into the vault on completion, via `lib/documents/computationSheet.ts`'s `ensureComputationSheetSaved` (idempotent, frozen-aware — a filed filing's saved copy is never regenerated) — no upload. **As of brief #4c/#4d it carries nothing else** — the acknowledgement's source-of-figure field and the optional client-confirming-message slot (`client_confirmation_evidence`) this bullet used to describe are both gone; see "Built and working, #4c–#4e" below and PROJECT_MASTER.md.
 - Step 16 offers a package-download button and a copyable, auto-filled client email draft (`lib/workflow/clientPackageEmail.ts`), including a line asking the client to forward the eAFS confirmation, shown only when step 15's slot is still empty.
