@@ -130,14 +130,36 @@ export function summarizeGroup(group: WorkflowGroupDef, steps: GroupStepInput[])
 
   let outstandingLabel: string | null = null;
   if (!isComplete) {
-    const waitingStep = groupSteps.find((s) => s.status === "WAITING_EXTERNAL");
-    if (waitingStep?.waitingOnLabel) {
-      outstandingLabel =
-        waitingStep.agingDaysWaiting != null
-          ? `waiting on ${waitingStep.waitingOnLabel}, ${waitingStep.agingDaysWaiting}d`
-          : `waiting on ${waitingStep.waitingOnLabel}`;
-    } else if (missingLabels.length > 0) {
-      outstandingLabel = `waiting on ${missingLabels.join(", ").toLowerCase()}`;
+    // Brief #4e — Prepare's own two self-completing steps (RECORD_SALES,
+    // RECEIVE_2307) both read WAITING_EXTERNAL with the same generic
+    // waitingOnLabel ("Client") until resolved, which used to make this
+    // summary read "waiting on Client, 0d" regardless of which of the
+    // two was actually still open — no more informative than the
+    // now-removed standing block-reason text it sat next to. Name the
+    // specific thing outstanding instead, same short style as every
+    // other group. Falls through to the generic case below once both
+    // are resolved (e.g. step 4/ADVISE_CLIENT genuinely marked waiting).
+    if (group.code === "PREPARE") {
+      const step1 = groupSteps.find((s) => s.stepCode === "RECORD_SALES");
+      const step2 = groupSteps.find((s) => s.stepCode === "RECEIVE_2307");
+      const step1Done = step1?.status === "DONE";
+      const step2Resolved = step2 ? isResolved(step2.status) : false;
+      const outstanding: string[] = [];
+      if (!step1Done) outstanding.push("quarterly sales");
+      if (!step2Resolved) outstanding.push("Form 2307");
+      if (outstanding.length > 0) outstandingLabel = `waiting on ${outstanding.join(" and ")}`;
+    }
+
+    if (outstandingLabel == null) {
+      const waitingStep = groupSteps.find((s) => s.status === "WAITING_EXTERNAL");
+      if (waitingStep?.waitingOnLabel) {
+        outstandingLabel =
+          waitingStep.agingDaysWaiting != null
+            ? `waiting on ${waitingStep.waitingOnLabel}, ${waitingStep.agingDaysWaiting}d`
+            : `waiting on ${waitingStep.waitingOnLabel}`;
+      } else if (missingLabels.length > 0) {
+        outstandingLabel = `waiting on ${missingLabels.join(", ").toLowerCase()}`;
+      }
     }
   }
 

@@ -169,6 +169,50 @@ describe("summarizeGroup", () => {
     expect(summary.outstandingLabel).toBe("waiting on BIR, 12d");
   });
 
+  it("brief #4e -- Prepare's outstanding label names quarterly sales specifically, not a generic 'waiting on Client'", () => {
+    const steps: GroupStepInput[] = prepare.stepCodes.map((stepCode) => ({
+      stepCode,
+      status: stepCode === "RECORD_SALES" ? "WAITING_EXTERNAL" : stepCode === "RECEIVE_2307" ? "DONE" : "PENDING",
+      waitingOnLabel: stepCode === "RECORD_SALES" ? "Client" : undefined,
+      agingDaysWaiting: stepCode === "RECORD_SALES" ? 0 : undefined,
+    }));
+    const summary = summarizeGroup(prepare, steps);
+    expect(summary.outstandingLabel).toBe("waiting on quarterly sales");
+  });
+
+  it("brief #4e -- Prepare's outstanding label names Form 2307 specifically once sales are recorded", () => {
+    const steps: GroupStepInput[] = prepare.stepCodes.map((stepCode) => ({
+      stepCode,
+      status: stepCode === "RECORD_SALES" ? "DONE" : stepCode === "RECEIVE_2307" ? "WAITING_EXTERNAL" : "PENDING",
+      waitingOnLabel: stepCode === "RECEIVE_2307" ? "Client" : undefined,
+      agingDaysWaiting: stepCode === "RECEIVE_2307" ? 0 : undefined,
+    }));
+    const summary = summarizeGroup(prepare, steps);
+    expect(summary.outstandingLabel).toBe("waiting on Form 2307");
+  });
+
+  it("brief #4e -- Prepare's outstanding label names both when neither self-completing step is resolved", () => {
+    const steps: GroupStepInput[] = prepare.stepCodes.map((stepCode) => ({
+      stepCode,
+      status: stepCode === "RECORD_SALES" || stepCode === "RECEIVE_2307" ? "WAITING_EXTERNAL" : "PENDING",
+      waitingOnLabel: stepCode === "RECORD_SALES" || stepCode === "RECEIVE_2307" ? "Client" : undefined,
+      agingDaysWaiting: stepCode === "RECORD_SALES" || stepCode === "RECEIVE_2307" ? 0 : undefined,
+    }));
+    const summary = summarizeGroup(prepare, steps);
+    expect(summary.outstandingLabel).toBe("waiting on quarterly sales and Form 2307");
+  });
+
+  it("brief #4e -- once steps 1/2 are resolved, Prepare falls through to the generic waiting-step label (e.g. step 4 genuinely marked waiting)", () => {
+    const steps: GroupStepInput[] = prepare.stepCodes.map((stepCode) => ({
+      stepCode,
+      status: stepCode === "ADVISE_CLIENT" ? "WAITING_EXTERNAL" : stepCode === "PREPARE_RETURN" ? "PENDING" : "DONE",
+      waitingOnLabel: stepCode === "ADVISE_CLIENT" ? "Client" : undefined,
+      agingDaysWaiting: stepCode === "ADVISE_CLIENT" ? 3 : undefined,
+    }));
+    const summary = summarizeGroup(prepare, steps);
+    expect(summary.outstandingLabel).toBe("waiting on Client, 3d");
+  });
+
   it("NA steps (no SAWT requirement) are excluded from doneCount/totalCount and don't stop the group from reading complete", () => {
     const steps: GroupStepInput[] = sawt.stepCodes.map((stepCode) => ({ stepCode, status: "NA" }));
     const summary = summarizeGroup(sawt, steps);

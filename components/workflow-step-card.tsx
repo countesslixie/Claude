@@ -109,6 +109,9 @@ export function WorkflowStepCard({
   const optionalSlots = step.requiredDocSlots.filter((s) => !s.required);
   const attachedFor = (slotCode: string) => step.documents.filter((d) => d.docSlotCode === slotCode);
 
+  // Brief #4e — blockReason no longer renders as standing text on the
+  // card; it still disables "Mark done" and explains why via that
+  // button's `title` tooltip (see below).
   const blockReason = stepBlockReason(step.requiredDocSlots, step.documents, dependencyBlockedReason);
 
   return (
@@ -308,8 +311,6 @@ export function WorkflowStepCard({
           </Button>
         </div>
       )}
-
-      {!isResolved && blockReason && <p className="mt-1 text-xs text-amber-700">{blockReason}</p>}
 
       {message && <p className="mt-2 rounded bg-amber-50 px-2 py-1 text-xs text-amber-800">{message}</p>}
     </div>

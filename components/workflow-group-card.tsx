@@ -13,6 +13,13 @@ import { markGroupDone } from "@/lib/actions/workflowSteps";
  * unresolved step in the group at once (lib/actions/workflowSteps.ts's
  * markGroupDone) — this is the point of the change: a clean quarter is
  * five clicks, not sixteen.
+ *
+ * Brief #4e — `blockReason` no longer renders as standing text under the
+ * header (the bookkeeper found the same sentence appearing here, under
+ * a per-step button, and as a "Missing required documents" line all at
+ * once, too noisy). It still disables "Mark done" and still explains
+ * why, via that button's `title` tooltip. `outstandingLabel` is
+ * unaffected — the short amber summary beside the group name stays.
  */
 export function WorkflowGroupCard({
   filingId,
@@ -80,7 +87,6 @@ export function WorkflowGroupCard({
         )}
       </div>
 
-      {!isComplete && blockReason && <p className="px-3 pb-2 text-xs text-amber-700">{blockReason}</p>}
       {message && <p className="px-3 pb-2 text-xs text-amber-700">{message}</p>}
 
       {isOpen && <div className="flex flex-col gap-2 border-t border-slate-100 p-3">{children}</div>}

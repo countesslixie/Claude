@@ -16,6 +16,11 @@ import { stepBlockReason, type AttachedDocument, type DocSlotLike } from "@/lib/
  * still happens down in the checklist card. Disabling this button with
  * the same reason (rather than only showing the error after a click)
  * keeps this control honest about what a click here would actually do.
+ *
+ * Brief #4e — blockReason no longer renders as standing text here
+ * either (this banner was a third place the same sentence showed up,
+ * alongside the group header and the per-step card). It still disables
+ * "Mark done" and explains why via that button's `title` tooltip.
  */
 export function NextActionControl({
   stepId,
@@ -64,7 +69,6 @@ export function NextActionControl({
           Go to checklist
         </a>
       </div>
-      {blockReason && <p className="text-xs text-amber-700">{blockReason}</p>}
       {message && <p className="text-xs text-amber-700">{message}</p>}
     </div>
   );
