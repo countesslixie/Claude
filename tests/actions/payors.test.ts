@@ -1,6 +1,6 @@
 import { describe, it, expect, afterAll, vi } from "vitest";
 import { prisma } from "@/lib/prisma";
-import { createPayor, updatePayor, createPayorInline, listActivePayors } from "@/lib/actions/payors";
+import { createPayor, updatePayor, createPayorInline, listActivePayors, fillPayorDetail } from "@/lib/actions/payors";
 import type { PayorFormState } from "@/lib/actions/payors";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
@@ -103,6 +103,79 @@ describe("Payor actions — Customers / payors", () => {
 
     const count = await prisma.payor.count({ where: { clientId: client.id, name: "Dup Co." } });
     expect(count).toBe(1);
+  });
+
+  /**
+   * Brief #5b — "only the name is required. She often records income long
+   * before she has the payor's TIN." The dialog's Save with everything
+   * else left blank must save cleanly, blank fields and all — not error,
+   * not invent a placeholder.
+   */
+  it("brief #5b: saving a payor with only a name leaves TIN, address and usual ATC code blank", async () => {
+    const client = await makeClient("payor-name-only");
+
+    const result = await createPayorInline(client.id, { name: "Name Only Co." });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.payor.tin).toBeNull();
+    expect(result.payor.address).toBeNull();
+    expect(result.payor.usualAtcCode).toBeNull();
+
+    const stored = await prisma.payor.findUniqueOrThrow({ where: { id: result.payor.id } });
+    expect(stored.tin).toBeNull();
+    expect(stored.address).toBeNull();
+    expect(stored.usualAtcCode).toBeNull();
+  });
+
+  /**
+   * Brief #5b — "filling in blanks later, without silent edits": the
+   * certificate form's fill-back offer calls this action when a field is
+   * blank on the saved payor. Guarded here too, not just by the offer
+   * only appearing for a blank field — the action itself never overwrites
+   * a value the payor already has.
+   */
+  describe("fillPayorDetail", () => {
+    it("fills a blank field on the saved payor", async () => {
+      const client = await makeClient("payor-fillback-blank");
+      const created = await createPayorInline(client.id, { name: "Fill Back Co." });
+      if (!created.ok) throw new Error("setup failed");
+
+      const result = await fillPayorDetail(client.id, created.payor.id, "tin", "444555666");
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.payor.tin).toBe("444555666");
+
+      const stored = await prisma.payor.findUniqueOrThrow({ where: { id: created.payor.id } });
+      expect(stored.tin).toBe("444555666");
+    });
+
+    it("never overwrites a field the payor already has, even with a different value", async () => {
+      const client = await makeClient("payor-fillback-differs");
+      const created = await createPayorInline(client.id, { name: "Already Has TIN Co.", tin: "111111111" });
+      if (!created.ok) throw new Error("setup failed");
+
+      const result = await fillPayorDetail(client.id, created.payor.id, "tin", "999999999");
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      // Untouched — the certificate that disagreed is the one that changed, not the payor (#5a's rule).
+      expect(result.payor.tin).toBe("111111111");
+
+      const stored = await prisma.payor.findUniqueOrThrow({ where: { id: created.payor.id } });
+      expect(stored.tin).toBe("111111111");
+    });
+
+    it("fills address and usual ATC code the same way", async () => {
+      const client = await makeClient("payor-fillback-other-fields");
+      const created = await createPayorInline(client.id, { name: "Multi Field Co." });
+      if (!created.ok) throw new Error("setup failed");
+
+      await fillPayorDetail(client.id, created.payor.id, "address", "22 Fill-back Ave.");
+      await fillPayorDetail(client.id, created.payor.id, "usualAtcCode", "WI010");
+
+      const stored = await prisma.payor.findUniqueOrThrow({ where: { id: created.payor.id } });
+      expect(stored.address).toBe("22 Fill-back Ave.");
+      expect(stored.usualAtcCode).toBe("WI010");
+    });
   });
 });
 

@@ -1,7 +1,7 @@
 # PROJECT_MASTER.md
 
 *Permanent project memory. Update only when something long-lived genuinely changes.*
-*Last reconciled: 2026-09-26 — brief #5a (ATC codes, the shared customer/payor list, new required certificate fields, scan-on-save, entry-form fixes), on top of the documentation pass (brief #4f) through briefs #4c-#4e.*
+*Last reconciled: 2026-09-27 — brief #5b (the "Save … to payors" dialog, fill-back, renamed to "Payors" on screen), on top of brief #5a and the documentation pass (brief #4f) through briefs #4c-#4e.*
 
 > Build status lives in CURRENT_STATE.md. This file is the intended application and the rules that govern it.
 
@@ -88,7 +88,8 @@ The declared figure is accepted as given. The per-quarter Notes field (`Quarterl
 - **Required fields (D45, brief #5a):** payor TIN, payor address and ATC code are now required, alongside payor name, income amount, tax withheld and period covered. Validated with Zod server-side, not only on the form. The old "more fields" disclosure is gone — once these three joined the main form, nothing required was left behind it.
 - **ATC code is a picker, and the rate is a property of the code (D43, brief #5a).** The free-text ATC box and separate rate box are gone. `AtcCode` (Settings: add/edit/deactivate, never invented — D19) now has a maintenance screen; the certificate form's ATC picker offers only active codes and fills `withholdingRateBps` from the chosen code's own rate. The rate stays visible and editable — the certificate is authoritative over the code when they disagree — and `Form2307.rateOverridden` records when she's typed a different rate than the code's own. `verifiedAgainstIssuance` is shown plainly wherever a code appears.
 - **The scan is part of saving the certificate (D46, brief #5a, her decision).** A certificate cannot be created without its scan — no separate upload step afterward. D35's blocking rule (below) is now satisfied by construction rather than earned later. A saved row keeps a **Replace scan** action (one-for-one; the prior scan is soft-deleted, never hard-deleted).
-- **"Customers / payors" (D44, brief #5a, her decision):** a saved per-client list (`Payor` — name, TIN, address, usual ATC code, active flag) shared by step 1's customer-name field and step 2's payor-name field. Picking a saved entry autofills that one row/certificate (TIN/address/ATC on step 2; name only on step 1); everything stays independently editable from there, and editing never rewrites the saved entry. **This is a shared reference of names/details only — there is no foreign key from `QuarterlySalesCustomer` or `Form2307` to `Payor`, and no path for a certificate to affect gross sales.** Typing an unrecognized name offers to save it inline; a small per-client screen (`/clients/[id]/payors`) covers edit/deactivate but is never the only way in.
+- **"Payors" (D44, brief #5a, her decision; named "Customers / payors" until brief #5b renamed it on screen):** a saved per-client list (`Payor` — name, TIN, address, usual ATC code, active flag) shared by step 1's payor-name field and step 2's payor-name field. Picking a saved entry autofills that one row/certificate (TIN/address/ATC on step 2; name only on step 1); everything stays independently editable from there, and editing never rewrites the saved entry. **This is a shared reference of names/details only — there is no foreign key from `QuarterlySalesCustomer` or `Form2307` to `Payor`, and no path for a certificate to affect gross sales.** A small per-client screen (`/clients/[id]/payors`) covers edit/deactivate but is never the only way in.
+- **Saving a new payor opens a small dialog (D48, brief #5b).** "Save … to payors" no longer saves the name alone — a dialog (`components/payor-details-dialog.tsx`) offers name (pre-filled), TIN, address and usual ATC code, all but the name optional. Cancel or Escape leaves the row exactly as typed, unsaved. One dialog serves both step 1 and step 2. Separately, when a certificate field is filled that's blank on its matched saved payor, a one-line offer appears to save that value back onto the payor (`fillPayorDetail`) — her choice, never automatic, and never offered when the payor already has a (possibly different) value for that field, per D45's certificate-is-authoritative rule.
 
 ### Deadlines
 - 1701Q: Q1 **May 15**, Q2 **Aug 15**, Q3 **Nov 15**. Annual: **Apr 15**.
@@ -209,4 +210,5 @@ Next.js 15 App Router · TypeScript strict · Prisma + SQLite (`data/app.db`) ·
 11. The blocking rule (D27), including the eAFS exception and step 16's conditional forwarding line
 12. The `Q4`-in-sales / no-`Q4`-in-filings distinction
 13. The archive's independence from the database
-14. The "Customers / payors" list's independence from income and certificates (D44) — no foreign key from `QuarterlySalesCustomer` or `Form2307` to `Payor`, ever
+14. The "Payors" list's independence from income and certificates (D44) — no foreign key from `QuarterlySalesCustomer` or `Form2307` to `Payor`, ever
+15. Fill-back (D48) only ever fills a blank field on a payor — never overwrites one it already has

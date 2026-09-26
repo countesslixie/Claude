@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { PayorNameField } from "@/components/payor-name-field";
+import { PayorDetailsDialog } from "@/components/payor-details-dialog";
 import { AtcCodeSelect, type SelectableAtcCode } from "@/components/atc-code-select";
 import type { CertificateFormState } from "@/lib/actions/form2307";
 import type { SavedPayor } from "@/lib/actions/payors";
@@ -27,6 +28,7 @@ export function CertificateForm({
   defaultPeriodFrom,
   defaultPeriodTo,
   onSaveNewPayor,
+  onFillPayorDetail,
   onSaved,
   onCancel,
 }: {
@@ -41,6 +43,12 @@ export function CertificateForm({
     address?: string;
     usualAtcCode?: string;
   }) => Promise<{ ok: true; payor: SavedPayor } | { ok: false; error: string }>;
+  /** Brief #5b — fills one blank detail on an existing saved payor. Never overwrites a value it already has. */
+  onFillPayorDetail: (
+    payorId: string,
+    field: "tin" | "address" | "usualAtcCode",
+    value: string,
+  ) => Promise<{ ok: true; payor: SavedPayor } | { ok: false; error: string }>;
   onSaved: () => void;
   onCancel: () => void;
 }) {
@@ -52,6 +60,16 @@ export function CertificateForm({
   const [payorAddress, setPayorAddress] = useState("");
   const [atcCode, setAtcCode] = useState("");
   const [ratePercent, setRatePercent] = useState("");
+  // Brief #5b — "Save … to payors" opens the shared dialog; null = closed.
+  const [dialogName, setDialogName] = useState<string | null>(null);
+  // Brief #5b — per-field "Not now" on the fill-back offer, keyed by the
+  // value that was dismissed (so re-typing something new re-offers it).
+  const [dismissedFillBack, setDismissedFillBack] = useState<Record<string, string>>({});
+  const [fillBackSaving, setFillBackSaving] = useState<string | null>(null);
+
+  const matchedPayor = payorName.trim()
+    ? localPayors.find((p) => p.name.toLowerCase() === payorName.trim().toLowerCase())
+    : undefined;
 
   // Re-sync the controlled fields from the server's echoed values after a
   // rejected save, same convention as QuarterlySalesCard, so a validation
@@ -89,21 +107,64 @@ export function CertificateForm({
     setRatePercent(rateFromCode(code));
   }
 
-  async function handleSaveNewPayor(name: string): Promise<{ ok: boolean; error?: string }> {
-    const result = await onSaveNewPayor({
-      name,
-      tin: payorTin || undefined,
-      address: payorAddress || undefined,
-      usualAtcCode: atcCode || undefined,
-    });
-    if (!result.ok) return { ok: false, error: result.error };
-    setLocalPayors((prev) => [...prev, result.payor]);
-    return { ok: true };
+  async function handleDialogSave(draft: {
+    name: string;
+    tin?: string;
+    address?: string;
+    usualAtcCode?: string;
+  }): Promise<{ ok: true; payor: SavedPayor } | { ok: false; error: string }> {
+    const result = await onSaveNewPayor(draft);
+    if (result.ok) setLocalPayors((prev) => [...prev, result.payor]);
+    return result;
+  }
+
+  /**
+   * Brief #5b — "filling in blanks later": once this field's name matches
+   * a saved payor, typing a value here that the payor doesn't have yet
+   * offers to save it back. A payor that already has a (possibly
+   * different) value for this field never gets this offer — that
+   * disagreement stays on the certificate only (#5a's rule).
+   */
+  async function handleFillBack(field: "tin" | "address" | "usualAtcCode", value: string) {
+    if (!matchedPayor) return;
+    setFillBackSaving(field);
+    const result = await onFillPayorDetail(matchedPayor.id, field, value);
+    setFillBackSaving(null);
+    if (result.ok) {
+      setLocalPayors((prev) => prev.map((p) => (p.id === result.payor.id ? result.payor : p)));
+    }
+  }
+
+  function fillBackOffer(field: "tin" | "address" | "usualAtcCode", label: string, value: string) {
+    const trimmedValue = value.trim();
+    if (!matchedPayor || matchedPayor[field] || !trimmedValue) return null;
+    if (dismissedFillBack[field] === trimmedValue) return null;
+    return (
+      <p className="text-xs text-slate-500">
+        {`Save this as ${matchedPayor.name}'s ${label} too?`}{" "}
+        <button
+          type="button"
+          onClick={() => handleFillBack(field, trimmedValue)}
+          disabled={fillBackSaving === field}
+          className="text-slate-700 underline hover:text-slate-900"
+        >
+          {fillBackSaving === field ? "Saving…" : "Save"}
+        </button>{" "}
+        <button
+          type="button"
+          onClick={() => setDismissedFillBack((prev) => ({ ...prev, [field]: trimmedValue }))}
+          className="text-slate-400 underline"
+        >
+          Not now
+        </button>
+      </p>
+    );
   }
 
   const errs = (key: string) => state.fieldErrors?.[key];
 
   return (
+    <>
     <form action={formAction} className="mt-1 flex flex-col gap-2 rounded border border-slate-200 p-2">
       {state.error && <p className="text-xs text-red-600">{state.error}</p>}
 
@@ -117,7 +178,7 @@ export function CertificateForm({
             onChange={setPayorName}
             payors={localPayors}
             onSelectSaved={handleSelectSavedPayor}
-            onSaveNew={handleSaveNewPayor}
+            onRequestSave={setDialogName}
             required
           />
           {errs("payorName")?.map((e) => (
@@ -140,6 +201,7 @@ export function CertificateForm({
               {e}
             </p>
           ))}
+          {fillBackOffer("tin", "TIN", payorTin)}
         </div>
         <div className="flex flex-col gap-0.5">
           <Label htmlFor="cert-payorAddress">Payor address</Label>
@@ -155,6 +217,7 @@ export function CertificateForm({
               {e}
             </p>
           ))}
+          {fillBackOffer("address", "address", payorAddress)}
         </div>
         <div className="flex flex-col gap-0.5 col-span-2">
           <Label htmlFor="cert-atcCode">ATC code</Label>
@@ -164,6 +227,7 @@ export function CertificateForm({
               {e}
             </p>
           ))}
+          {fillBackOffer("usualAtcCode", "usual ATC code", atcCode)}
         </div>
         <div className="flex flex-col gap-0.5">
           <Label htmlFor="cert-withholdingRatePercent">Rate (%)</Label>
@@ -242,5 +306,13 @@ export function CertificateForm({
         </button>
       </div>
     </form>
+    <PayorDetailsDialog
+      open={dialogName !== null}
+      initialName={dialogName ?? ""}
+      atcCodes={atcCodes}
+      onSave={handleDialogSave}
+      onClose={() => setDialogName(null)}
+    />
+    </>
   );
 }

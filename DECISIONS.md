@@ -2,7 +2,7 @@
 
 *Append new decisions. Mark superseded ones rather than deleting them.*
 *Dates during the build are approximate — most work happened across August 2026.*
-*Last reconciled: 2026-09-26 — brief #5a (D43-D47), on top of the documentation pass (brief #4f) through briefs #4c-#4e.*
+*Last reconciled: 2026-09-27 — brief #5b (D48), on top of brief #5a (D43-D47) and the documentation pass (brief #4f) through briefs #4c-#4e.*
 
 ---
 
@@ -295,6 +295,7 @@ On the certificate form, the free-text "ATC code" box and separate "Rate (%)" bo
 *What did NOT change:* no code is seeded by this brief — WI010 and WI011 stay exactly as they were, both unverified (D19's "never invent" applies as much to this pass as to the original seed).
 
 **D44 — "Customers / payors": one saved list per client, shared by step 1's customer field and step 2's payor field, but never linked to either's numbers** *(2026-09-26, brief #5a, her decision)*
+**⚠️ Renamed "Payors" on screen 2026-09-27 by D48 (brief #5b)** — the label only; the `Payor` model/table and every internal field name below are unchanged.
 
 *Why:* a company recorded as a customer in step 1 is usually the same company that issues a 2307 in step 2. Free-typed twice in two different screens, it drifts — two spellings of the same payor, one screen with a TIN and the other without.
 
@@ -321,3 +322,19 @@ Alongside the payor name, income amount, tax withheld and period covered that we
 3. *While "All certificates received" is ticked, no certificate can be added or removed.* The Add button and each row's Remove action are hidden — not merely disabled — with one short line saying to untick first; unticking restores both. This is enforced server-side too (`addCertificate`/`deleteCertificate` both refuse while `Filing.certificatesAllReceivedAt` is set), not only by hiding the buttons, so the rule holds even if the action is ever called directly. This is a deliberate, narrow exception to D41's "no standing block-reason text" — the checkbox already means "the set is complete," so the line explains a state she just set herself, not a rule blocking her from something she's trying to do; it is one line, appears in exactly one place, and disappears the moment she unticks it.
 
 *Checked and confirmed unaffected by this whole brief:* D26/D33 (gross sales stays step-1-only, a certificate contributes nothing to it), D34 (a certificate still counts in the filing it was entered under, locked once filed), D35 (restated more precisely by D46 above), D39 (Skip still shows only while there are no rows), D3 (money stays integer centavos on the Decimal.js path — the percent-to-basis-points conversion used for the rate here is the same `percentToBps` #4c already added, no new float arithmetic anywhere).
+
+---
+
+## 2026-09-27 — brief #5b (bookkeeper's walkthrough of brief #5a's saved payor list)
+
+**D48 — Saving a new payor opens a small dialog for its full details; a certificate can offer to fill a gap back onto it; the list is called "Payors" on screen** *(2026-09-27, brief #5b, her decisions)*
+
+*Why:* D44 (brief #5a) only ever saved the bare name from step 1, so TIN, address and ATC still had to be typed on the payor's first certificate. And a payor saved from step 1 with no TIN or address would go on to trip step 2's required fields (D45) with nothing to autofill from.
+
+*The dialog:* clicking "Save … to payors" (step 1's customer-name field or step 2's payor-name field, both via `components/payor-name-field.tsx`'s `onRequestSave`) now opens `components/payor-details-dialog.tsx` — a native `<dialog>` (`showModal()`, Escape-to-close and focus containment for free), not Radix (still installed unused, still not to be started). It offers name (pre-filled from what she typed, editable), TIN, address and usual ATC code (D43's picker). Only the name is required — she often records income long before she has a payor's TIN, and a blank field is saved blank, not invented (D19 by extension). Cancel, the dialog's own X, or Escape leaves the row's typed name exactly as it was, unsaved — the same outcome as today's "Not now". One dialog instance, used identically from both step 1 and step 2; step 1 still only had a name to fill from picking a saved entry, but can now capture the rest at save time instead of never.
+
+*Fill-back:* on step 2, when she fills a certificate field (TIN, address, ATC) that is blank on the row's matched saved payor, a one-line offer appears — "Save this as `<payor>`'s `<field>` too?" — calling `fillPayorDetail` (`lib/actions/payors.ts`) on Save. Her choice; nothing here is automatic. The action itself only ever fills a field that is still blank when it runs (checked server-side, not just by the offer's own condition) — if the payor already has a value, that value is returned untouched and the offer never even appears, per D45's rule that the certificate is authoritative over the payor when they disagree, never the other way around.
+
+*The rename:* "Customers / payors" becomes "Payors" everywhere it was user-facing — step 1's column header, the "Add customer"/"Customer name" text, the saved-list screen and its heading and empty state, the save prompt, and the client-page nav link. **Screen text only.** Left alone, deliberately, per the brief: the `Payor` Prisma model and table, `QuarterlySalesCustomer` and its `customerName` column, the `customers`/`CustomerRow`/`customerName` identifiers throughout `components/quarterly-sales-card.tsx` and the income page, and every test and comment that names these internals. None of it was worth a migration or a wire-format rename for a label change.
+
+*Confirmed unaffected:* D26/D33 (the saved list still only fills a row/certificate, never links income to credit), D45 (certificate required fields, unchanged), D46 (scan-on-save, unchanged), D47's tick-locks-the-list rule (unchanged), D41 (no standing block-reason text — the fill-back offer is a one-line, dismissible, opt-in prompt, not a block).

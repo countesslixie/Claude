@@ -77,9 +77,15 @@ export default async function IncomePage({
 
   const editableQuarter: SalesQuarter | null = openFiling ? ownSalesQuarterOf(openFiling.period as never) : null;
 
-  // Brief #5a — the customer-name field on each row offers the client's
-  // saved "Customers / payors" list, with free typing still allowed.
-  const payors = await listActivePayors(id);
+  // Brief #5a — each row's name field (labeled "Payor" on screen since
+  // brief #5b; internal name customerName is unchanged) offers the
+  // client's saved payor list, with free typing still allowed.
+  // Brief #5b — "Save … to payors" opens the full-details dialog here too,
+  // so the income page's picker needs the active ATC list as well.
+  const [payors, atcCodes] = await Promise.all([
+    listActivePayors(id),
+    prisma.atcCode.findMany({ where: { isActive: true }, orderBy: { code: "asc" } }),
+  ]);
   const boundSaveNewPayor = createPayorInline.bind(null, id);
 
   const yearTotalGrossCents = rows.reduce((sum, r) => sum + r.grossSalesCents, 0);
@@ -190,6 +196,7 @@ export default async function IncomePage({
                 initialSavedAt={row ? formatManilaDate(row.updatedAt) : null}
                 filingHref={filing ? `/clients/${id}/filings/${filing.id}` : `/clients/${id}/income`}
                 payors={payors}
+                atcCodes={atcCodes}
                 onSaveNewPayor={boundSaveNewPayor}
               />
             </div>
@@ -236,6 +243,7 @@ export default async function IncomePage({
                 initialSavedAt={row ? formatManilaDate(row.updatedAt) : null}
                 filingHref={filing ? `/clients/${id}/filings/${filing.id}` : `/clients/${id}/income`}
                 payors={payors}
+                atcCodes={atcCodes}
                 onSaveNewPayor={boundSaveNewPayor}
               />
             );
@@ -252,7 +260,7 @@ export default async function IncomePage({
             <thead>
               <tr>
                 <th>Quarter</th>
-                <th>Customers</th>
+                <th>Payors</th>
                 <th>Total</th>
                 <th></th>
               </tr>

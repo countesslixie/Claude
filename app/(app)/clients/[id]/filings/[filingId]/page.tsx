@@ -8,7 +8,7 @@ import {
   dismissCompletenessNote,
 } from "@/lib/actions/filings";
 import { addCertificate } from "@/lib/actions/form2307";
-import { listActivePayors, createPayorInline } from "@/lib/actions/payors";
+import { listActivePayors, createPayorInline, fillPayorDetail } from "@/lib/actions/payors";
 import { StatusBadge } from "@/components/status-badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -106,6 +106,7 @@ export default async function FilingDetailPage({
   const boundAddCertificate = addCertificate.bind(null, filing.id);
   const boundToggleAllReceived = setAllCertificatesReceived.bind(null, filing.id);
   const boundSaveNewPayor = createPayorInline.bind(null, filing.clientId);
+  const boundFillPayorDetail = fillPayorDetail.bind(null, filing.clientId);
 
   // Brief #5a — step 2's payor picker and the certificate form's ATC
   // picker both read the client's saved lists; the ATC list also gates
@@ -540,6 +541,7 @@ export default async function FilingDetailPage({
                         payors={payors}
                         atcCodes={activeAtcCodes}
                         onSaveNewPayor={boundSaveNewPayor}
+                        onFillPayorDetail={boundFillPayorDetail}
                       />
                     );
                   }

@@ -13,7 +13,7 @@ export interface SelectableAtcCode {
 
 /**
  * Brief #5a — "ATC code becomes a picker of the active codes." Reused by
- * the certificate form and the Payor (customers/payors) form. If the
+ * the certificate form and the Payor ("Payors" on screen) form. If the
  * list is empty, says so and links to Settings rather than showing an
  * empty dropdown with no explanation.
  */

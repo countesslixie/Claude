@@ -84,7 +84,7 @@ export default async function ClientDetailPage({
           </Link>
           <Link href={`/clients/${client.id}/payors`}>
             <Button variant="secondary" size="sm">
-              Customers / payors
+              Payors
             </Button>
           </Link>
           <Link href={`/clients/${client.id}/edit`}>

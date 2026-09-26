@@ -7,6 +7,7 @@ import { setAllCertificatesReceived } from "@/lib/actions/filings";
 import { markStepDone } from "@/lib/actions/workflowSteps";
 import { uploadDocument, deleteDocument } from "@/lib/actions/documents";
 import { generateFilingsForClientYear } from "@/lib/workflow/filingGeneration";
+import { createPayorInline } from "@/lib/actions/payors";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
@@ -24,6 +25,7 @@ describe("step 2 — certificate entry (addCertificate/deleteCertificate)", () =
     if (createdClientIds.length === 0) return;
     await prisma.document.deleteMany({ where: { clientId: { in: createdClientIds } } });
     await prisma.form2307.deleteMany({ where: { clientId: { in: createdClientIds } } });
+    await prisma.payor.deleteMany({ where: { clientId: { in: createdClientIds } } });
     await prisma.workflowStep.deleteMany({ where: { filing: { clientId: { in: createdClientIds } } } });
     await prisma.filing.deleteMany({ where: { clientId: { in: createdClientIds } } });
     await prisma.client.deleteMany({ where: { id: { in: createdClientIds } } });
@@ -249,5 +251,47 @@ describe("step 2 — certificate entry (addCertificate/deleteCertificate)", () =
 
     const deleteResult = await deleteCertificate(cert.id, "test");
     expect(deleteResult.ok).toBe(false);
+  });
+
+  /**
+   * Brief #5b — "the dialog's details reaching a later certificate": the
+   * dialog (components/payor-details-dialog.tsx) saves name/TIN/address/
+   * usual ATC via createPayorInline; step 2's picker then autofills a
+   * later certificate from exactly that saved record. The autofill
+   * itself is client-side JS this suite has no tooling to drive (see
+   * tests/actions/payors.test.ts's note) — this proves the data path it
+   * depends on: what the dialog saves is exactly what a certificate for
+   * that payor needs, unchanged.
+   */
+  it("brief #5b: a payor saved with full details (as the dialog would) supplies everything a later certificate needs", async () => {
+    const { client, filing } = await makeClientWithQ2Filing("f2307-dialog-details");
+
+    const saved = await createPayorInline(client.id, {
+      name: "Dialog-Saved Payor",
+      tin: "222333444",
+      address: "9 Dialog Lane",
+      usualAtcCode: "WI010",
+    });
+    expect(saved.ok).toBe(true);
+    if (!saved.ok) return;
+
+    const result = await addCertificate(
+      filing.id,
+      {} as CertificateFormState,
+      certFormData({
+        payorName: saved.payor.name,
+        payorTin: saved.payor.tin!,
+        payorAddress: saved.payor.address!,
+        atcCode: saved.payor.usualAtcCode!,
+      }),
+    );
+    expect(result.saved).toBe(true);
+
+    const cert = await prisma.form2307.findFirstOrThrow({
+      where: { claimedOnFilingId: filing.id, deletedAt: null, payorName: "Dialog-Saved Payor" },
+    });
+    expect(cert.payorTin).toBe("222333444");
+    expect(cert.payorAddress).toBe("9 Dialog Lane");
+    expect(cert.atcCode).toBe("WI010");
   });
 });

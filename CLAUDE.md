@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 *Instructions for Claude Code working on this repository.*
-*Last reconciled: 2026-09-26 — brief #5a, on top of the documentation pass (brief #4f) through briefs #4c-#4e.*
+*Last reconciled: 2026-09-27 — brief #5b, on top of brief #5a and the documentation pass (brief #4f) through briefs #4c-#4e.*
 
 ---
 
@@ -56,7 +56,7 @@ Next.js 15 App Router · TypeScript strict · Prisma + SQLite (`data/app.db`) ·
                                (saveQuarterlySales, D33), form2307.ts
                                (addCertificate/deleteCertificate, D34, now
                                scan-on-save — D46), atcCodes.ts, payors.ts
-                               (createPayorInline, brief #5a)
+                               (createPayorInline, brief #5a; fillPayorDetail, brief #5b)
 /lib/dates.ts                  manilaCalendarDay(), formatManilaDate()
 /components/                   next-action-control.tsx, computation-sheet-panel.tsx,
                                quarterly-sales-card.tsx, record-sales-step-card.tsx,
@@ -64,7 +64,8 @@ Next.js 15 App Router · TypeScript strict · Prisma + SQLite (`data/app.db`) ·
                                (brief #5a), workflow-step-card.tsx,
                                workflow-group-card.tsx, copy-textarea.tsx,
                                payor-name-field.tsx, atc-code-select.tsx,
-                               atc-code-form.tsx, payor-form.tsx (brief #5a)
+                               atc-code-form.tsx, payor-form.tsx (brief #5a),
+                               payor-details-dialog.tsx (brief #5b)
                                ui/ (plain Tailwind primitives)
 /prisma/                       schema, migrations, seed
 /storage/                      gitignored document vault
@@ -99,7 +100,9 @@ A missing quarter is zero, not an error — but a filing whose OWN quarter has n
 
 **There is no control of any kind over a declared income figure — say so plainly, don't invent a replacement.** Step 3 used to carry an acknowledgement that partially closed this gap: a required source-of-figure text field, plus an optional attachment for the client's own confirming message. Both are gone (briefs #4c and #4d, DECISIONS.md D37) — the bookkeeper made both calls deliberately, having watched the field in actual use. Once income is declared-only, nothing can be cross-checked against anything at the source level; the only surviving reconciliation, `lib/reconciliation.ts`, is annual certificates-vs-declared-sales — a sanity check, not a source-level one, and it was never a substitute for the field that's now gone. The per-quarter Notes field (`QuarterlySales.notes`) still exists and can hold anything she chooses to write, but nothing asks for an entry and nothing requires one.
 
-**"Customers / payors" (D44, brief #5a) is a saved list, not a link.** `Payor` (one row per client: name, TIN, address, usual ATC code, active flag) is shared by step 1's customer field and step 2's payor field via one component (`components/payor-name-field.tsx`), so the same company doesn't get typed — and spelled — two different ways. Picking a saved entry only fills that one row/certificate; there is no foreign key from `QuarterlySalesCustomer` or `Form2307` to `Payor`, and there must never be one — a certificate still cannot affect gross sales.
+**"Payors" (D44, brief #5a; named "Customers / payors" until brief #5b renamed it on screen) is a saved list, not a link.** `Payor` (one row per client: name, TIN, address, usual ATC code, active flag) is shared by step 1's payor field and step 2's payor field via one component (`components/payor-name-field.tsx`), so the same company doesn't get typed — and spelled — two different ways. Picking a saved entry only fills that one row/certificate; there is no foreign key from `QuarterlySalesCustomer` or `Form2307` to `Payor`, and there must never be one — a certificate still cannot affect gross sales.
+
+**"Save … to payors" opens a dialog; a certificate can offer to fill a gap back onto the payor (D48, brief #5b).** `components/payor-details-dialog.tsx` — one dialog, used from both step 1 and step 2 — captures name (required) plus optional TIN/address/usual ATC in one go, so she doesn't have to wait for the first certificate to record them. A native `<dialog>`, not Radix (still unused/uninstalled in any load-bearing sense). Separately, `fillPayorDetail` (`lib/actions/payors.ts`) lets the certificate form offer to save a value back to the payor when that field is blank there — never when the payor already has a different value (D45's certificate-is-authoritative rule is unchanged).
 
 **A certificate's ATC code is now a picker, and the rate comes from it (D43, brief #5a).** `AtcCode` has a maintenance screen (`/settings/atc-codes` — add/edit/deactivate, D19 unaffected: never invent a code or a rate). The certificate form's ATC field offers only active codes and fills the rate from the chosen code; she can still override the rate for one certificate, which sets `Form2307.rateOverridden` and keeps her value — the certificate is authoritative over the code, not the reverse. Payor TIN, payor address and ATC code are now required on a certificate (D45), validated server-side.
 
@@ -172,7 +175,8 @@ The sixteen steps are wrapped in five groups: **Prepare** (1–4), **File** (5, 
 8. The income model, the blocking rule, and the `Q4` distinction, all above
 9. No .DAT generation, no BIR API integration, no email sending
 10. The archive's independence from the database
-11. The "Customers / payors" list's independence from income and certificates (D44) — no foreign key from `QuarterlySalesCustomer` or `Form2307` to `Payor`, ever
+11. The "Payors" list's independence from income and certificates (D44) — no foreign key from `QuarterlySalesCustomer` or `Form2307` to `Payor`, ever
+12. Fill-back (D48) only fills a blank payor field — never overwrites one it already has
 
 ## Never invent BIR specifics
 
@@ -219,7 +223,7 @@ Will hold real TINs and income data under the Data Privacy Act from November 202
 
 See `CURRENT_STATE.md`. In short:
 
-1. Let her walk steps 3 and 4 of the Prepare group (computation, advising the client) before touching the other four groups — steps 1 and 2 have now been walked and fixed across briefs #4c-#4e and #5a.
+1. Let her walk steps 3 and 4 of the Prepare group (computation, advising the client) before touching the other four groups — steps 1 and 2 have now been walked and fixed across briefs #4c-#4e, #5a and #5b.
 2. Act on whatever that walkthrough finds, step by step.
 3. Build the **document archive browse view** — client → year, with a whole-year zip. It serves what she named as the most important thing the app does, and it is the only genuinely new build left in the backlog.
 4. **Before the live Q3 cycle:** back up `data/app.db`, `storage/`, and the `.env` file (she raised this 2026-09-26, deferring the how until real data exists), and confirm the ATC codes against BIR.

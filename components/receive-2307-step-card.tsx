@@ -72,6 +72,7 @@ export function Receive2307StepCard({
   payors,
   atcCodes,
   onSaveNewPayor,
+  onFillPayorDetail,
 }: {
   stepId: string;
   sequence: number;
@@ -94,6 +95,11 @@ export function Receive2307StepCard({
     address?: string;
     usualAtcCode?: string;
   }) => Promise<{ ok: true; payor: SavedPayor } | { ok: false; error: string }>;
+  onFillPayorDetail: (
+    payorId: string,
+    field: "tin" | "address" | "usualAtcCode",
+    value: string,
+  ) => Promise<{ ok: true; payor: SavedPayor } | { ok: false; error: string }>;
 }) {
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
@@ -313,6 +319,7 @@ export function Receive2307StepCard({
                   defaultPeriodFrom={defaultPeriodFrom}
                   defaultPeriodTo={defaultPeriodTo}
                   onSaveNewPayor={onSaveNewPayor}
+                  onFillPayorDetail={onFillPayorDetail}
                   onSaved={() => setShowAddForm(false)}
                   onCancel={() => setShowAddForm(false)}
                 />

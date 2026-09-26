@@ -8,10 +8,12 @@ import { createPayor } from "@/lib/actions/payors";
 import { bpsToPercentLabel } from "@/lib/money";
 
 /**
- * Brief #5a — "Customers / payors": one saved list per client (name, TIN,
- * address, usual ATC code, active flag). Adding is inline here (and from
- * step 1/step 2 directly, see components/payor-name-field.tsx) — this
- * screen is the small "edit or deactivate" fallback, not the only way in.
+ * Brief #5a — "Payors": one saved list per client (name, TIN, address,
+ * usual ATC code, active flag). Adding is inline here (and from step
+ * 1/step 2 directly, see components/payor-name-field.tsx) — this screen
+ * is the small "edit or deactivate" fallback, not the only way in.
+ * Brief #5b renamed "Customers / payors" to "Payors" on screen only — the
+ * Payor model/table and internal field names are unchanged.
  */
 export default async function PayorsPage({
   params,
@@ -34,12 +36,12 @@ export default async function PayorsPage({
       <div className="mb-4 flex items-center justify-between">
         <div>
           <h1 className="text-lg font-semibold text-slate-900">
-            Customers / payors — {client.registeredName}
+            Payors — {client.registeredName}
           </h1>
           <p className="mt-1 text-sm text-slate-500">
-            One shared list of names and details for this client — a company recorded as a customer in
-            step 1 is usually the same one that issues a 2307 in step 2. Picking a saved entry fills the
-            details on that one row or certificate; nothing here affects income or credit amounts.
+            One shared list of names and details for this client — a company entered on a step 1 row is
+            usually the same one that issues a 2307 in step 2. Picking a saved entry fills the details on
+            that one row or certificate; nothing here affects income or credit amounts.
           </p>
         </div>
         <Link href={`/clients/${id}`}>
@@ -95,7 +97,7 @@ export default async function PayorsPage({
             {payors.length === 0 && (
               <tr>
                 <td colSpan={6} className="py-8 text-center text-sm text-slate-400">
-                  No saved customers/payors yet.
+                  No saved payors yet.
                 </td>
               </tr>
             )}

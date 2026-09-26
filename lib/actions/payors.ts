@@ -174,3 +174,40 @@ export async function createPayorInline(
     payor: { id: payor.id, name: payor.name, tin: payor.tin, address: payor.address, usualAtcCode: payor.usualAtcCode },
   };
 }
+
+/**
+ * Brief #5b — "filling in blanks later, without silent edits": step 2's
+ * certificate form offers, in one line, to save a detail back onto its
+ * matched saved payor when that detail is blank there. Her choice, never
+ * automatic. Guarded server-side, not just by the offer only showing for
+ * a blank field: if the field is no longer blank by the time this runs
+ * (e.g. two tabs), the existing value wins and is returned unchanged —
+ * this fills a gap, it never overwrites what's already saved.
+ */
+export async function fillPayorDetail(
+  clientId: string,
+  payorId: string,
+  field: "tin" | "address" | "usualAtcCode",
+  value: string,
+): Promise<{ ok: true; payor: SavedPayor } | { ok: false; error: string }> {
+  const payor = await prisma.payor.findUnique({ where: { id: payorId } });
+  if (!payor || payor.clientId !== clientId) return { ok: false, error: "Payor not found." };
+
+  if (payor[field]) {
+    return {
+      ok: true,
+      payor: { id: payor.id, name: payor.name, tin: payor.tin, address: payor.address, usualAtcCode: payor.usualAtcCode },
+    };
+  }
+
+  const actorId = await getActorId();
+  const updated = await prisma.payor.update({ where: { id: payorId }, data: { [field]: value, actorId } });
+
+  await logActivity({ entityType: "Payor", entityId: payorId, action: "UPDATE", before: payor, after: updated, actorId });
+
+  revalidatePath(`/clients/${clientId}/payors`);
+  return {
+    ok: true,
+    payor: { id: updated.id, name: updated.name, tin: updated.tin, address: updated.address, usualAtcCode: updated.usualAtcCode },
+  };
+}

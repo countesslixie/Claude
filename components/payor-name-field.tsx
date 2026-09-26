@@ -5,15 +5,22 @@ import { Input } from "@/components/ui/input";
 import type { SavedPayor } from "@/lib/actions/payors";
 
 /**
- * Brief #5a — shared name field for the "Customers / payors" list, used
- * by step 1's customer rows and step 2's certificate form. A native
- * `<datalist>` gives suggestions from the client's saved list while still
- * allowing free typing (no combobox library — this codebase's inputs are
- * plain elements, not Radix). Typing or picking an exact saved name calls
+ * Brief #5a — shared name field for the saved payor list, used by step
+ * 1's payor rows and step 2's certificate form. A native `<datalist>`
+ * gives suggestions from the client's saved list while still allowing
+ * free typing (no combobox library — this codebase's inputs are plain
+ * elements, not Radix). Typing or picking an exact saved name calls
  * `onSelectSaved` (step 2 uses this to autofill TIN/address/ATC); typing
- * a name that ISN'T on the list offers to save it inline, right here —
- * no trip to a separate screen. Editing here never changes the saved
- * entry itself — only a future pick from the list would.
+ * a name that ISN'T on the list offers to save it — right here — no trip
+ * to a separate screen. Editing here never changes the saved entry
+ * itself — only a future pick from the list would.
+ *
+ * Brief #5b — the offer now opens the shared PayorDetailsDialog (owned by
+ * the caller, since it also needs the ATC list) instead of saving the
+ * bare name immediately; `onRequestSave` just asks the caller to open it.
+ * Once the dialog saves and the caller's payor list is updated, this
+ * field's own `matched` check picks it up naturally and the offer drops
+ * away — no separate dismiss needed for the success path.
  */
 export function PayorNameField({
   id,
@@ -22,7 +29,7 @@ export function PayorNameField({
   onChange,
   payors,
   onSelectSaved,
-  onSaveNew,
+  onRequestSave,
   placeholder,
   required,
 }: {
@@ -33,37 +40,24 @@ export function PayorNameField({
   payors: SavedPayor[];
   /** Called once when the typed value exactly matches a saved entry (case-insensitive). */
   onSelectSaved?: (payor: SavedPayor) => void;
-  /** Omit to disable the "save as new" offer entirely (e.g. a context with no client to save against). */
-  onSaveNew?: (name: string) => Promise<{ ok: boolean; error?: string }>;
+  /** Omit to disable the "save as new" offer entirely (e.g. a context with no client to save against). Opens the caller's PayorDetailsDialog with this name pre-filled. */
+  onRequestSave?: (name: string) => void;
   placeholder?: string;
   required?: boolean;
 }) {
   const listId = useId();
   const [dismissedFor, setDismissedFor] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
 
   const trimmed = value.trim();
   const matched = trimmed
     ? payors.find((p) => p.name.toLowerCase() === trimmed.toLowerCase())
     : undefined;
-  const showOffer = !!onSaveNew && trimmed.length > 0 && !matched && dismissedFor !== trimmed;
+  const showOffer = !!onRequestSave && trimmed.length > 0 && !matched && dismissedFor !== trimmed;
 
   function handleChange(next: string) {
     onChange(next);
-    setSaveError(null);
     const nextMatch = payors.find((p) => p.name.toLowerCase() === next.trim().toLowerCase());
     if (nextMatch && onSelectSaved) onSelectSaved(nextMatch);
-  }
-
-  async function handleSaveNew() {
-    if (!onSaveNew) return;
-    setSaving(true);
-    setSaveError(null);
-    const result = await onSaveNew(trimmed);
-    setSaving(false);
-    if (!result.ok) setSaveError(result.error ?? "Could not save.");
-    else setDismissedFor(trimmed);
   }
 
   return (
@@ -88,18 +82,16 @@ export function PayorNameField({
           Not on your saved list.{" "}
           <button
             type="button"
-            onClick={handleSaveNew}
-            disabled={saving}
+            onClick={() => onRequestSave!(trimmed)}
             className="text-slate-700 underline hover:text-slate-900"
           >
-            {saving ? "Saving…" : `Save "${trimmed}" to Customers/payors`}
+            {`Save "${trimmed}" to payors`}
           </button>{" "}
           <button type="button" onClick={() => setDismissedFor(trimmed)} className="text-slate-400 underline">
             Not now
           </button>
         </p>
       )}
-      {saveError && <p className="text-xs text-red-600">{saveError}</p>}
     </div>
   );
 }

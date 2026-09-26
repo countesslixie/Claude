@@ -7,6 +7,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { PayorNameField } from "@/components/payor-name-field";
+import { PayorDetailsDialog } from "@/components/payor-details-dialog";
+import type { SelectableAtcCode } from "@/components/atc-code-select";
 import type { QuarterlySalesFormState } from "@/lib/actions/quarterlySales";
 import type { SavedPayor } from "@/lib/actions/payors";
 
@@ -55,6 +57,7 @@ export function QuarterlySalesCard({
   initialSavedAt,
   filingHref,
   payors,
+  atcCodes,
   onSaveNewPayor,
 }: {
   quarter: "Q1" | "Q2" | "Q3" | "Q4";
@@ -72,9 +75,15 @@ export function QuarterlySalesCard({
   initialSavedAt: string | null;
   /** Where a successful final Save returns to. */
   filingHref: string;
-  /** Brief #5a — the client's saved "Customers / payors" list, offered on each customer row's name field. */
+  /** Brief #5a — the client's saved payor list, offered on each row's name field. */
   payors: SavedPayor[];
-  onSaveNewPayor: (data: { name: string }) => Promise<{ ok: true; payor: SavedPayor } | { ok: false; error: string }>;
+  atcCodes: SelectableAtcCode[];
+  onSaveNewPayor: (data: {
+    name: string;
+    tin?: string;
+    address?: string;
+    usualAtcCode?: string;
+  }) => Promise<{ ok: true; payor: SavedPayor } | { ok: false; error: string }>;
 }) {
   const [state, formAction, isPending] = useActionState<QuarterlySalesFormState, FormData>(action, {
     values: initialValues,
@@ -84,12 +93,20 @@ export function QuarterlySalesCard({
     initialValues?.customers && initialValues.customers.length > 0 ? initialValues.customers : [EMPTY_ROW],
   );
   const [localPayors, setLocalPayors] = useState(payors);
+  // Brief #5b — "Save … to payors" opens the shared dialog rather than
+  // saving the bare name; one dialog instance per card, since only one
+  // row's offer can be in flight at a time. null means closed.
+  const [dialogName, setDialogName] = useState<string | null>(null);
 
-  async function handleSaveNewPayor(name: string): Promise<{ ok: boolean; error?: string }> {
-    const result = await onSaveNewPayor({ name });
-    if (!result.ok) return { ok: false, error: result.error };
-    setLocalPayors((prev) => [...prev, result.payor]);
-    return { ok: true };
+  async function handleDialogSave(draft: {
+    name: string;
+    tin?: string;
+    address?: string;
+    usualAtcCode?: string;
+  }): Promise<{ ok: true; payor: SavedPayor } | { ok: false; error: string }> {
+    const result = await onSaveNewPayor(draft);
+    if (result.ok) setLocalPayors((prev) => [...prev, result.payor]);
+    return result;
   }
   const [noSales, setNoSales] = useState(initialValues?.noSalesThisQuarter ?? false);
   const [finalized, setFinalized] = useState(initialFinalized);
@@ -183,6 +200,7 @@ export function QuarterlySalesCard({
   }
 
   return (
+    <>
     <form key={formKey} action={formAction} className="rounded-lg border border-slate-200 bg-white p-4">
       <div className="mb-3 flex items-baseline justify-between">
         <h2 className="text-sm font-semibold text-slate-900">{quarter}</h2>
@@ -207,7 +225,7 @@ export function QuarterlySalesCard({
       {!noSales && (
         <div className="mb-3 flex flex-col gap-2">
           <div className="grid grid-cols-[1fr_160px_auto] gap-2 text-xs font-medium uppercase tracking-wide text-slate-400">
-            <span>Customer</span>
+            <span>Payor</span>
             <span>Amount (₱)</span>
             <span></span>
           </div>
@@ -218,8 +236,8 @@ export function QuarterlySalesCard({
                 value={row.customerName}
                 onChange={(v) => updateRow(i, "customerName", v)}
                 payors={localPayors}
-                onSaveNew={handleSaveNewPayor}
-                placeholder="Customer name"
+                onRequestSave={setDialogName}
+                placeholder="Payor name"
               />
               <Input
                 name="amount"
@@ -245,7 +263,7 @@ export function QuarterlySalesCard({
           ))}
           <div>
             <Button type="button" variant="secondary" size="sm" onClick={addRow}>
-              Add customer
+              Add payor
             </Button>
           </div>
         </div>
@@ -293,5 +311,13 @@ export function QuarterlySalesCard({
         )}
       </div>
     </form>
+    <PayorDetailsDialog
+      open={dialogName !== null}
+      initialName={dialogName ?? ""}
+      atcCodes={atcCodes}
+      onSave={handleDialogSave}
+      onClose={() => setDialogName(null)}
+    />
+    </>
   );
 }

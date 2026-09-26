@@ -9,7 +9,8 @@ import { AtcCodeSelect, type SelectableAtcCode } from "@/components/atc-code-sel
 import type { PayorFormState } from "@/lib/actions/payors";
 
 /**
- * Brief #5a — add/edit form for one "Customers / payors" entry. Shared
+ * Brief #5a — add/edit form for one saved payor entry ("Payors" on
+ * screen since brief #5b). Shared
  * between the inline add form and the small per-entry edit screen
  * (submitLabel distinguishes them, same convention as TaxRuleSetForm).
  * isActive's checkbox is how an entry is deactivated — there is no
