@@ -1,7 +1,7 @@
 # PROJECT_MASTER.md
 
 *Permanent project memory. Update only when something long-lived genuinely changes.*
-*Last reconciled: 2026-09-26 — documentation pass (brief #4f), bringing the notes up to date through briefs #4c, #4d and #4e.*
+*Last reconciled: 2026-09-26 — brief #5a (ATC codes, the shared customer/payor list, new required certificate fields, scan-on-save, entry-form fixes), on top of the documentation pass (brief #4f) through briefs #4c-#4e.*
 
 > Build status lives in CURRENT_STATE.md. This file is the intended application and the rules that govern it.
 
@@ -85,6 +85,10 @@ The declared figure is accepted as given. The per-quarter Notes field (`Quarterl
 - **No amended returns (D11).** This is what makes D34 safe — a filed period's certificate list can never be reopened to move a certificate into or out of it.
 - Cumulative crediting is otherwise unchanged: a certificate claimed on period P counts toward P and every later period in the same taxable year.
 - The only reconciliation: certificate gross totals ≤ declared sales, **compared over the taxable year**, never per quarter — unaffected by D34; it still runs over the whole year regardless of which quarter a certificate is claimed on.
+- **Required fields (D45, brief #5a):** payor TIN, payor address and ATC code are now required, alongside payor name, income amount, tax withheld and period covered. Validated with Zod server-side, not only on the form. The old "more fields" disclosure is gone — once these three joined the main form, nothing required was left behind it.
+- **ATC code is a picker, and the rate is a property of the code (D43, brief #5a).** The free-text ATC box and separate rate box are gone. `AtcCode` (Settings: add/edit/deactivate, never invented — D19) now has a maintenance screen; the certificate form's ATC picker offers only active codes and fills `withholdingRateBps` from the chosen code's own rate. The rate stays visible and editable — the certificate is authoritative over the code when they disagree — and `Form2307.rateOverridden` records when she's typed a different rate than the code's own. `verifiedAgainstIssuance` is shown plainly wherever a code appears.
+- **The scan is part of saving the certificate (D46, brief #5a, her decision).** A certificate cannot be created without its scan — no separate upload step afterward. D35's blocking rule (below) is now satisfied by construction rather than earned later. A saved row keeps a **Replace scan** action (one-for-one; the prior scan is soft-deleted, never hard-deleted).
+- **"Customers / payors" (D44, brief #5a, her decision):** a saved per-client list (`Payor` — name, TIN, address, usual ATC code, active flag) shared by step 1's customer-name field and step 2's payor-name field. Picking a saved entry autofills that one row/certificate (TIN/address/ATC on step 2; name only on step 1); everything stays independently editable from there, and editing never rewrites the saved entry. **This is a shared reference of names/details only — there is no foreign key from `QuarterlySalesCustomer` or `Form2307` to `Payor`, and no path for a certificate to affect gross sales.** Typing an unrecognized name offers to save it inline; a small per-client screen (`/clients/[id]/payors`) covers edit/deactivate but is never the only way in.
 
 ### Deadlines
 - 1701Q: Q1 **May 15**, Q2 **Aug 15**, Q3 **Nov 15**. Annual: **Apr 15**.
@@ -134,7 +138,7 @@ Group membership is a fixed lookup table (`lib/workflow/groups.ts`), not the `ca
 | Actions she **performs** elsewhere | No slot at all | 4, 12, 16 |
 | A document delivered **to someone else** | Optional, hidden, never blocking | 15 only |
 
-Step 2 (D35, brief #4b) blocks on its own terms — "all certificates received" ticked and every certificate row has its own scan attached — rather than one step-level slot, since it now holds a variable number of certificate rows instead of a single document.
+Step 2 (D35, brief #4b) blocks on its own terms — "all certificates received" ticked and every certificate row has its own scan attached — rather than one step-level slot, since it now holds a variable number of certificate rows instead of a single document. **As of D46 (brief #5a), this is satisfied by construction:** a certificate cannot be created without its scan, so a row lacking one is no longer reachable through ordinary use — the rule itself is unchanged. **While "all certificates received" is ticked, no row can be added or removed** (D47, brief #5a) — enforced server-side, not only by hiding the Add/Remove controls; unticking restores both.
 
 Step 15 (eAFS) is the documented exception: its confirmation goes to the client, not to her, and often never reaches her. Blocking would strand a filing on a file she cannot obtain. **Do not "fix" this inconsistency.**
 
@@ -179,7 +183,7 @@ Next.js 15 App Router · TypeScript strict · Prisma + SQLite (`data/app.db`) ·
 - **The page leads with the work, not the output, two ways at once.** A next-action line and summary strip sit at the top of the filing page, answering "what do I do now" without a scroll — the first test drive's specific complaint ("I don't know what to do with it... I realized I need to scroll down"). Separately, anything belonging to a step lives inside that step's own card rather than as a page-level panel at the bottom — the second test drive's complaint ("not sure what the bottom boxes are for"). These are two different fixes for two different findings; keep both. (The certificate cutoff and client-confirmation panels these two fixes originally described are both gone — see D34 and D37 — but the two fixes themselves, and the reasoning behind keeping them separate, still stand.)
 - **A document belongs to its step, not to the page** (D30). Anything belonging to a step renders inside that step's card.
 - **Never expose a raw step code** (`PREPARE_RETURN`) in a user-facing label.
-- **A disabled control explains itself on hover, not with standing text (D41, brief #4e).** A blocked "Mark done" — per step or per group — carries its reason as a `title` tooltip. It used to sit on the page as a standing red or amber line, in up to three places at once for the same rule; none of that remains. The one piece of standing status text that stays is the short amber "waiting on …" summary beside a group's name. Do not reintroduce standing block-reason text.
+- **A disabled control explains itself on hover, not with standing text (D41, brief #4e).** A blocked "Mark done" — per step or per group — carries its reason as a `title` tooltip. It used to sit on the page as a standing red or amber line, in up to three places at once for the same rule; none of that remains. The one piece of standing status text that stays is the short amber "waiting on …" summary beside a group's name. Do not reintroduce standing block-reason text. **One narrow, deliberate exception (D47, brief #5a):** while step 2's "All certificates received" checkbox is ticked, the hidden Add/Remove controls are explained by one short line ("untick to add or remove"), because it explains a state she just set herself rather than blocking her from something — same spirit as the "waiting on …" exception above, not a reopening of D41.
 
 ## Data status and security
 
@@ -205,3 +209,4 @@ Next.js 15 App Router · TypeScript strict · Prisma + SQLite (`data/app.db`) ·
 11. The blocking rule (D27), including the eAFS exception and step 16's conditional forwarding line
 12. The `Q4`-in-sales / no-`Q4`-in-filings distinction
 13. The archive's independence from the database
+14. The "Customers / payors" list's independence from income and certificates (D44) — no foreign key from `QuarterlySalesCustomer` or `Form2307` to `Payor`, ever

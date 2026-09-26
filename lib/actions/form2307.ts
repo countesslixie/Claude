@@ -11,6 +11,7 @@ import { periodToSingleQuarterCovered } from "@/lib/tax/periods";
 import { recomputeRequiresSawt } from "@/lib/workflow/filingGeneration";
 import { recomputeReceive2307Status } from "@/lib/actions/workflowSteps";
 import { setAllCertificatesReceived } from "@/lib/actions/filings";
+import { saveDocumentForStep } from "@/lib/actions/documents";
 
 export type CertificateFormState = {
   error?: string;
@@ -52,12 +53,34 @@ async function assertFilingNotLocked(filingId: string): Promise<string | null> {
 }
 
 /**
+ * Brief #5a — while "All certificates received" is ticked, the set is
+ * closed: no certificate can be added or removed until she unticks it.
+ * The UI hides Add/Remove for the same reason (components/receive-2307-
+ * step-card.tsx); this is the server-side half, so the rule holds even if
+ * the action is ever called directly.
+ */
+function assertCertificatesNotAllReceived(filing: { certificatesAllReceivedAt: Date | null }): string | null {
+  if (filing.certificatesAllReceivedAt != null) {
+    return "\"All certificates received\" is ticked — untick it before adding or removing a certificate.";
+  }
+  return null;
+}
+
+/**
  * Brief #4b (D34) — adds one certificate row under this filing's step 2.
  * claimedOnFilingId is set here, once, to this filing's id: this is what
  * decides the certificate's credit period from now on (supersedes D10's
  * dateReceived-vs-cutoff rule), never reassigned afterward. Locked once
  * this filing's own return is filed (step 5, FILE_RETURN, DONE) — D11
  * (no amended returns) is what makes that safe.
+ *
+ * Brief #5a — the scan is now part of saving the certificate: a
+ * certificate cannot be created without one (D35 is now satisfied by
+ * construction, not earned afterward). The ATC code is chosen from the
+ * active-codes picker; its own rate fills withholdingRateBps unless she
+ * typed a different one, in which case her value is kept and
+ * rateOverridden records the disagreement — the certificate is
+ * authoritative over the code, not the other way around.
  */
 export async function addCertificate(
   filingId: string,
@@ -66,6 +89,13 @@ export async function addCertificate(
 ): Promise<CertificateFormState> {
   const values = rawFromFormData(formData);
   const parsed = certificateEntrySchema.safeParse(values);
+
+  const file = formData.get("file");
+  const hasFile = file instanceof File && file.size > 0;
+  if (!hasFile) {
+    const fieldErrors = parsed.success ? {} : parsed.error.flatten().fieldErrors;
+    return { fieldErrors: { ...fieldErrors, file: ["A scan is required to save this certificate."] }, values };
+  }
   if (!parsed.success) {
     return { fieldErrors: parsed.error.flatten().fieldErrors, values };
   }
@@ -76,10 +106,22 @@ export async function addCertificate(
   const lockedReason = await assertFilingNotLocked(filingId);
   if (lockedReason) return { error: lockedReason, values };
 
+  const allReceivedReason = assertCertificatesNotAllReceived(filing);
+  if (allReceivedReason) return { error: allReceivedReason, values };
+
+  const atcCode = await prisma.atcCode.findUnique({ where: { code: parsed.data.atcCode } });
+  if (!atcCode) {
+    return { fieldErrors: { atcCode: ["Unknown ATC code — refresh the page and choose again."] }, values };
+  }
+
   const quarterCovered = periodToSingleQuarterCovered(filing.period);
   const withholdingRateBps = parsed.data.withholdingRatePercent
     ? percentToBps(parsed.data.withholdingRatePercent)
-    : filing.client.defaultWithholdingRateBps ?? 0;
+    : atcCode.rateBps;
+  const rateOverridden = withholdingRateBps !== atcCode.rateBps;
+
+  const documentDateRaw = String(formData.get("documentDate") ?? "");
+  const documentDate = documentDateRaw ? manilaDateInputToJsDate(documentDateRaw) : new Date();
 
   const actorId = await getActorId();
   const cert = await prisma.form2307.create({
@@ -87,16 +129,16 @@ export async function addCertificate(
       clientId: filing.clientId,
       taxableYear: filing.taxableYear,
       payorName: parsed.data.payorName,
-      payorTin: parsed.data.payorTin ?? null,
-      payorAddress: parsed.data.payorAddress ?? null,
+      payorTin: parsed.data.payorTin,
+      payorAddress: parsed.data.payorAddress,
       periodFrom: manilaDateInputToJsDate(parsed.data.periodFrom),
       periodTo: manilaDateInputToJsDate(parsed.data.periodTo),
       quarterCovered,
-      // D19 — never invent an ATC code; left empty and unverified when she hasn't supplied one.
-      atcCode: parsed.data.atcCode ?? "",
+      atcCode: atcCode.code,
       incomePaymentCents: pesosToCents(parsed.data.incomePayment),
       taxWithheldCents: pesosToCents(parsed.data.taxWithheld),
       withholdingRateBps,
+      rateOverridden,
       status: "RECORDED",
       claimedOnFilingId: filing.id,
       notes: parsed.data.notes ?? null,
@@ -106,8 +148,29 @@ export async function addCertificate(
 
   await logActivity({ entityType: "Form2307", entityId: cert.id, action: "CREATE", after: cert, actorId });
 
+  const receive2307Step = await prisma.workflowStep.findFirstOrThrow({
+    where: { filingId: filing.id, stepCode: "RECEIVE_2307" },
+  });
+  const scanResult = await saveDocumentForStep({
+    workflowStepId: receive2307Step.id,
+    docSlotCode: "form2307_scan",
+    file,
+    documentDate,
+    form2307Id: cert.id,
+  });
+  if (!scanResult.ok) {
+    // The certificate is required to have a scan by construction (brief
+    // #5a) — a failed scan save (e.g. a disk write error) must not leave
+    // an orphaned certificate with none. This was never actually
+    // persisted "for real" from her point of view, so a hard delete here
+    // (not the usual soft delete) is correct.
+    await prisma.form2307.delete({ where: { id: cert.id } });
+    return { error: scanResult.error ?? "Could not save the scan.", values };
+  }
+
+  // saveDocumentForStep above already recomputed step 2's status (it
+  // always does, for a RECEIVE_2307 step) — no need to do it again here.
   await recomputeRequiresSawt(filing.clientId, filing.taxableYear, filing.period);
-  await recomputeReceive2307Status(filing.id);
   revalidatePath(`/clients/${filing.clientId}/filings/${filing.id}`);
 
   return { saved: true };
@@ -125,6 +188,11 @@ export async function deleteCertificate(certificateId: string, reason: string): 
 
   const lockedReason = await assertFilingNotLocked(cert.claimedOnFilingId);
   if (lockedReason) return { ok: false, error: lockedReason };
+
+  const filingForCheck = await prisma.filing.findUnique({ where: { id: cert.claimedOnFilingId } });
+  if (!filingForCheck) return { ok: false, error: "Filing not found." };
+  const allReceivedReason = assertCertificatesNotAllReceived(filingForCheck);
+  if (allReceivedReason) return { ok: false, error: allReceivedReason };
 
   const actorId = await getActorId();
   const updated = await prisma.form2307.update({

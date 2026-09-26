@@ -13,10 +13,14 @@ const BUILT = [
     title: "Holidays",
     description: "Regular and special non-working days used for due-date business-day shifting.",
   },
+  {
+    href: "/settings/atc-codes",
+    title: "ATC codes",
+    description: "Add, edit and deactivate the codes the certificate form's ATC picker offers (D19).",
+  },
 ];
 
 const LATER = [
-  { title: "ATC codes", phase: "Phase 2" },
   { title: "Workflow step template", phase: "Phase 3" },
   { title: "Chart of accounts", phase: "Phase 4" },
   { title: "Backup", phase: "Phase 4" },

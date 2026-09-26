@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 *Instructions for Claude Code working on this repository.*
-*Last reconciled: 2026-09-26 — documentation pass (brief #4f), bringing this file up to date through briefs #4c, #4d and #4e.*
+*Last reconciled: 2026-09-26 — brief #5a, on top of the documentation pass (brief #4f) through briefs #4c-#4e.*
 
 ---
 
@@ -54,12 +54,17 @@ Next.js 15 App Router · TypeScript strict · Prisma + SQLite (`data/app.db`) ·
 /lib/reconciliation.ts         the single annual certificates-vs-declared-sales check
 /lib/actions/                  Server Actions — the I/O boundary. quarterlySales.ts
                                (saveQuarterlySales, D33), form2307.ts
-                               (addCertificate/deleteCertificate, D34)
+                               (addCertificate/deleteCertificate, D34, now
+                               scan-on-save — D46), atcCodes.ts, payors.ts
+                               (createPayorInline, brief #5a)
 /lib/dates.ts                  manilaCalendarDay(), formatManilaDate()
 /components/                   next-action-control.tsx, computation-sheet-panel.tsx,
                                quarterly-sales-card.tsx, record-sales-step-card.tsx,
-                               receive-2307-step-card.tsx, workflow-step-card.tsx,
+                               receive-2307-step-card.tsx, certificate-form.tsx
+                               (brief #5a), workflow-step-card.tsx,
                                workflow-group-card.tsx, copy-textarea.tsx,
+                               payor-name-field.tsx, atc-code-select.tsx,
+                               atc-code-form.tsx, payor-form.tsx (brief #5a)
                                ui/ (plain Tailwind primitives)
 /prisma/                       schema, migrations, seed
 /storage/                      gitignored document vault
@@ -94,6 +99,12 @@ A missing quarter is zero, not an error — but a filing whose OWN quarter has n
 
 **There is no control of any kind over a declared income figure — say so plainly, don't invent a replacement.** Step 3 used to carry an acknowledgement that partially closed this gap: a required source-of-figure text field, plus an optional attachment for the client's own confirming message. Both are gone (briefs #4c and #4d, DECISIONS.md D37) — the bookkeeper made both calls deliberately, having watched the field in actual use. Once income is declared-only, nothing can be cross-checked against anything at the source level; the only surviving reconciliation, `lib/reconciliation.ts`, is annual certificates-vs-declared-sales — a sanity check, not a source-level one, and it was never a substitute for the field that's now gone. The per-quarter Notes field (`QuarterlySales.notes`) still exists and can hold anything she chooses to write, but nothing asks for an entry and nothing requires one.
 
+**"Customers / payors" (D44, brief #5a) is a saved list, not a link.** `Payor` (one row per client: name, TIN, address, usual ATC code, active flag) is shared by step 1's customer field and step 2's payor field via one component (`components/payor-name-field.tsx`), so the same company doesn't get typed — and spelled — two different ways. Picking a saved entry only fills that one row/certificate; there is no foreign key from `QuarterlySalesCustomer` or `Form2307` to `Payor`, and there must never be one — a certificate still cannot affect gross sales.
+
+**A certificate's ATC code is now a picker, and the rate comes from it (D43, brief #5a).** `AtcCode` has a maintenance screen (`/settings/atc-codes` — add/edit/deactivate, D19 unaffected: never invent a code or a rate). The certificate form's ATC field offers only active codes and fills the rate from the chosen code; she can still override the rate for one certificate, which sets `Form2307.rateOverridden` and keeps her value — the certificate is authoritative over the code, not the reverse. Payor TIN, payor address and ATC code are now required on a certificate (D45), validated server-side.
+
+**The scan is part of saving a certificate, not a separate step afterward (D46, brief #5a).** `addCertificate` refuses to save without a file. A saved row's only remaining scan action is **Replace** (one-for-one — the old scan is soft-deleted, not accumulated).
+
 ## The blocking rule — read this before touching the workflow
 
 **The app blocks on documents it receives. It never asks the bookkeeper to prove she did something.**
@@ -116,7 +127,7 @@ A missing quarter is zero, not an error — but a filing whose OWN quarter has n
 
 **The filing page combines two fixes for the same complaint** ("output shown ahead of the work it belongs to"): a next-action line and compact summary strip at the top (`components/next-action-control.tsx`) answer "what do I do now" without scrolling, and anything belonging to a step lives inside that step's own card rather than as a page-level panel at the bottom. Keep both — they answer different complaints from different test drives, not the same one twice. (The certificate cutoff and client confirmation panels these two fixes originally described are both gone — see D34 and D37 — but the two fixes and the reasoning for keeping them separate still stand.)
 
-**A disabled control explains itself on hover, not with standing text (brief #4e).** A blocked "Mark done" — per step or per group — carries its reason as a `title` tooltip only. Do not reintroduce a standing red or amber paragraph under a group header, under a per-step button, or under the next-action banner — that was the exact noise brief #4e removed, after it turned out to be rendering in three places at once for the same rule. The short amber "waiting on …" summary beside a group's name is the one piece of standing status text that stays.
+**A disabled control explains itself on hover, not with standing text (brief #4e).** A blocked "Mark done" — per step or per group — carries its reason as a `title` tooltip only. Do not reintroduce a standing red or amber paragraph under a group header, under a per-step button, or under the next-action banner — that was the exact noise brief #4e removed, after it turned out to be rendering in three places at once for the same rule. The short amber "waiting on …" summary beside a group's name is the one piece of standing status text that stays. **One narrow exception (D47, brief #5a):** while step 2's "All certificates received" checkbox is ticked, Add and Remove are hidden (server-side too, not just in the UI) with one short line saying to untick first — it explains a state she just set herself, not a block on her, so it isn't the pattern D41 removed.
 
 ## The five groups (D32) — read this before touching the checklist or the board
 
@@ -161,10 +172,11 @@ The sixteen steps are wrapped in five groups: **Prepare** (1–4), **File** (5, 
 8. The income model, the blocking rule, and the `Q4` distinction, all above
 9. No .DAT generation, no BIR API integration, no email sending
 10. The archive's independence from the database
+11. The "Customers / payors" list's independence from income and certificates (D44) — no foreign key from `QuarterlySalesCustomer` or `Form2307` to `Payor`, ever
 
 ## Never invent BIR specifics
 
-ATC codes, penalty rates, compromise schedules, form field orders. If you are not certain, **leave it empty and flag it** rather than producing something plausible. A wrong ATC code looks correct and gets filed. Unverified items carry `verifiedAgainstIssuance: false` — keep that pattern.
+ATC codes, penalty rates, compromise schedules, form field orders. If you are not certain, **leave it empty and flag it** rather than producing something plausible. A wrong ATC code looks correct and gets filed. Unverified items carry `verifiedAgainstIssuance: false` — keep that pattern. **The ATC maintenance screen (`/settings/atc-codes`, D43, brief #5a) is where she adds and verifies codes herself — do not seed a code or a rate you have not been given, even now that a screen exists to hold them.**
 
 ## UI rules
 
@@ -207,7 +219,7 @@ Will hold real TINs and income data under the Data Privacy Act from November 202
 
 See `CURRENT_STATE.md`. In short:
 
-1. Let her walk steps 3 and 4 of the Prepare group (computation, advising the client) before touching the other four groups — steps 1 and 2 have now been walked and fixed across briefs #4c–#4e.
+1. Let her walk steps 3 and 4 of the Prepare group (computation, advising the client) before touching the other four groups — steps 1 and 2 have now been walked and fixed across briefs #4c-#4e and #5a.
 2. Act on whatever that walkthrough finds, step by step.
 3. Build the **document archive browse view** — client → year, with a whole-year zip. It serves what she named as the most important thing the app does, and it is the only genuinely new build left in the backlog.
 4. **Before the live Q3 cycle:** back up `data/app.db`, `storage/`, and the `.env` file (she raised this 2026-09-26, deferring the how until real data exists), and confirm the ATC codes against BIR.

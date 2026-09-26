@@ -50,12 +50,12 @@ export function emptySlots<T extends DocSlotLike>(slots: T[], documents: Attache
 }
 
 /**
- * The single reason (if any) a step's DONE control is disabled, for
- * client-side display beside the control itself rather than only as a
- * post-click error (rework brief #2 §2.1: "the DONE control disabled and
- * a plain-language reason until the file is attached"). Missing documents
- * take priority over a dependency reason when both apply, since attaching
- * the document is the more immediately actionable of the two.
+ * The single reason (if any) a step's DONE control is disabled. Surfaced
+ * as a `title` tooltip on the disabled control itself (D41, brief #4e) —
+ * not standing text on the page — rather than only as a post-click error.
+ * Missing documents take priority over a dependency reason when both
+ * apply, since attaching the document is the more immediately actionable
+ * of the two.
  */
 export function stepBlockReason(
   slots: DocSlotLike[],

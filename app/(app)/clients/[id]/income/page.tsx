@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { Button } from "@/components/ui/button";
 import { QuarterlySalesCard } from "@/components/quarterly-sales-card";
 import { saveQuarterlySales } from "@/lib/actions/quarterlySales";
+import { listActivePayors, createPayorInline } from "@/lib/actions/payors";
 import { centsToPesos } from "@/lib/money";
 import { currentTaxableYearManila, formatManilaDate } from "@/lib/dates";
 import { ownSalesQuarterOf, filingPeriodForSalesQuarter } from "@/lib/tax/periods";
@@ -75,6 +76,11 @@ export default async function IncomePage({
   }
 
   const editableQuarter: SalesQuarter | null = openFiling ? ownSalesQuarterOf(openFiling.period as never) : null;
+
+  // Brief #5a — the customer-name field on each row offers the client's
+  // saved "Customers / payors" list, with free typing still allowed.
+  const payors = await listActivePayors(id);
+  const boundSaveNewPayor = createPayorInline.bind(null, id);
 
   const yearTotalGrossCents = rows.reduce((sum, r) => sum + r.grossSalesCents, 0);
   const yearTotalNonOperatingCents = rows.reduce((sum, r) => sum + r.nonOperatingIncomeCents, 0);
@@ -183,6 +189,8 @@ export default async function IncomePage({
                 initialFinalized={finalized}
                 initialSavedAt={row ? formatManilaDate(row.updatedAt) : null}
                 filingHref={filing ? `/clients/${id}/filings/${filing.id}` : `/clients/${id}/income`}
+                payors={payors}
+                onSaveNewPayor={boundSaveNewPayor}
               />
             </div>
           );
@@ -227,6 +235,8 @@ export default async function IncomePage({
                 initialFinalized={finalized}
                 initialSavedAt={row ? formatManilaDate(row.updatedAt) : null}
                 filingHref={filing ? `/clients/${id}/filings/${filing.id}` : `/clients/${id}/income`}
+                payors={payors}
+                onSaveNewPayor={boundSaveNewPayor}
               />
             );
           })}

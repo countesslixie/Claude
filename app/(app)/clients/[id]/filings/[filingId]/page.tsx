@@ -8,6 +8,7 @@ import {
   dismissCompletenessNote,
 } from "@/lib/actions/filings";
 import { addCertificate } from "@/lib/actions/form2307";
+import { listActivePayors, createPayorInline } from "@/lib/actions/payors";
 import { StatusBadge } from "@/components/status-badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -96,6 +97,7 @@ export default async function FilingDetailPage({
     taxWithheldCents: c.taxWithheldCents,
     atcCode: c.atcCode,
     withholdingRateBps: c.withholdingRateBps,
+    rateOverridden: c.rateOverridden,
     periodFrom: formatManilaDate(c.periodFrom),
     periodTo: formatManilaDate(c.periodTo),
     notes: c.notes,
@@ -103,6 +105,16 @@ export default async function FilingDetailPage({
   }));
   const boundAddCertificate = addCertificate.bind(null, filing.id);
   const boundToggleAllReceived = setAllCertificatesReceived.bind(null, filing.id);
+  const boundSaveNewPayor = createPayorInline.bind(null, filing.clientId);
+
+  // Brief #5a — step 2's payor picker and the certificate form's ATC
+  // picker both read the client's saved lists; the ATC list also gates
+  // whether a certificate can be saved at all (required, D19: never
+  // invent a code).
+  const [payors, activeAtcCodes] = await Promise.all([
+    listActivePayors(filing.clientId),
+    prisma.atcCode.findMany({ where: { isActive: true }, orderBy: { code: "asc" } }),
+  ]);
 
   // Brief #4c — "Period covered" pre-fills with this filing's own
   // quarter, the same range addCertificate falls back to if it were ever
@@ -525,6 +537,9 @@ export default async function FilingDetailPage({
                         toggleAllReceivedAction={boundToggleAllReceived}
                         defaultPeriodFrom={toManilaDateInputValue(defaultCertificatePeriod.from)}
                         defaultPeriodTo={toManilaDateInputValue(defaultCertificatePeriod.to)}
+                        payors={payors}
+                        atcCodes={activeAtcCodes}
+                        onSaveNewPayor={boundSaveNewPayor}
                       />
                     );
                   }

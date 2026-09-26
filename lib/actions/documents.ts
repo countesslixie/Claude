@@ -35,11 +35,117 @@ const SLOT_CODE_TO_CATEGORY: Record<string, string> = {
 };
 
 /**
- * Uploads one document against a workflow step's doc slot (SPEC.md §8).
- * Writes the file to disk at the exact §8 path, records SHA-256 (§16
- * item 17), and warns — never blocks — on a hash duplicate within the
- * same client (§16 item 18). Never auto-completes the step; the
- * bookkeeper still marks it DONE explicitly once satisfied.
+ * Core of "attach a file to a workflow step's doc slot" (SPEC.md §8),
+ * shared by `uploadDocument` (a <form action>, below) and
+ * `addCertificate` (lib/actions/form2307.ts, brief #5a — the scan is now
+ * part of saving the certificate, not a separate step afterward). Writes
+ * the file to disk at the exact §8 path, records SHA-256 (§16 item 17),
+ * and warns — never blocks — on a hash duplicate within the same client
+ * (§16 item 18). Never auto-completes the step; the bookkeeper still
+ * marks it DONE explicitly once satisfied (except step 2, which derives
+ * its own status from `recomputeReceive2307Status` below).
+ *
+ * Brief #5a — "Replace scan": a certificate's own scan is one-for-one,
+ * not accumulating. When `form2307Id` is set, any other non-deleted
+ * document already attached to that same certificate is soft-deleted
+ * right after this upload succeeds, so a bad or unreadable file can be
+ * swapped without leaving stale copies on the row.
+ */
+export async function saveDocumentForStep(params: {
+  workflowStepId: string;
+  docSlotCode: string;
+  file: File;
+  documentDate: Date;
+  notes?: string | null;
+  form2307Id?: string | null;
+}): Promise<UploadDocumentResult> {
+  const step = await prisma.workflowStep.findUnique({
+    where: { id: params.workflowStepId },
+    include: { filing: { include: { client: true } } },
+  });
+  if (!step) return { ok: false, error: "Workflow step not found." };
+
+  const { filing } = step;
+  const { client } = filing;
+
+  const buffer = Buffer.from(await params.file.arrayBuffer());
+  const sha256 = computeSha256(buffer);
+
+  const duplicate = await prisma.document.findFirst({
+    where: { clientId: client.id, sha256, deletedAt: null },
+  });
+  // formatManilaDate, not toISOString().split("T")[0]: uploadedAt is a real
+  // timestamp (not a clean midnight), so a raw UTC slice can show the
+  // wrong calendar day for any upload in Manila's 00:00-07:59 window.
+  const duplicateWarning = duplicate
+    ? `This file's contents match an existing document already on file for this client: "${duplicate.originalFilename}" (uploaded ${formatManilaDate(
+        duplicate.uploadedAt,
+      )}). Saved anyway — please check you didn't mean to attach a different file.`
+    : undefined;
+
+  const ext = params.file.name.includes(".") ? (params.file.name.split(".").pop() as string) : "bin";
+  const existingCount = await prisma.document.count({
+    where: { filingId: filing.id, docSlotCode: params.docSlotCode, deletedAt: null },
+  });
+
+  const relativePath = buildStorageRelativePath({
+    clientCode: client.code,
+    taxableYear: filing.taxableYear,
+    period: filing.period,
+    stepCode: step.stepCode,
+    slotCode: params.docSlotCode,
+    documentDate: params.documentDate,
+    seq: existingCount + 1,
+    ext,
+  });
+
+  await saveDocumentFile(relativePath, buffer);
+
+  const actorId = await getActorId();
+  const created = await prisma.document.create({
+    data: {
+      clientId: client.id,
+      filingId: filing.id,
+      workflowStepId: step.id,
+      docSlotCode: params.docSlotCode,
+      form2307Id: params.form2307Id ?? null,
+      category: (SLOT_CODE_TO_CATEGORY[params.docSlotCode] ?? "OTHER") as never,
+      originalFilename: params.file.name,
+      storedPath: relativePath,
+      mimeType: params.file.type || "application/octet-stream",
+      sizeBytes: buffer.byteLength,
+      sha256,
+      documentDate: params.documentDate,
+      notes: params.notes ?? null,
+      actorId,
+    },
+  });
+
+  await logActivity({ entityType: "Document", entityId: created.id, action: "CREATE", after: created, actorId });
+
+  if (params.form2307Id) {
+    const siblings = await prisma.document.findMany({
+      where: { form2307Id: params.form2307Id, id: { not: created.id }, deletedAt: null },
+    });
+    for (const sibling of siblings) {
+      const updated = await prisma.document.update({
+        where: { id: sibling.id },
+        data: { deletedAt: new Date(), deletedReason: "Replaced by a newer scan.", actorId },
+      });
+      await logActivity({ entityType: "Document", entityId: sibling.id, action: "DELETE", before: sibling, after: updated, actorId });
+    }
+  }
+
+  if (step.stepCode === "RECEIVE_2307") await recomputeReceive2307Status(filing.id);
+  revalidatePath(`/clients/${client.id}/filings/${filing.id}`);
+
+  return { ok: true, documentId: created.id, duplicateWarning };
+}
+
+/**
+ * Uploads one document against a workflow step's doc slot — the
+ * <form action> entry point (e.g. a saved certificate's "Replace scan").
+ * See saveDocumentForStep above for what actually happens.
  */
 export async function uploadDocument(formData: FormData): Promise<UploadDocumentResult> {
   const file = formData.get("file");
@@ -60,75 +166,9 @@ export async function uploadDocument(formData: FormData): Promise<UploadDocument
     return { ok: false, error: "Missing step or document slot." };
   }
 
-  const step = await prisma.workflowStep.findUnique({
-    where: { id: workflowStepId },
-    include: { filing: { include: { client: true } } },
-  });
-  if (!step) return { ok: false, error: "Workflow step not found." };
-
-  const { filing } = step;
-  const { client } = filing;
-
   const documentDate = documentDateInput ? manilaDateInputToJsDate(documentDateInput) : new Date();
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const sha256 = computeSha256(buffer);
 
-  const duplicate = await prisma.document.findFirst({
-    where: { clientId: client.id, sha256, deletedAt: null },
-  });
-  // formatManilaDate, not toISOString().split("T")[0]: uploadedAt is a real
-  // timestamp (not a clean midnight), so a raw UTC slice can show the
-  // wrong calendar day for any upload in Manila's 00:00-07:59 window.
-  const duplicateWarning = duplicate
-    ? `This file's contents match an existing document already on file for this client: "${duplicate.originalFilename}" (uploaded ${formatManilaDate(
-        duplicate.uploadedAt,
-      )}). Saved anyway — please check you didn't mean to attach a different file.`
-    : undefined;
-
-  const ext = file.name.includes(".") ? (file.name.split(".").pop() as string) : "bin";
-  const existingCount = await prisma.document.count({
-    where: { filingId: filing.id, docSlotCode, deletedAt: null },
-  });
-
-  const relativePath = buildStorageRelativePath({
-    clientCode: client.code,
-    taxableYear: filing.taxableYear,
-    period: filing.period,
-    stepCode: step.stepCode,
-    slotCode: docSlotCode,
-    documentDate,
-    seq: existingCount + 1,
-    ext,
-  });
-
-  await saveDocumentFile(relativePath, buffer);
-
-  const actorId = await getActorId();
-  const created = await prisma.document.create({
-    data: {
-      clientId: client.id,
-      filingId: filing.id,
-      workflowStepId: step.id,
-      docSlotCode,
-      form2307Id,
-      category: (SLOT_CODE_TO_CATEGORY[docSlotCode] ?? "OTHER") as never,
-      originalFilename: file.name,
-      storedPath: relativePath,
-      mimeType: file.type || "application/octet-stream",
-      sizeBytes: buffer.byteLength,
-      sha256,
-      documentDate,
-      notes,
-      actorId,
-    },
-  });
-
-  await logActivity({ entityType: "Document", entityId: created.id, action: "CREATE", after: created, actorId });
-
-  if (step.stepCode === "RECEIVE_2307") await recomputeReceive2307Status(filing.id);
-  revalidatePath(`/clients/${client.id}/filings/${filing.id}`);
-
-  return { ok: true, documentId: created.id, duplicateWarning };
+  return saveDocumentForStep({ workflowStepId, docSlotCode, file, documentDate, notes, form2307Id });
 }
 
 /** Soft-delete — financial/audit records are never hard-deleted (SPEC.md 14). */

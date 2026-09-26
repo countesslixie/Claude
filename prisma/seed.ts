@@ -12,6 +12,9 @@
  *   from Settings.
  * - A sparse, unverified AtcCode table (SPEC.md 3.5) — do not add codes
  *   here without confirming them against the current BIR ATC list.
+ * - Brief #5a — a few "Customers / payors" entries per sample client
+ *   (Payor table), matching the names already used above, so the picker
+ *   isn't empty on a fresh database.
  * - The 16-step WorkflowStepTemplate (rework brief §5.1: advisory_evidence
  *   on ADVISE_CLIENT is optional, not required).
  * - Three fictitious clients spanning the full 2025 cycle (SPEC.md 14):
@@ -653,6 +656,41 @@ async function seedClientC(actorId: string) {
   }
 }
 
+/**
+ * Brief #5a — a few starter "Customers / payors" entries per sample
+ * client, so the picker isn't empty on a fresh database. Matches the
+ * names already seeded as Form2307 payors / QuarterlySalesCustomer rows
+ * above, but this list is purely a shared reference of names/details —
+ * it isn't read by, and doesn't feed, either of those.
+ */
+async function seedPayors(actorId: string) {
+  const clientA = await prisma.client.findUniqueOrThrow({ where: { code: "dela-cruz-j" } });
+  const clientB = await prisma.client.findUniqueOrThrow({ where: { code: "santos-m" } });
+  const clientC = await prisma.client.findUniqueOrThrow({ where: { code: "reyes-p" } });
+
+  const rows: Array<{ clientId: string; name: string; tin?: string; address?: string; usualAtcCode?: string }> = [
+    { clientId: clientA.id, name: "Acme Publishing Corp.", tin: "987654321", usualAtcCode: "WI010" },
+    { clientId: clientB.id, name: "Direct client — Reyes Bakery" },
+    { clientId: clientB.id, name: "Direct client — Villanueva Print Shop" },
+    { clientId: clientC.id, name: "Northgate Solutions Inc.", tin: "456789123", usualAtcCode: "WI011" },
+  ];
+
+  for (const r of rows) {
+    await prisma.payor.upsert({
+      where: { clientId_name: { clientId: r.clientId, name: r.name } },
+      update: {},
+      create: {
+        clientId: r.clientId,
+        name: r.name,
+        tin: r.tin ?? null,
+        address: r.address ?? null,
+        usualAtcCode: r.usualAtcCode ?? null,
+        actorId,
+      },
+    });
+  }
+}
+
 // ---------------------------------------------------------------------------
 // TY2026 Filing/WorkflowStep cycle — dashboard-ready demo state
 // ---------------------------------------------------------------------------
@@ -1244,6 +1282,7 @@ async function main() {
   await seedClientA(user.id);
   await seedClientB(user.id);
   await seedClientC(user.id);
+  await seedPayors(user.id);
   await seedTY2026Cycle(user.id);
   console.log("Seed complete.");
 }

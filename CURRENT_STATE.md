@@ -1,15 +1,17 @@
 # CURRENT_STATE.md
 
 *Living snapshot. Replace stale content rather than appending.*
-*Last reconciled: 2026-09-26 — documentation pass (brief #4f), bringing the notes up to date through briefs #4c, #4d and #4e.*
+*Last reconciled: 2026-09-26 — brief #5a, on top of the documentation pass (brief #4f) through briefs #4c-#4e.*
 
 ---
 
 ## Where the code is
 
-**Working branch: `claude/admiring-curie-r15qu9`.** Verified against `git log`/`git merge-base` for this pass: it was cut from `claude/steady-noether-3xq7`, the branch carrying brief #4a's grouping work (D32) — `steady-noether`'s own tip commit is `bfd7303` ("Wrap the sixteen workflow steps in five groups"), and that same commit sits directly in `admiring-curie`'s own linear history as its branch point. The reconciliation branches from the previous pass (`claude/peaceful-goldberg-hsh6yo`, `claude/laughing-darwin-wcnh8u`) and the base before them (`claude/elegant-clarke-vu1xyd`) are all further back in this same line and superseded; there is nothing left to build on there.
+**Working branch: `claude/serene-hypatia-rs67pw`, cut fresh from `claude/admiring-curie-r15qu9` for brief #5a.** The session's designated branch name had no prior work on it (its remote copy had been deleted and its local tip sat at an old, pre-rework commit, well behind `admiring-curie`) — verified with `git log`/`git merge-base` before writing any code, per the standing rule below. Since this brief itself names `admiring-curie-r15qu9` as the branch its instructions describe, and `admiring-curie` is the tip of the real lineage (see the paragraph below), the designated branch was reset to `admiring-curie`'s tip (a fast-forward — it carried nothing of its own to lose) and brief #5a's work landed on top of that. State plainly which branch a pass landed on and what it was cut from — don't assume the reader can reconstruct it from a name alone.
 
-**Briefs #4b, #4c, #4d and #4e all landed on `admiring-curie` itself — no new branch per pass.** This differs from the general rule stated below (Claude Code normally creates a new branch every pass); across this whole sequence of small, fast-turnaround briefs it did not, each one committing directly onto `admiring-curie` and pushing. Verify this expectation against `git log` before assuming a new branch exists for the next brief too — it may or may not, depending on what's asked.
+**`claude/admiring-curie-r15qu9` was, and remains, the real lineage through brief #4g.** Verified against `git log`/`git merge-base` for the #4f pass: it was cut from `claude/steady-noether-3xq7`, the branch carrying brief #4a's grouping work (D32) — `steady-noether`'s own tip commit is `bfd7303` ("Wrap the sixteen workflow steps in five groups"), and that same commit sits directly in `admiring-curie`'s own linear history as its branch point. The reconciliation branches from the previous pass (`claude/peaceful-goldberg-hsh6yo`, `claude/laughing-darwin-wcnh8u`) and the base before them (`claude/elegant-clarke-vu1xyd`) are all further back in this same line and superseded; there is nothing left to build on there.
+
+**Briefs #4b through #4g all landed on `admiring-curie` itself — no new branch per pass.** This differs from the general rule stated below (Claude Code normally creates a new branch every pass); across this whole sequence of small, fast-turnaround briefs it did not, each one committing directly onto `admiring-curie` and pushing. Brief #5a is the first pass in this sequence to actually cut a new branch, and only because the session's designated branch name forced the question. Verify this expectation against `git log` before assuming a new branch exists (or doesn't) for the next brief too.
 
 **Claude Code creates a new branch for every pass and does not announce the name unless asked, as a general rule.** After any Claude Code run: `git fetch --all` then `git branch -a`, and look for a `claude/...` branch you do not recognise. Ask it to state the branch it worked on AND the branch it cut from — the branch-reconciliation pass (D31) exists because a branch relationship was asserted without being checked.
 
@@ -92,6 +94,15 @@ All four share one key: client × taxable year × period.
 - **Checked and left alone:** the separate "N documents not yet attached" note (`lib/workflow/completeness.ts`) — a different mechanism (gaps on `DONE`/`IN_PROGRESS` steps, dismissible), not one of the removed lines.
 - **`scripts/verify-real.ts` and `scripts/real-fixture.local.ts` are both gone (D42)**, replaced by `tests/tax/realFilingQ1_2026.test.ts` — see "Validated against reality" above and "Known limitations" below.
 
+**Fixes from the bookkeeper's walkthrough of step 2 (brief #5a, 2026-09-26):**
+- **ATC codes get a maintenance screen; the rate is a property of the code (D43).** `/settings/atc-codes` (add/edit/deactivate — no hard delete). The certificate form's free-text ATC box and separate rate box are both gone, replaced by a picker of active codes (`components/atc-code-select.tsx`) that fills the rate from the chosen code's own `rateBps`. The rate stays visible and editable; typing a different one sets `Form2307.rateOverridden` and keeps her value. `verifiedAgainstIssuance` shows plainly everywhere a code appears (list, edit form, picker). No codes were seeded — WI010/WI011 stay exactly as before, both unverified.
+- **"Customers / payors" (D44) — a saved per-client list (`Payor` model), shared by step 1's customer field and step 2's payor field, never linked to either's numbers.** Picking a saved entry autofills TIN/address/ATC on step 2 (name only on step 1) via one shared component (`components/payor-name-field.tsx`, a native `<datalist>` — free typing still works). Typing an unrecognized name offers to save it inline (`createPayorInline`, `lib/actions/payors.ts`); `/clients/[id]/payors` covers edit/deactivate but isn't the only way in. No foreign key from `QuarterlySalesCustomer` or `Form2307` — confirmed no path for a certificate to affect gross sales. Seeded a few starter entries per sample client (`seedPayors` in `prisma/seed.ts`).
+- **Payor TIN, payor address and ATC code are now required on a certificate (D45)** — validated server-side (`lib/validation/form2307.ts`) as well as on the form. The "more fields" disclosure is gone; everything that was behind it is now in the main form (`components/certificate-form.tsx`, replacing the inline form that used to live in `components/receive-2307-step-card.tsx`).
+- **The scan is part of saving the certificate (D46).** `addCertificate` (`lib/actions/form2307.ts`) refuses to save without a file, attaching it in the same action via a helper factored out of `uploadDocument` (`lib/actions/documents.ts`'s `saveDocumentForStep`, now shared by both). A failed scan save hard-deletes the just-created certificate row rather than leaving an orphan. A saved row's only remaining scan action is **Replace** — one-for-one, the prior scan soft-deleted, never accumulating.
+- **Three entry-form/collapse fixes (D47):** the add-certificate form now closes back to an "Add certificate" button after a save (it used to stay open, permanently blocking step 2's own collapse); step 2 collapses to a summary line ("N certificates · ₱X withheld") once Done or Skipped, with a "Show rows" link; and while "All certificates received" is ticked, Add and Remove are hidden (not just disabled), server-side as well as in the UI, with one short line saying to untick first.
+- New tests: `tests/actions/payors.test.ts` (the Payor data layer a picker's autofill depends on); `tests/actions/form2307.test.ts` gained cases for rate-fill-with-override, the three new required fields refused server-side, no-scan-no-save, the all-received Add/Remove lock, and Replace scan restoring a step that lost its only scan; `tests/reconciliation/annualCertificatesVsSales.test.ts`'s existing `addCertificate` call was updated for the new required fields and now provisions real `WorkflowStep` rows (`generateFilingsForClientYear`) since `addCertificate` needs its own `RECEIVE_2307` step to attach the scan to. Full suite, typecheck, and build all verified.
+- **Not tested by this suite:** the actual browser-side autofill (picking a saved payor, or an ATC code, filling the visible fields) runs in `components/payor-name-field.tsx`/`components/atc-code-select.tsx`, client-side JS with no test-library tooling in this repo to exercise it — verified instead by a live walkthrough against the dev server (see "How to test" in CLAUDE.md).
+
 ---
 
 ## Test drives
@@ -109,6 +120,8 @@ All four share one key: client × taxable year × period.
 **Sixth — 2026-09-22, walked brief #4c's fixes (produced brief #4d).** Found: the income page gave no sign of whether a save was a draft or final; step 2's checkbox made no sense with zero certificates; the client-confirmation box on step 3 should go entirely; `dateReceived` should finally come out now that its last two readers could be switched. Produced D37 (completed), D38, D39, D40.
 
 **Seventh — 2026-09-26, walked brief #4d's fixes (produced brief #4e).** Found: the same block-reason sentence appearing in up to three places on the page at once, and Prepare's own waiting summary saying "waiting on Client, 0d" without naming which of two things was actually the holdup; also, that the real-figures fixture had apparently never existed anywhere reachable, including the bookkeeper's own laptop. Produced D41 and D42.
+
+**Eighth — 2026-09-26, walked step 2 itself (produced brief #5a).** Found: the free-text ATC code and separately-typed rate could disagree with each other; the same payor gets typed twice (once as a step 1 customer, once as a step 2 payor) with no shared list; payor TIN/address/ATC weren't actually required despite mattering; the scan was a separate step after saving a certificate instead of part of it; the add-certificate form never closed after saving, which is what made step 2 impossible to collapse; and Add/Remove needed to be locked out while "all certificates received" is ticked. Produced D43-D47.
 
 ---
 
@@ -129,7 +142,7 @@ All four share one key: client × taxable year × period.
 
 ## Needs the bookkeeper's review
 
-1. **ATC codes** — only WI010 and WI011 seeded, both `verifiedAgainstIssuance: false`. Must be confirmed against the current BIR list before live use.
+1. **ATC codes** — only WI010 and WI011 seeded, both `verifiedAgainstIssuance: false`. Must be confirmed against the current BIR list before live use. She can now do this herself at `/settings/atc-codes` (brief #5a, D43) — no code change needed, just the confirming and ticking "Verified."
 2. **SAWT keying worksheet field order** — built, not yet checked against the actual Alphalist Data Entry Module's own field order.
 3. **Which clients are certificate clients and which declare only** — affects nothing structurally now that both paths are unified through declared sales, but worth recording.
 
@@ -156,9 +169,9 @@ All four share one key: client × taxable year × period.
 
 ## Next, in order
 
-1. Let the bookkeeper walk steps 3 and 4 of the Prepare group (computation, advising the client) before touching the other four groups — steps 1 and 2 have now been walked and fixed across briefs #4c–#4e.
+1. Let the bookkeeper walk steps 3 and 4 of the Prepare group (computation, advising the client) before touching the other four groups — steps 1 and 2 have now been walked and fixed across briefs #4c-#4e and #5a.
 2. Act on whatever that walkthrough finds, step by step.
 3. Build the document archive browse view.
-4. **Before live data in November:** back up `data/app.db`, `storage/`, and the `.env` file (raised by the bookkeeper 2026-09-26, deferring the how until real data exists — not done yet), and confirm the ATC codes against the current BIR list.
+4. **Before live data in November:** back up `data/app.db`, `storage/`, and the `.env` file (raised by the bookkeeper 2026-09-26, deferring the how until real data exists — not done yet), and confirm the ATC codes against the current BIR list (now possible directly at `/settings/atc-codes`, brief #5a).
 5. **Decide on the live Q3 cycle** — certificates expected early November, 1701Q due **November 16, 2026** (statutory Nov 15 is a Sunday). The Excel files remain the master until that decision.
 6. Reassess the remaining Phase 4 items (calendar view) afterwards.

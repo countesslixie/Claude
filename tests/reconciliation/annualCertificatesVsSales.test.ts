@@ -1,7 +1,10 @@
 import { describe, it, expect, afterAll, vi } from "vitest";
+import { rm } from "node:fs/promises";
+import path from "node:path";
 import { prisma } from "@/lib/prisma";
 import { getAnnualCertificatesVsSalesReconciliation } from "@/lib/reconciliation";
 import { addCertificate, type CertificateFormState } from "@/lib/actions/form2307";
+import { generateFilingsForClientYear } from "@/lib/workflow/filingGeneration";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
@@ -14,17 +17,23 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
  */
 describe("getAnnualCertificatesVsSalesReconciliation", () => {
   const createdClientIds: string[] = [];
+  const clientCodes: string[] = [];
 
   afterAll(async () => {
     if (createdClientIds.length === 0) return;
+    await prisma.document.deleteMany({ where: { clientId: { in: createdClientIds } } });
     await prisma.form2307.deleteMany({ where: { clientId: { in: createdClientIds } } });
     await prisma.workflowStep.deleteMany({ where: { filing: { clientId: { in: createdClientIds } } } });
     await prisma.filing.deleteMany({ where: { clientId: { in: createdClientIds } } });
     await prisma.quarterlySales.deleteMany({ where: { clientId: { in: createdClientIds } } });
     await prisma.client.deleteMany({ where: { id: { in: createdClientIds } } });
+    for (const code of clientCodes) {
+      await rm(path.join(process.cwd(), "storage", code), { recursive: true, force: true });
+    }
   });
 
   async function makeClient(code: string) {
+    clientCodes.push(code);
     const client = await prisma.client.create({
       data: {
         code,
@@ -115,23 +124,24 @@ describe("getAnnualCertificatesVsSalesReconciliation", () => {
     await prisma.quarterlySales.create({
       data: { clientId: client.id, taxableYear: 2025, quarter: "Q4", grossSalesCents: 400_000_00 },
     });
-    const annualFiling = await prisma.filing.create({
-      data: {
-        clientId: client.id,
-        taxableYear: 2025,
-        period: "ANNUAL",
-        formType: "F1701A",
-        statutoryDueDate: new Date("2026-04-15T00:00:00.000Z"),
-        adjustedDueDate: new Date("2026-04-15T00:00:00.000Z"),
-      },
+    // generateFilingsForClientYear, not a bare prisma.filing.create, so the
+    // filing gets real WorkflowStep rows (brief #5a's addCertificate needs
+    // this filing's own RECEIVE_2307 step to attach the required scan to).
+    await generateFilingsForClientYear(client.id, 2025);
+    const annualFiling = await prisma.filing.findUniqueOrThrow({
+      where: { clientId_taxableYear_period: { clientId: client.id, taxableYear: 2025, period: "ANNUAL" } },
     });
 
     const fd = new FormData();
     fd.set("payorName", "Late-Arriving Payor");
+    fd.set("payorTin", "111222333");
+    fd.set("payorAddress", "N/A");
+    fd.set("atcCode", "WI010");
     fd.set("incomePayment", "150000");
     fd.set("taxWithheld", "7500");
     fd.set("periodFrom", "2025-10-01");
     fd.set("periodTo", "2025-12-31");
+    fd.set("file", new File(["scan-bytes"], "scan.pdf", { type: "application/pdf" }));
     const result = await addCertificate(annualFiling.id, {} as CertificateFormState, fd);
     expect(result.saved).toBe(true);
 

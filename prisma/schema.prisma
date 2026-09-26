@@ -218,8 +218,40 @@ model Client {
   filings        Filing[]
   documents      Document[]
   sawtBatches    SawtBatch[]
+  payors         Payor[]
 
   @@index([isActive])
+}
+
+// Brief #5a — one saved list per client of companies she deals with, since
+// the same company is usually both a customer recorded in step 1 and the
+// payor of a 2307 she receives in step 2. Purely a shared reference of
+// names/details: picking a saved entry only pre-fills fields on one
+// customer row or one certificate, which stays independently editable
+// from there — nothing here feeds gross sales or a certificate's own
+// numbers, and there is no foreign key from QuarterlySalesCustomer or
+// Form2307 back to this table (D26/D33 stay untouched; a certificate
+// still cannot affect gross sales). usualAtcCode is a plain AtcCode.code
+// string, not a hard FK, so a later code change/deactivation never
+// breaks a saved entry.
+model Payor {
+  id       String @id @default(cuid())
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id])
+
+  name         String
+  tin          String?
+  address      String?
+  usualAtcCode String?
+
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  actorId   String?
+
+  @@unique([clientId, name])
+  @@index([clientId, isActive])
 }
 
 // One row per client per taxable year per sales quarter — the only place
@@ -313,6 +345,10 @@ model Form2307 {
   client      Client @relation(fields: [clientId], references: [id])
   taxableYear Int
 
+  // Brief #5a — payorTin and payorAddress are now required at entry
+  // (validated server-side, lib/validation/form2307.ts); the columns stay
+  // nullable here only because certificates entered before this brief may
+  // lack them.
   payorName    String
   payorTin     String?
   payorAddress String?
@@ -321,10 +357,19 @@ model Form2307 {
   periodTo       DateTime
   quarterCovered Int
 
+  // Brief #5a — atcCode is now required and chosen from a picker of
+  // active AtcCode rows (never free-typed, never invented — D19); this
+  // stays a plain code string, not a hard FK, so a later deactivation or
+  // edit of the AtcCode row never rewrites or breaks an already-saved
+  // certificate. withholdingRateBps defaults to the chosen code's own
+  // rate; rateOverridden records when she typed a different rate for this
+  // one certificate instead (the certificate is authoritative over the
+  // code when they disagree — her value is kept either way).
   atcCode            String
   incomePaymentCents Int
   taxWithheldCents   Int
   withholdingRateBps Int
+  rateOverridden     Boolean @default(false)
 
   // Brief #4d — dateReceived is removed entirely. It was kept in brief
   // #4c because the SAWT keying worksheet's row order and the annual
@@ -629,7 +674,11 @@ model Holiday {
 }
 
 // Sparse, editable ATC reference table. Never invent codes/rates here —
-// leave sparse and unverified until confirmed against the current BIR list.
+// leave sparse and unverified until confirmed against the current BIR
+// list. Brief #5a — maintained from Settings (add/edit/deactivate, never
+// hard-deleted); the certificate form's ATC picker reads active rows from
+// here and fills the rate from rateBps, since the rate is a property of
+// the code, not a separately-typed figure.
 model AtcCode {
   id          String  @id @default(cuid())
   code        String  @unique

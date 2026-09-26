@@ -6,7 +6,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { PayorNameField } from "@/components/payor-name-field";
 import type { QuarterlySalesFormState } from "@/lib/actions/quarterlySales";
+import type { SavedPayor } from "@/lib/actions/payors";
 
 type CustomerRow = { customerName: string; amount: string };
 
@@ -52,6 +54,8 @@ export function QuarterlySalesCard({
   initialFinalized,
   initialSavedAt,
   filingHref,
+  payors,
+  onSaveNewPayor,
 }: {
   quarter: "Q1" | "Q2" | "Q3" | "Q4";
   isQ4: boolean;
@@ -68,6 +72,9 @@ export function QuarterlySalesCard({
   initialSavedAt: string | null;
   /** Where a successful final Save returns to. */
   filingHref: string;
+  /** Brief #5a — the client's saved "Customers / payors" list, offered on each customer row's name field. */
+  payors: SavedPayor[];
+  onSaveNewPayor: (data: { name: string }) => Promise<{ ok: true; payor: SavedPayor } | { ok: false; error: string }>;
 }) {
   const [state, formAction, isPending] = useActionState<QuarterlySalesFormState, FormData>(action, {
     values: initialValues,
@@ -76,6 +83,14 @@ export function QuarterlySalesCard({
   const [rows, setRows] = useState<CustomerRow[]>(
     initialValues?.customers && initialValues.customers.length > 0 ? initialValues.customers : [EMPTY_ROW],
   );
+  const [localPayors, setLocalPayors] = useState(payors);
+
+  async function handleSaveNewPayor(name: string): Promise<{ ok: boolean; error?: string }> {
+    const result = await onSaveNewPayor({ name });
+    if (!result.ok) return { ok: false, error: result.error };
+    setLocalPayors((prev) => [...prev, result.payor]);
+    return { ok: true };
+  }
   const [noSales, setNoSales] = useState(initialValues?.noSalesThisQuarter ?? false);
   const [finalized, setFinalized] = useState(initialFinalized);
   const [savedAt, setSavedAt] = useState(initialSavedAt);
@@ -198,10 +213,12 @@ export function QuarterlySalesCard({
           </div>
           {rows.map((row, i) => (
             <div key={i} className="grid grid-cols-[1fr_160px_auto] gap-2">
-              <Input
+              <PayorNameField
                 name="customerName"
                 value={row.customerName}
-                onChange={(e) => updateRow(i, "customerName", e.target.value)}
+                onChange={(v) => updateRow(i, "customerName", v)}
+                payors={localPayors}
+                onSaveNew={handleSaveNewPayor}
                 placeholder="Customer name"
               />
               <Input

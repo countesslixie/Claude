@@ -1,15 +1,17 @@
 "use client";
 
-import { useActionState, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { CertificateForm } from "@/components/certificate-form";
 import { deleteCertificate, type CertificateFormState } from "@/lib/actions/form2307";
 import { skipStep } from "@/lib/actions/workflowSteps";
 import { uploadDocument } from "@/lib/actions/documents";
 import { centsToPesos, bpsToPercentLabel } from "@/lib/money";
+import type { SavedPayor } from "@/lib/actions/payors";
+import type { SelectableAtcCode } from "@/components/atc-code-select";
 
 export interface CertificateRow {
   id: string;
@@ -20,6 +22,7 @@ export interface CertificateRow {
   taxWithheldCents: number;
   atcCode: string;
   withholdingRateBps: number;
+  rateOverridden: boolean;
   periodFrom: string;
   periodTo: string;
   notes: string | null;
@@ -41,6 +44,17 @@ export interface CertificateRow {
  * more rows shows the checkbox and hides Skip. Removing the last row
  * (lib/actions/form2307.ts's deleteCertificate) goes back to the first
  * state and unticks the checkbox if it was ticked.
+ *
+ * Brief #5a — three fixes from the walkthrough of this step:
+ * - the add form (components/certificate-form.tsx) now closes back to
+ *   "Add certificate" after a save, instead of staying open forever;
+ * - once resolved (Done or Skipped), the card collapses to one summary
+ *   line with a "Show rows" link, matching the group card's own
+ *   collapse-when-resolved convention;
+ * - while "All certificates received" is ticked, Add and Remove are
+ *   hidden (not just disabled) with one short line saying to untick
+ *   first — the checkbox means the set is complete, so there is nothing
+ *   to add or remove until she says otherwise.
  */
 export function Receive2307StepCard({
   stepId,
@@ -55,6 +69,9 @@ export function Receive2307StepCard({
   toggleAllReceivedAction,
   defaultPeriodFrom,
   defaultPeriodTo,
+  payors,
+  atcCodes,
+  onSaveNewPayor,
 }: {
   stepId: string;
   sequence: number;
@@ -69,6 +86,14 @@ export function Receive2307StepCard({
   /** Brief #4c — "Period covered" pre-fills with this filing's own quarter. */
   defaultPeriodFrom: string;
   defaultPeriodTo: string;
+  payors: SavedPayor[];
+  atcCodes: SelectableAtcCode[];
+  onSaveNewPayor: (data: {
+    name: string;
+    tin?: string;
+    address?: string;
+    usualAtcCode?: string;
+  }) => Promise<{ ok: true; payor: SavedPayor } | { ok: false; error: string }>;
 }) {
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
@@ -76,13 +101,13 @@ export function Receive2307StepCard({
   const [showAddForm, setShowAddForm] = useState(false);
   const [openMore, setOpenMore] = useState<Set<string>>(new Set());
   const [openScanUpload, setOpenScanUpload] = useState<Set<string>>(new Set());
-  const [addState, addFormAction, addPending] = useActionState<CertificateFormState, FormData>(
-    addCertificateAction,
-    {},
-  );
 
   const isResolved = status === "DONE" || status === "SKIPPED";
+  // Brief #5a — collapsed by default once resolved, the same "summary
+  // line, expand to see the rows" convention the group card itself uses.
+  const [expanded, setExpanded] = useState(!isResolved);
   const allHaveScans = certificates.length > 0 && certificates.every((c) => c.scans.length > 0);
+  const totalWithheldCents = certificates.reduce((sum, c) => sum + c.taxWithheldCents, 0);
 
   function run(action: () => Promise<{ ok: boolean; error?: string }>) {
     setMessage(null);
@@ -130,8 +155,27 @@ export function Receive2307StepCard({
 
       {status === "SKIPPED" && skippedReason && <p className="mt-1 text-xs text-slate-500">Skipped: {skippedReason}</p>}
 
-      {status !== "SKIPPED" && (
+      {status !== "SKIPPED" && !expanded && (
+        <p className="mt-1 text-xs text-slate-600">
+          {certificates.length} certificate{certificates.length === 1 ? "" : "s"} ·{" "}
+          {centsToPesos(totalWithheldCents, { withSymbol: true })} withheld —{" "}
+          <button type="button" onClick={() => setExpanded(true)} className="underline hover:text-slate-900">
+            Show rows
+          </button>
+        </p>
+      )}
+
+      {status !== "SKIPPED" && expanded && (
         <>
+          {isResolved && (
+            <button
+              type="button"
+              onClick={() => setExpanded(false)}
+              className="mt-1 text-xs text-slate-400 underline hover:text-slate-600"
+            >
+              Hide rows
+            </button>
+          )}
           <div className="mt-2 flex flex-col gap-2">
             {certificates.length === 0 && <p className="text-xs text-slate-400">No certificates entered yet.</p>}
             {certificates.map((c) => (
@@ -144,7 +188,7 @@ export function Receive2307StepCard({
                       {centsToPesos(c.taxWithheldCents, { withSymbol: true })} withheld
                     </p>
                   </div>
-                  {!locked && (
+                  {!locked && !allReceived && (
                     <Button
                       size="sm"
                       variant="ghost"
@@ -176,7 +220,7 @@ export function Receive2307StepCard({
                       onClick={() => toggleSet(openScanUpload, setOpenScanUpload, c.id)}
                       className="text-xs text-slate-500 underline hover:text-slate-900"
                     >
-                      {c.scans.length > 0 ? "Attach another" : "Attach scan"}
+                      {c.scans.length > 0 ? "Replace scan" : "Attach scan"}
                     </button>
                     <button
                       type="button"
@@ -198,7 +242,7 @@ export function Receive2307StepCard({
                         className="h-8 w-36 text-xs"
                       />
                       <Button type="submit" size="sm" variant="secondary" disabled={isPending}>
-                        Upload
+                        {c.scans.length > 0 ? "Replace" : "Upload"}
                       </Button>
                       <button
                         type="button"
@@ -239,6 +283,7 @@ export function Receive2307StepCard({
                     </div>
                     <div>
                       <dt className="inline font-medium">Rate:</dt> {bpsToPercentLabel(c.withholdingRateBps)}
+                      {c.rateOverridden && <span className="ml-1 text-amber-700">(overridden from the ATC code&rsquo;s rate)</span>}
                     </div>
                     <div className="col-span-2">
                       <dt className="inline font-medium">Period:</dt> {c.periodFrom} – {c.periodTo}
@@ -254,98 +299,31 @@ export function Receive2307StepCard({
             ))}
           </div>
 
-          {!locked && (
+          {!locked && !allReceived && (
             <div className="mt-2">
               {!showAddForm ? (
                 <Button type="button" size="sm" variant="secondary" onClick={() => setShowAddForm(true)}>
                   Add certificate
                 </Button>
               ) : (
-                <form action={addFormAction} className="mt-1 flex flex-col gap-2 rounded border border-slate-200 p-2">
-                  {addState.error && <p className="text-xs text-red-600">{addState.error}</p>}
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="flex flex-col gap-0.5 col-span-2">
-                      <Label htmlFor="cert-payorName">Payor name</Label>
-                      <Input id="cert-payorName" name="payorName" defaultValue={addState.values?.payorName} required />
-                    </div>
-                    <div className="flex flex-col gap-0.5">
-                      <Label htmlFor="cert-incomePayment">Income amount (₱)</Label>
-                      <Input id="cert-incomePayment" name="incomePayment" defaultValue={addState.values?.incomePayment} required />
-                    </div>
-                    <div className="flex flex-col gap-0.5">
-                      <Label htmlFor="cert-taxWithheld">Tax withheld (₱)</Label>
-                      <Input id="cert-taxWithheld" name="taxWithheld" defaultValue={addState.values?.taxWithheld} required />
-                    </div>
-                    <div className="flex flex-col gap-0.5">
-                      <Label htmlFor="cert-periodFrom">Period covered — from</Label>
-                      <Input
-                        id="cert-periodFrom"
-                        name="periodFrom"
-                        type="date"
-                        defaultValue={addState.values?.periodFrom ?? defaultPeriodFrom}
-                        required
-                      />
-                    </div>
-                    <div className="flex flex-col gap-0.5">
-                      <Label htmlFor="cert-periodTo">Period covered — to</Label>
-                      <Input
-                        id="cert-periodTo"
-                        name="periodTo"
-                        type="date"
-                        defaultValue={addState.values?.periodTo ?? defaultPeriodTo}
-                        required
-                      />
-                    </div>
-                  </div>
-                  {addState.fieldErrors && (
-                    <ul className="flex flex-col gap-0.5">
-                      {Object.entries(addState.fieldErrors).flatMap(([field, errs]) =>
-                        (errs ?? []).map((e) => (
-                          <li key={`${field}-${e}`} className="text-xs text-red-600">
-                            {e}
-                          </li>
-                        )),
-                      )}
-                    </ul>
-                  )}
-                  <details>
-                    <summary className="cursor-pointer text-xs text-slate-500">More fields</summary>
-                    <div className="mt-1 grid grid-cols-2 gap-2">
-                      <div className="flex flex-col gap-0.5">
-                        <Label htmlFor="cert-payorTin">Payor TIN</Label>
-                        <Input id="cert-payorTin" name="payorTin" defaultValue={addState.values?.payorTin} />
-                      </div>
-                      <div className="flex flex-col gap-0.5">
-                        <Label htmlFor="cert-payorAddress">Payor address</Label>
-                        <Input id="cert-payorAddress" name="payorAddress" defaultValue={addState.values?.payorAddress} />
-                      </div>
-                      <div className="flex flex-col gap-0.5">
-                        <Label htmlFor="cert-atcCode">ATC code (unverified)</Label>
-                        <Input id="cert-atcCode" name="atcCode" defaultValue={addState.values?.atcCode} />
-                      </div>
-                      <div className="flex flex-col gap-0.5">
-                        <Label htmlFor="cert-withholdingRatePercent">Rate (%)</Label>
-                        <Input
-                          id="cert-withholdingRatePercent"
-                          name="withholdingRatePercent"
-                          placeholder="e.g. 5 or 5.00"
-                          defaultValue={addState.values?.withholdingRatePercent}
-                        />
-                      </div>
-                    </div>
-                  </details>
-                  <div className="flex items-center gap-2">
-                    <Button type="submit" size="sm" disabled={addPending}>
-                      {addPending ? "Saving…" : "Save certificate"}
-                    </Button>
-                    <button type="button" onClick={() => setShowAddForm(false)} className="text-xs text-slate-400 underline">
-                      Cancel
-                    </button>
-                    {addState.saved && !addPending && <span className="text-xs text-emerald-600">Saved.</span>}
-                  </div>
-                </form>
+                <CertificateForm
+                  action={addCertificateAction}
+                  payors={payors}
+                  atcCodes={atcCodes}
+                  defaultPeriodFrom={defaultPeriodFrom}
+                  defaultPeriodTo={defaultPeriodTo}
+                  onSaveNewPayor={onSaveNewPayor}
+                  onSaved={() => setShowAddForm(false)}
+                  onCancel={() => setShowAddForm(false)}
+                />
               )}
             </div>
+          )}
+
+          {!locked && allReceived && (
+            <p className="mt-2 text-xs text-slate-500">
+              All certificates received is ticked — untick it to add or remove a certificate.
+            </p>
           )}
 
           {certificates.length > 0 && (

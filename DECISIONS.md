@@ -2,7 +2,7 @@
 
 *Append new decisions. Mark superseded ones rather than deleting them.*
 *Dates during the build are approximate — most work happened across August 2026.*
-*Last reconciled: 2026-09-26 — documentation pass (brief #4f), bringing the notes up to date through briefs #4c, #4d and #4e.*
+*Last reconciled: 2026-09-26 — brief #5a (D43-D47), on top of the documentation pass (brief #4f) through briefs #4c-#4e.*
 
 ---
 
@@ -281,3 +281,43 @@ Supersedes the `scripts/verify-real.ts` / `scripts/real-fixture.local.ts` arrang
 
 *The replacement:* `tests/tax/realFilingQ1_2026.test.ts`, an ordinary test with an inline fixture (as `/lib/tax/` tests require — D5), running with the rest of the suite every time. It carries the same five amounts already written elsewhere in these notes (gross ₱332,933.90, taxable ₱82,933.90, tax due ₱6,634.71, CWT ₱16,646.70, overpayment ₱10,011.99) and nothing else — no client name, TIN, payor name, or address. The ₱16,646.70 CWT figure is represented as a single certificate, named "Payor A," for the full amount: the real split behind that total was never recoverable in any environment this project reaches, so one certificate is what's actually verifiable rather than a plausible-looking invention. Verified to fail on a one-centavo drift in any input and to pass again once reverted, before being committed.
 `npm run verify:real` is removed along with the script it ran.
+
+---
+
+## 2026-09-26 — brief #5a (bookkeeper's walkthrough of step 2: ATC codes, a saved customer/payor list, entry fixes)
+
+**D43 — ATC codes get a maintenance screen, and the rate becomes a property of the code, not a separately-typed figure** *(2026-09-26, brief #5a)*
+
+*The rule:* Settings gains an ATC codes screen (alongside Holidays and Tax rule sets, `lib/actions/atcCodes.ts`, `app/(app)/settings/atc-codes/`), backed by the existing `AtcCode` table (D19) — add, edit, deactivate (no hard delete; `isActive` is how a code stops being offered). `verifiedAgainstIssuance` is shown plainly everywhere a code appears — the list, the edit form, the certificate form's picker — never tucked away, per D19: an unverified code must never look authoritative.
+
+On the certificate form, the free-text "ATC code" box and separate "Rate (%)" box are gone. ATC code is now a picker of the *active* codes only (`components/atc-code-select.tsx`); choosing one fills the rate from `AtcCode.rateBps`. The rate field stays visible and editable — the certificate is authoritative over the code when they disagree, not the other way around — and if she types a different rate, `Form2307.rateOverridden` records the disagreement while her value is what's saved (`lib/actions/form2307.ts`'s `addCertificate`). If the active-codes list is empty, the picker says so in place of an empty dropdown and links to Settings, rather than silently blocking her with no explanation.
+
+*What did NOT change:* no code is seeded by this brief — WI010 and WI011 stay exactly as they were, both unverified (D19's "never invent" applies as much to this pass as to the original seed).
+
+**D44 — "Customers / payors": one saved list per client, shared by step 1's customer field and step 2's payor field, but never linked to either's numbers** *(2026-09-26, brief #5a, her decision)*
+
+*Why:* a company recorded as a customer in step 1 is usually the same company that issues a 2307 in step 2. Free-typed twice in two different screens, it drifts — two spellings of the same payor, one screen with a TIN and the other without.
+
+*The rule:* a new `Payor` model, one row per client (name, TIN, address, usual ATC code, active flag; `@@unique([clientId, name])`). Step 2's payor-name field and step 1's customer-name field both read this list through the same component (`components/payor-name-field.tsx`) — a native `<datalist>` so free typing still works, not a combobox library. Picking a saved name on step 2 fills TIN, address and ATC (and therefore the rate, via D43); picking one on step 1 fills only the name, since step 1 has nothing else to fill. Either way the fill is a one-time autocomplete, not a link: everything stays independently editable on that one row/certificate afterward, and editing there never rewrites the saved entry. Typing a name that isn't on the list offers to save it inline, right there (`createPayorInline`, `lib/actions/payors.ts`) — no trip to a separate screen before finishing a certificate or a customer row. A small per-client screen (`/clients/[id]/payors`) covers add/edit/deactivate for when she wants to fix a saved entry, but it is explicitly not the only way in.
+
+*What this is not:* a link between income and certificates. `QuarterlySalesCustomer` and `Form2307` both stay exactly as free-typed rows with no foreign key to `Payor` — picking a saved name changes what gets typed into those rows, never what the rows themselves mean. D26 and D33 are untouched: gross sales is still only the sum of step 1's per-customer rows, and a certificate still contributes nothing to it. Confirmed no path exists, before or after this brief, for a certificate to affect gross sales.
+
+*Seed:* the sample clients get a few starter entries (`prisma/seed.ts`'s `seedPayors`) matching names already used elsewhere in the seed, so the picker isn't empty on a fresh database.
+
+**D45 — Payor TIN, payor address and ATC code are now required on a certificate** *(2026-09-26, brief #5a)*
+
+Alongside the payor name, income amount, tax withheld and period covered that were already required. Validated with Zod server-side (`lib/validation/form2307.ts`'s `certificateEntrySchema`) as well as on the form — refusing an empty required field never depended on the form alone. The "more fields" disclosure these three used to sit behind (with the withholding rate) is gone: once they joined the main form, nothing required was left behind a disclosure, so the disclosure itself was removed rather than kept empty (`components/certificate-form.tsx` replaces the old inline form in `components/receive-2307-step-card.tsx`).
+
+**D46 — The scan is part of saving the certificate; D35 is now satisfied by construction, not earned afterward** *(2026-09-26, brief #5a, her decision)*
+
+*The rule:* the file input moved into the certificate form itself and is required — `addCertificate` (`lib/actions/form2307.ts`) refuses to save without one, attaching it in the same action via a shared helper (`saveDocumentForStep`, factored out of `lib/actions/documents.ts`'s `uploadDocument` so both share one code path). If the scan fails to save (e.g. a disk-write error), the just-created `Form2307` row is hard-deleted rather than left as an orphan with no scan — it was never persisted "for real" from her point of view. There is no more separate upload step on a saved row afterward; what remains is **Replace scan** — a saved row's scan is one-for-one, not accumulating, so uploading a new one automatically soft-deletes whichever one it replaces (never a hard delete — SPEC.md's no-hard-deletes-on-financial-records rule still applies to the superseded copy).
+
+*What did NOT change:* D35's actual blocking rule (step 2 is `DONE` only once "all certificates received" is ticked **and** every row has a scan) is unchanged — it's just unreachable to violate now, since a row can't exist without a scan in the first place. A row from before this brief that somehow lacks one still blocks exactly as D35 always said, and still offers "Attach scan."
+
+**D47 — Three entry-form and collapse fixes to step 2, from watching it in use** *(2026-09-26, brief #5a)*
+
+1. *The form now closes after saving.* Before this fix, a blank "Add certificate" form stayed open below the saved row permanently — the specific thing that made step 2 impossible to collapse. `components/certificate-form.tsx` calls back to its parent once the server action reports `saved`, which closes it back to an "Add certificate" button.
+2. *Step 2 collapses to a summary line once resolved* (Done or Skipped) — e.g. "3 certificates · ₱16,646.70 withheld" — with a "Show rows" link, matching the same collapse-when-resolved shape the group cards already use. This is a client-side default (expanded while unresolved, collapsed once resolved at the point the card first renders), not a change to what `DONE`/`SKIPPED` mean.
+3. *While "All certificates received" is ticked, no certificate can be added or removed.* The Add button and each row's Remove action are hidden — not merely disabled — with one short line saying to untick first; unticking restores both. This is enforced server-side too (`addCertificate`/`deleteCertificate` both refuse while `Filing.certificatesAllReceivedAt` is set), not only by hiding the buttons, so the rule holds even if the action is ever called directly. This is a deliberate, narrow exception to D41's "no standing block-reason text" — the checkbox already means "the set is complete," so the line explains a state she just set herself, not a rule blocking her from something she's trying to do; it is one line, appears in exactly one place, and disappears the moment she unticks it.
+
+*Checked and confirmed unaffected by this whole brief:* D26/D33 (gross sales stays step-1-only, a certificate contributes nothing to it), D34 (a certificate still counts in the filing it was entered under, locked once filed), D35 (restated more precisely by D46 above), D39 (Skip still shows only while there are no rows), D3 (money stays integer centavos on the Decimal.js path — the percent-to-basis-points conversion used for the rate here is the same `percentToBps` #4c already added, no new float arithmetic anywhere).
