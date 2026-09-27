@@ -1,7 +1,7 @@
 # PROJECT_MASTER.md
 
 *Permanent project memory. Update only when something long-lived genuinely changes.*
-*Last reconciled: 2026-09-27 — brief #5b (the "Save … to payors" dialog, fill-back, renamed to "Payors" on screen), on top of brief #5a and the documentation pass (brief #4f) through briefs #4c-#4e.*
+*Last reconciled: 2026-09-27 — brief #5c (reworded the income-record layer table to say "payor," matching D48), on top of brief #5b (the "Save … to payors" dialog, fill-back, renamed to "Payors" on screen), brief #5a, and the documentation pass (brief #4f) through briefs #4c-#4e.*
 
 > Build status lives in CURRENT_STATE.md. This file is the intended application and the rules that govern it.
 
@@ -21,7 +21,7 @@ Four layers, with a strict rule about who authors what:
 
 | Layer | Authored? | Role |
 |---|---|---|
-| Income record | Yes | The client's declared gross sales per quarter — the sum of per-customer rows, derived, never typed directly (D33). The only place money enters. |
+| Income record | Yes | The client's declared gross sales per quarter — the sum of per-payor rows, derived, never typed directly (D33; called "Payor" on screen since D48 — the underlying `QuarterlySalesCustomer` model and `customerName` field keep their original names, deliberately). The only place money enters. |
 | Computation | **Never** | Pure derivation. 8% cumulative. |
 | Checklist | Marks only | A map of where you are. Blocks only on documents received from outside. |
 | Document archive | Yes | Independently browsable. For a declared-income client, substantially the whole record. |

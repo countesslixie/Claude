@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 *Instructions for Claude Code working on this repository.*
-*Last reconciled: 2026-09-27 — brief #5b, on top of brief #5a and the documentation pass (brief #4f) through briefs #4c-#4e.*
+*Last reconciled: 2026-09-27 — brief #5c (SPEC.md's banner, a date contradiction, and two stale standing-instruction paragraphs), on top of brief #5b, brief #5a, and the documentation pass (brief #4f) through briefs #4c-#4e.*
 
 ---
 
@@ -11,15 +11,15 @@ A local-first Next.js application used by **one bookkeeper** to manage Philippin
 
 **It is a filing manager, not an accounting system.** It generates no books of accounts. There is no ledger — only a declared-income record sufficient to compute the return.
 
-`PROJECT_MASTER.md`, `CURRENT_STATE.md` and `DECISIONS.md` carry project context and are current as of 2026-09-26. **`SPEC.md` is not** — it still describes the pre-rework system and contradicts the build in several places; see its dated banner for which sections a decision has superseded. Where SPEC.md disagrees with PROJECT_MASTER.md or DECISIONS.md, the latter win, and say so rather than following SPEC.md quietly.
+`PROJECT_MASTER.md`, `CURRENT_STATE.md` and `DECISIONS.md` carry project context and are current as of 2026-09-27. **`SPEC.md` is not** — it still describes the pre-rework system and contradicts the build in several places; see its dated banner for which sections a decision has superseded. Where SPEC.md disagrees with PROJECT_MASTER.md or DECISIONS.md, the latter win, and say so rather than following SPEC.md quietly.
 
-## A note on how this branch came to be
+## Trust the tree, not a brief's account of it
 
-This branch is a reconciliation of two earlier rework passes that diverged from the same base commit and had to be stitched back together by hand — see `DECISIONS.md` D31 for the full history and what changed in the process. The lesson that outlasted the history itself: **if a brief's account of "what's on this branch" doesn't match what you find, trust the tree** — verify with `git log`/`git merge-base` before writing code, not just before writing docs. Brief #4f's own branch-ancestry claim was checked this way, five passes later, and held up.
+Once, a documentation brief asserted that two rework-pass branches were already stacked onto each other when they were actually siblings that had diverged from the same base commit — found only after a dedicated pass reconciled them back together by hand (`DECISIONS.md` D31). The lesson that outlasted that specific episode: **if a brief's account of "what's on this branch" doesn't match what you find, trust the tree** — verify with `git log`/`git merge-base` before writing code, not just before writing docs. This has been checked and held up on several later passes since, including a case where the session's newly-assigned branch turned out to carry no real work at all and had to be reset onto the branch a brief actually named. **Which specific branch each past brief used, and what it was cut from, is recorded in `CURRENT_STATE.md`'s "Where the code is" section** — read that, don't assume, if you need the current branch's real history.
 
 ## Before you finish: state the branch
 
-**End every summary with the branch name, whether it's new, and confirm you pushed.** Claude Code sometimes creates a new branch per pass and sometimes continues on the current one — briefs #4b through #4e all landed on the same branch, one after another, with no new branch cut for any of them. The user has no way to guess which happened unless you say so. This has cost several round trips — she reseeded her database against code she did not have, and two branches diverged from a name that was never clearly stated. One line prevents it.
+**End every summary with three things: the branch you worked on, whether it's new, and (if new) the branch it was cut from.** Never assume the reader can reconstruct this from a name alone. Whether a pass lands on a brand-new branch or continues on the previous one varies and cannot be guessed in advance — confirm with `git log`/`git status` before assuming either. Skipping this has cost real round trips: the user has reseeded her database against code she did not have, and two branches once diverged from a name that was never clearly stated. One line prevents it, every time — not just when something changed.
 
 ## Who you are working with
 
