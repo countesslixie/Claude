@@ -12,12 +12,16 @@ import { generateFilingsForClientYear } from "@/lib/workflow/filingGeneration";
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 /**
- * Brief #5d §6 — while a filing's own return isn't filed (step 5,
- * FILE_RETURN, not DONE), a change to the figures behind the computation
- * made after step 3 (PREPARE_RETURN) is Done reopens both step 3 and
- * step 4 (ADVISE_CLIENT). A no-change save and a Replace scan don't. A
- * filed filing is untouched (its mutating actions are already refused
- * outright before reopening logic would ever run).
+ * Brief #5d §6 (narrowed by brief #5e §6) — while a filing's own return
+ * isn't filed (step 5, FILE_RETURN, not DONE), a change to the figures
+ * behind the computation made after step 3 (PREPARE_RETURN) is Done
+ * reopens both step 3 and step 4 (ADVISE_CLIENT): a figures-changing
+ * final save, any draft save, or adding/removing a certificate. Brief
+ * #5e §6 — unticking "all certificates received" alone does NOT reopen
+ * anything downstream (that was too eager); it only reverts step 2
+ * itself, same as before. A no-change save and a Replace scan don't
+ * reopen either. A filed filing is untouched (its mutating actions are
+ * already refused outright before reopening logic would ever run).
  */
 describe("reopening steps 3/4 after a change to the computation's figures", () => {
   const createdClientIds: string[] = [];
@@ -187,13 +191,26 @@ describe("reopening steps 3/4 after a change to the computation's figures", () =
     expect((await prisma.workflowStep.findUniqueOrThrow({ where: { id: step4.id } })).status).toBe("PENDING");
   });
 
-  it("unticking 'all certificates received' reopens steps 3 and 4", async () => {
-    const { filing, step3, step4 } = await makePreparedFilingWithCert("reopen-untick");
+  it("brief #5e §6: unticking 'all certificates received' alone reopens nothing downstream — only step 2 itself reverts", async () => {
+    const { filing, step3, step4 } = await makePreparedFilingWithCert("reopen-untick-only");
 
     await setAllCertificatesReceived(filing.id, false);
 
-    expect((await prisma.workflowStep.findUniqueOrThrow({ where: { id: step3.id } })).status).toBe("PENDING");
-    expect((await prisma.workflowStep.findUniqueOrThrow({ where: { id: step4.id } })).status).toBe("PENDING");
+    const step2 = await prisma.workflowStep.findFirstOrThrow({ where: { filingId: filing.id, stepCode: "RECEIVE_2307" } });
+    expect(step2.status).toBe("WAITING_EXTERNAL"); // step 2 itself still reverts, as before
+
+    expect((await prisma.workflowStep.findUniqueOrThrow({ where: { id: step3.id } })).status).toBe("DONE");
+    expect((await prisma.workflowStep.findUniqueOrThrow({ where: { id: step4.id } })).status).toBe("DONE");
+  });
+
+  it("brief #5e §6: untick then retick with no other change leaves steps 3 and 4 as they were", async () => {
+    const { filing, step3, step4 } = await makePreparedFilingWithCert("reopen-untick-retick");
+
+    await setAllCertificatesReceived(filing.id, false);
+    await setAllCertificatesReceived(filing.id, true);
+
+    expect((await prisma.workflowStep.findUniqueOrThrow({ where: { id: step3.id } })).status).toBe("DONE");
+    expect((await prisma.workflowStep.findUniqueOrThrow({ where: { id: step4.id } })).status).toBe("DONE");
   });
 
   it("Replace scan does NOT reopen steps 3 and 4", async () => {
@@ -226,5 +243,33 @@ describe("reopening steps 3/4 after a change to the computation's figures", () =
 
     expect((await prisma.workflowStep.findUniqueOrThrow({ where: { id: step3.id } })).status).toBe("DONE");
     expect((await prisma.workflowStep.findUniqueOrThrow({ where: { id: step4.id } })).status).toBe("DONE");
+  });
+
+  it("brief #5e §3: the message is saved at Mark done, stays unchanged by a later figures change, and reopening clears it so it rebuilds fresh", async () => {
+    const { client, filing, step3, step4 } = await makePreparedFilingNoCerts("reopen-saved-message");
+
+    const savedFirst = await prisma.filing.findUniqueOrThrow({ where: { id: filing.id } });
+    expect(savedFirst.adviceMessageSubject).toBeTruthy();
+    expect(savedFirst.adviceMessageBody).toContain("₱1,000.00"); // setup's own gross sales figure
+    expect(savedFirst.adviceMessageSavedAt).not.toBeNull();
+
+    // Change the figures -- this reopens steps 3/4 (brief #5d §6) and must
+    // clear the saved message, not leave it sitting there stale.
+    await saveQuarterlySales(client.id, 2026, "Q2", {}, salesFormData("final", "5000"));
+    expect((await prisma.workflowStep.findUniqueOrThrow({ where: { id: step3.id } })).status).toBe("PENDING");
+    expect((await prisma.workflowStep.findUniqueOrThrow({ where: { id: step4.id } })).status).toBe("PENDING");
+
+    const afterReopen = await prisma.filing.findUniqueOrThrow({ where: { id: filing.id } });
+    expect(afterReopen.adviceMessageSubject).toBeNull();
+    expect(afterReopen.adviceMessageBody).toBeNull();
+    expect(afterReopen.adviceMessageSavedAt).toBeNull();
+
+    // Re-preparing and re-marking step 4 done rebuilds it fresh, from the
+    // NEW figures -- not the old saved text.
+    await markStepDone(step3.id);
+    await markStepDone(step4.id);
+    const savedAgain = await prisma.filing.findUniqueOrThrow({ where: { id: filing.id } });
+    expect(savedAgain.adviceMessageBody).toContain("₱5,000.00");
+    expect(savedAgain.adviceMessageBody).not.toBe(savedFirst.adviceMessageBody);
   });
 });

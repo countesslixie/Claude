@@ -134,6 +134,34 @@ describe("step 2 — certificate entry (addCertificate/deleteCertificate)", () =
     expect(activeScans[0].originalFilename).toBe("rescan.pdf");
   });
 
+  it("brief #5e §7: replacing a scan that's still attached (not first deleted) links the new file and soft-deletes the old one", async () => {
+    const { filing } = await makeClientWithQ2Filing("f2307-replace-live-scan");
+
+    await addCertificate(filing.id, {} as CertificateFormState, certFormData());
+    const cert = await prisma.form2307.findFirstOrThrow({ where: { claimedOnFilingId: filing.id, deletedAt: null } });
+    const originalScan = await prisma.document.findFirstOrThrow({ where: { form2307Id: cert.id, deletedAt: null } });
+
+    const replaceFormData = new FormData();
+    replaceFormData.set("file", new File(["replacement-bytes"], "replacement.pdf", { type: "application/pdf" }));
+    replaceFormData.set("workflowStepId", (await prisma.workflowStep.findFirstOrThrow({ where: { filingId: filing.id, stepCode: "RECEIVE_2307" } })).id);
+    replaceFormData.set("docSlotCode", "form2307_scan");
+    replaceFormData.set("form2307Id", cert.id);
+    replaceFormData.set("documentDate", "2026-06-15");
+    const result = await uploadDocument(replaceFormData);
+    expect(result.ok).toBe(true);
+
+    // The new file is linked, active, and correctly named.
+    const activeScans = await prisma.document.findMany({ where: { form2307Id: cert.id, deletedAt: null } });
+    expect(activeScans).toHaveLength(1);
+    expect(activeScans[0].originalFilename).toBe("replacement.pdf");
+    expect(activeScans[0].id).not.toBe(originalScan.id);
+
+    // The old one is soft-deleted, not hard-deleted or left dangling active.
+    const oldScanAfter = await prisma.document.findUniqueOrThrow({ where: { id: originalScan.id } });
+    expect(oldScanAfter.deletedAt).not.toBeNull();
+    expect(oldScanAfter.deletedReason).toMatch(/replaced/i);
+  });
+
   it("unticking 'all received' reverts step 2 to not-done, even after it was Done", async () => {
     const { filing, step } = await makeClientWithQ2Filing("f2307-untick");
 

@@ -62,6 +62,27 @@ async function priorYearExcessCreditCentsFor(clientId: string, taxableYear: numb
   return clientTaxYear?.priorYearExcessCreditCents ?? 0;
 }
 
+/**
+ * Brief #5e §8 — items 55/57 (prior-year excess credit) and 61/63 (other
+ * tax credits/payments) are both single client-year figures stored on
+ * ClientTaxYear, entered once and appearing in full on every return of
+ * that year (same rule as the existing prior-year credit, locked rule #1 /
+ * SPEC §16 item 7 — this file already never lowers or "uses up" that
+ * figure across periods, since every call re-reads the same stored value).
+ */
+async function yearLevelCreditsFor(
+  clientId: string,
+  taxableYear: number,
+): Promise<{ priorYearExcessCreditCents: number; otherCreditsCents: number }> {
+  const clientTaxYear = await prisma.clientTaxYear.findUnique({
+    where: { clientId_taxableYear: { clientId, taxableYear } },
+  });
+  return {
+    priorYearExcessCreditCents: clientTaxYear?.priorYearExcessCreditCents ?? 0,
+    otherCreditsCents: clientTaxYear?.otherCreditsCents ?? 0,
+  };
+}
+
 async function certificatesForCwt(clientId: string, taxableYear: number) {
   const certificates = await prisma.form2307.findMany({
     where: { clientId, taxableYear, deletedAt: null },
@@ -107,7 +128,7 @@ async function assembleQuarterlyForm(
   const cwtThisQuarterCents = sumCwtThroughPeriod(certificates, period) - cwtPriorQuartersCents;
 
   const priorPeriodPaymentsCents = await priorPeriodPaymentsCentsThrough(clientId, taxableYear, period);
-  const priorYearExcessCreditCents = await priorYearExcessCreditCentsFor(clientId, taxableYear);
+  const { priorYearExcessCreditCents, otherCreditsCents } = await yearLevelCreditsFor(clientId, taxableYear);
 
   return computeQuarterlyForm({
     taxableYear,
@@ -121,6 +142,7 @@ async function assembleQuarterlyForm(
     priorPeriodPaymentsCents,
     cwtPriorQuartersCents,
     cwtThisQuarterCents,
+    otherCreditsCents,
   });
 }
 
@@ -144,7 +166,7 @@ async function assembleAnnualForm(clientId: string, taxableYear: number): Promis
   const cwtQ4Cents = sumCwtThroughPeriod(certificates, "ANNUAL") - cwtQ1ToQ3Cents;
 
   const priorPeriodPaymentsQ1ToQ3Cents = await priorPeriodPaymentsCentsThrough(clientId, taxableYear, "ANNUAL");
-  const priorYearExcessCreditCents = await priorYearExcessCreditCentsFor(clientId, taxableYear);
+  const { priorYearExcessCreditCents, otherCreditsCents } = await yearLevelCreditsFor(clientId, taxableYear);
 
   return computeAnnualForm({
     taxableYear,
@@ -155,6 +177,7 @@ async function assembleAnnualForm(clientId: string, taxableYear: number): Promis
     priorPeriodPaymentsQ1ToQ3Cents,
     cwtQ1ToQ3Cents,
     cwtQ4Cents,
+    otherCreditsCents,
   });
 }
 

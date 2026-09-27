@@ -67,8 +67,13 @@ export function WorkflowStepCard({
   dependencyBlockedReason?: string | null;
   /** Step-specific content rendered inside the card, above the doc slots (sales entry link, certificate cutoff, computation sheet, client package). */
   extra?: React.ReactNode;
-  /** Brief #5d §7 — step 4 (ADVISE_CLIENT) has no Start, Mark waiting, or Skip; only Mark done remains. */
-  controlsMode?: "full" | "markDoneOnly";
+  /**
+   * Brief #5d §7 — "markDoneOnly": step 4 (ADVISE_CLIENT) has no Start,
+   * Mark waiting, or Skip; only Mark done remains. Brief #5e §4 —
+   * "noStart": step 3 (PREPARE_RETURN) never needs a separate Start; it
+   * keeps only Mark done and Skip.
+   */
+  controlsMode?: "full" | "markDoneOnly" | "noStart";
 }) {
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
@@ -298,7 +303,7 @@ export function WorkflowStepCard({
           >
             Mark done
           </Button>
-          {controlsMode === "full" && (
+          {(controlsMode === "full" || controlsMode === "noStart") && (
             <>
               <Input
                 placeholder="Skip reason"

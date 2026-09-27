@@ -1,15 +1,13 @@
 import { centsToPesos } from "@/lib/money";
-import { formatManilaDate } from "@/lib/dates";
+import { formatManilaDateLong } from "@/lib/dates";
 import type { Period } from "@/lib/tax/types";
 
 /**
- * Step 4's copyable client advice message (brief #5d §8) — modeled on
- * step 16's client package email (lib/workflow/clientPackageEmail.ts):
- * a starting point the bookkeeper edits before sending, filled in from
- * the filing's own rounded computation sheet. Only 1701Q/1701A are in
- * scope (brief #5d §1) — MIXED_INCOME's annual return (1701) has no sheet
- * built, so this is never called for it; the caller decides not to render
- * step 4's message at all in that case.
+ * Step 4's copyable client advice message (brief #5d §8, wording replaced
+ * by brief #5e §9 with the bookkeeper's own text). Only 1701Q/1701A are in
+ * scope — MIXED_INCOME's annual return (1701) has no sheet built, so this
+ * is never called for it; the caller decides not to render step 4's
+ * message at all in that case.
  */
 export interface ClientTaxAdviceMessageInput {
   clientRegisteredName: string;
@@ -27,69 +25,69 @@ export interface ClientTaxAdviceMessageInput {
   taxPayableCents: number;
   isOverpayment: boolean;
   overpaymentCents: number;
-  adjustedDueDate: Date;
+  /**
+   * Brief #5e §9 — the date shown to the CLIENT: the filing's adjusted BIR
+   * due date minus TaxRuleSet.clientPaymentLeadDays calendar days, shifted
+   * earlier on a weekend/holiday. Computed by the caller
+   * (lib/tax/deadlines.ts's clientPaymentDueDate) — this function only
+   * formats it. Ignored when the filing is an overpayment (no payment to
+   * schedule).
+   */
+  clientDueDate: Date;
   /** Only consulted for an ANNUAL overpayment; unset/NA means "not yet decided." */
   yearEndCreditElection?: "REFUND" | "TCC" | "CARRY_OVER" | "NA" | null;
 }
 
 const FORM_LABEL: Record<"F1701Q" | "F1701A", string> = { F1701Q: "1701Q", F1701A: "1701A" };
 
-function periodLabel(period: Period): string {
-  return period === "ANNUAL" ? "Annual" : period;
-}
-
 const ELECTION_SENTENCE: Record<"REFUND" | "TCC" | "CARRY_OVER", string> = {
-  REFUND: "This will be refunded to you.",
-  TCC: "This will be issued to you as a Tax Credit Certificate.",
-  CARRY_OVER: "This will be carried over and applied to next year's return.",
+  REFUND: "The overpayment will be refunded to you.",
+  TCC: "The overpayment will be issued to you as a Tax Credit Certificate.",
+  CARRY_OVER: "The overpayment will be carried over to next year's return.",
 };
 
 export function buildClientTaxAdviceMessage(input: ClientTaxAdviceMessageInput): { subject: string; body: string } {
   const formLabel = FORM_LABEL[input.formType];
-  const period = periodLabel(input.period);
-  const dueDateLabel = formatManilaDate(input.adjustedDueDate);
+  const periodLabel = input.period === "ANNUAL" ? String(input.taxableYear) : `${input.period} ${input.taxableYear}`;
 
-  const subject = `${input.clientRegisteredName} — ${formLabel} ${period} ${input.taxableYear} computation`;
+  const subject = `${input.clientRegisteredName} — ${formLabel} ${input.period === "ANNUAL" ? "Annual" : input.period} ${input.taxableYear} computation`;
 
-  const summaryLines = [
-    `  Gross sales/receipts   ${centsToPesos(input.grossSalesCents, { withSymbol: true })}`,
-    `  Tax due                ${centsToPesos(input.taxDueCents, { withSymbol: true })}`,
-    `  Total credits          ${centsToPesos(input.totalCreditsCents, { withSymbol: true })}`,
+  const figureLines = [
+    `Gross sales/receipts: ${centsToPesos(input.grossSalesCents, { withSymbol: true })}`,
+    `Tax due: ${centsToPesos(input.taxDueCents, { withSymbol: true })}`,
+    `Less: Total credits: ${centsToPesos(input.totalCreditsCents, { withSymbol: true })}`,
   ];
-
-  const resultLines: string[] = [];
-  if (!input.isOverpayment) {
-    resultLines.push(
-      `Amount payable: ${centsToPesos(input.taxPayableCents, { withSymbol: true })}, due ${dueDateLabel}.`,
-      "Please confirm this amount or let me know how you'd like to arrange payment before that date.",
-    );
-  } else if (input.period !== "ANNUAL") {
-    resultLines.push(
-      `Nothing is payable this quarter. The overpayment of ${centsToPesos(input.overpaymentCents, {
-        withSymbol: true,
-      })} is applied to your next return this year — no action needed from you now.`,
-    );
-  } else {
-    resultLines.push(`This return shows an overpayment of ${centsToPesos(input.overpaymentCents, { withSymbol: true })}.`);
-    const election = input.yearEndCreditElection;
-    if (election && election !== "NA") {
-      resultLines.push(ELECTION_SENTENCE[election]);
-    } else {
-      resultLines.push("I'll confirm with you how you'd like this applied — refund, tax credit certificate, or carried over to next year.");
-    }
-  }
 
   const bodyLines = [
     `Hi ${input.clientFirstName},`,
     "",
-    `Here's the computation for your ${formLabel} ${period} ${input.taxableYear} return:`,
+    `Here's the computation for your ${formLabel} ${periodLabel} return:`,
     "",
-    ...summaryLines,
-    "",
-    ...resultLines,
-    "",
-    "Please let me know if you have any questions.",
+    ...figureLines,
   ];
+
+  if (!input.isOverpayment) {
+    bodyLines.push(
+      `Amount payable: ${centsToPesos(input.taxPayableCents, { withSymbol: true })}`,
+      `Due date: ${formatManilaDateLong(input.clientDueDate)}`,
+      "",
+      "Please let me know when you plan to make the payment, or if you would like me to advance the payment on your behalf.",
+    );
+  } else {
+    bodyLines.push(`Overpayment: ${centsToPesos(input.overpaymentCents, { withSymbol: true })}`, "");
+    if (input.period !== "ANNUAL") {
+      bodyLines.push("There is nothing to pay this quarter. The overpayment will be applied to your next return this year.");
+    } else {
+      const election = input.yearEndCreditElection;
+      bodyLines.push(
+        election && election !== "NA"
+          ? ELECTION_SENTENCE[election]
+          : "I'll get in touch with you about how the overpayment will be applied.",
+      );
+    }
+  }
+
+  bodyLines.push("", "If you have any questions, please feel free to let me know.", "", "Thank you!");
 
   return { subject, body: bodyLines.join("\n") };
 }

@@ -2,97 +2,144 @@ import { describe, it, expect } from "vitest";
 import { buildClientTaxAdviceMessage, type ClientTaxAdviceMessageInput } from "@/lib/workflow/clientTaxAdviceMessage";
 
 /**
- * Brief #5d §8 — step 4's copyable client advice message. Only
- * 1701Q/1701A are in scope; the caller decides not to render it at all
- * for MIXED_INCOME's annual return (Form 1701), which has no sheet built.
+ * Brief #5e §9 — step 4's copyable client advice message, replaced with
+ * the bookkeeper's own wording. Only 1701Q/1701A are in scope; the caller
+ * decides not to render it at all for MIXED_INCOME's annual return (Form
+ * 1701), which has no sheet built.
  */
 function baseInput(overrides: Partial<ClientTaxAdviceMessageInput> = {}): ClientTaxAdviceMessageInput {
   return {
-    clientRegisteredName: "Juan Dela Cruz",
-    clientFirstName: "Juan",
-    period: "Q2",
+    clientRegisteredName: "Maria Santos",
+    clientFirstName: "Maria",
+    period: "Q3",
     taxableYear: 2026,
     formType: "F1701Q",
-    grossSalesCents: 60_000_00,
-    taxDueCents: 6_400_00,
-    totalCreditsCents: 5_250_00,
-    taxPayableCents: 1_150_00,
+    grossSalesCents: 130_000_00,
+    taxDueCents: 16_800_00,
+    totalCreditsCents: 4_700_00,
+    taxPayableCents: 12_100_00,
     isOverpayment: false,
     overpaymentCents: 0,
-    adjustedDueDate: new Date("2026-08-17T00:00:00.000Z"),
+    clientDueDate: new Date("2026-11-06T00:00:00.000Z"),
     ...overrides,
   };
 }
 
 describe("buildClientTaxAdviceMessage", () => {
-  it("payable: gives the amount and the due date, and asks the client to confirm or arrange payment", () => {
+  it("payable: matches the bookkeeper's exact wording", () => {
     const message = buildClientTaxAdviceMessage(baseInput());
-    expect(message.body).toContain("Amount payable: ₱1,150.00, due Aug 17, 2026.");
-    expect(message.body).toMatch(/confirm this amount|arrange payment/i);
-    expect(message.body).not.toContain("overpayment");
-  });
-
-  it("quarterly overpayment: says nothing is payable this quarter and it applies to the next return, without asking for payment", () => {
-    const message = buildClientTaxAdviceMessage(
-      baseInput({ period: "Q2", isOverpayment: true, overpaymentCents: 500_00, taxPayableCents: 0 }),
+    expect(message.body).toBe(
+      [
+        "Hi Maria,",
+        "",
+        "Here's the computation for your 1701Q Q3 2026 return:",
+        "",
+        "Gross sales/receipts: ₱130,000.00",
+        "Tax due: ₱16,800.00",
+        "Less: Total credits: ₱4,700.00",
+        "Amount payable: ₱12,100.00",
+        "Due date: November 6, 2026",
+        "",
+        "Please let me know when you plan to make the payment, or if you would like me to advance the payment on your behalf.",
+        "",
+        "If you have any questions, please feel free to let me know.",
+        "",
+        "Thank you!",
+      ].join("\n"),
     );
-    expect(message.body).toContain("Nothing is payable this quarter");
-    expect(message.body).toContain("₱500.00");
-    expect(message.body).toContain("applied to your next return this year");
-    expect(message.body).not.toMatch(/confirm this amount|arrange payment/i);
   });
 
-  it("annual overpayment with no election yet: says she'll confirm how it's applied, without asserting refund/TCC/carry-over", () => {
+  it("quarterly overpayment: matches the bookkeeper's exact wording", () => {
+    const message = buildClientTaxAdviceMessage(
+      baseInput({
+        period: "Q1",
+        grossSalesCents: 450_000_00,
+        taxDueCents: 16_000_00,
+        totalCreditsCents: 22_500_00,
+        taxPayableCents: 0,
+        isOverpayment: true,
+        overpaymentCents: 6_500_00,
+      }),
+    );
+    expect(message.body).toBe(
+      [
+        "Hi Maria,",
+        "",
+        "Here's the computation for your 1701Q Q1 2026 return:",
+        "",
+        "Gross sales/receipts: ₱450,000.00",
+        "Tax due: ₱16,000.00",
+        "Less: Total credits: ₱22,500.00",
+        "Overpayment: ₱6,500.00",
+        "",
+        "There is nothing to pay this quarter. The overpayment will be applied to your next return this year.",
+        "",
+        "If you have any questions, please feel free to let me know.",
+        "",
+        "Thank you!",
+      ].join("\n"),
+    );
+    expect(message.body).not.toMatch(/Amount payable|Due date/);
+  });
+
+  it("annual overpayment with no election yet: uses '1701A 2026' and the get-in-touch line", () => {
     const message = buildClientTaxAdviceMessage(
       baseInput({
         period: "ANNUAL",
         formType: "F1701A",
-        isOverpayment: true,
-        overpaymentCents: 998_700,
+        grossSalesCents: 1_424_056_00,
+        taxDueCents: 93_924_00,
+        totalCreditsCents: 83_937_00,
         taxPayableCents: 0,
+        isOverpayment: true,
+        overpaymentCents: 9_987_00,
         yearEndCreditElection: null,
       }),
     );
-    expect(message.body).toContain("This return shows an overpayment of ₱9,987.00");
-    expect(message.body).toContain("I'll confirm with you how you'd like this applied");
-    expect(message.body).not.toMatch(/refunded to you\.|Tax Credit Certificate\.|carried over and applied/);
+    expect(message.body).toContain("Here's the computation for your 1701A 2026 return:");
+    expect(message.body).toContain("Overpayment: ₱9,987.00");
+    expect(message.body).toContain("I'll get in touch with you about how the overpayment will be applied.");
+    expect(message.body).not.toMatch(/refunded to you|Tax Credit Certificate|carried over to next year's return/);
   });
 
-  it("annual overpayment with yearEndCreditElection already set: uses it instead of asking", () => {
+  it("annual overpayment with yearEndCreditElection CARRY_OVER: states it directly instead of asking", () => {
     const message = buildClientTaxAdviceMessage(
       baseInput({
         period: "ANNUAL",
         formType: "F1701A",
         isOverpayment: true,
-        overpaymentCents: 998_700,
+        overpaymentCents: 9_987_00,
         taxPayableCents: 0,
         yearEndCreditElection: "CARRY_OVER",
       }),
     );
-    expect(message.body).toContain("This will be carried over and applied to next year's return.");
-    expect(message.body).not.toContain("I'll confirm with you how you'd like this applied");
+    expect(message.body).toContain("The overpayment will be carried over to next year's return.");
+    expect(message.body).not.toContain("I'll get in touch with you");
   });
 
-  it("annual overpayment with NA election: still asks, same as unset", () => {
+  it("annual overpayment with yearEndCreditElection REFUND", () => {
     const message = buildClientTaxAdviceMessage(
-      baseInput({
-        period: "ANNUAL",
-        formType: "F1701A",
-        isOverpayment: true,
-        overpaymentCents: 100_00,
-        taxPayableCents: 0,
-        yearEndCreditElection: "NA",
-      }),
+      baseInput({ period: "ANNUAL", formType: "F1701A", isOverpayment: true, overpaymentCents: 1_000_00, taxPayableCents: 0, yearEndCreditElection: "REFUND" }),
     );
-    expect(message.body).toContain("I'll confirm with you how you'd like this applied");
+    expect(message.body).toContain("The overpayment will be refunded to you.");
   });
 
-  it("includes the client's name, period, taxable year, gross sales, tax due, and total credits", () => {
+  it("annual overpayment with yearEndCreditElection TCC", () => {
+    const message = buildClientTaxAdviceMessage(
+      baseInput({ period: "ANNUAL", formType: "F1701A", isOverpayment: true, overpaymentCents: 1_000_00, taxPayableCents: 0, yearEndCreditElection: "TCC" }),
+    );
+    expect(message.body).toContain("The overpayment will be issued to you as a Tax Credit Certificate.");
+  });
+
+  it("annual overpayment with yearEndCreditElection NA: still asks, same as unset", () => {
+    const message = buildClientTaxAdviceMessage(
+      baseInput({ period: "ANNUAL", formType: "F1701A", isOverpayment: true, overpaymentCents: 1_000_00, taxPayableCents: 0, yearEndCreditElection: "NA" }),
+    );
+    expect(message.body).toContain("I'll get in touch with you about how the overpayment will be applied.");
+  });
+
+  it("keeps the existing subject line format", () => {
     const message = buildClientTaxAdviceMessage(baseInput());
-    expect(message.body).toContain("Hi Juan,");
-    expect(message.body).toContain("Q2 2026");
-    expect(message.body).toContain("₱60,000.00");
-    expect(message.body).toContain("₱6,400.00");
-    expect(message.body).toContain("₱5,250.00");
+    expect(message.subject).toBe("Maria Santos — 1701Q Q3 2026 computation");
   });
 });

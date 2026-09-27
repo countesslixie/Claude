@@ -188,7 +188,7 @@ export function computeQuarterlyForm(input: QuarterlyFormComputationInput): Quar
   const item56PriorPeriodPaymentsCents = input.priorPeriodPaymentsCents;
   const item57CwtPriorQuartersCents = input.cwtPriorQuartersCents;
   const item58CwtThisQuarterCents = input.cwtThisQuarterCents;
-  const item61OtherCreditsCents = 0;
+  const item61OtherCreditsCents = input.otherCreditsCents;
   const item62TotalCreditsCents = roundToWholePesoCents(
     item55PriorYearExcessCreditCents +
       item56PriorPeriodPaymentsCents +
@@ -221,7 +221,7 @@ export function computeQuarterlyForm(input: QuarterlyFormComputationInput): Quar
     { label: "56. Tax Payment/s for the Previous Quarter/s", amountCents: item56PriorPeriodPaymentsCents, sourceNote: "Amounts actually remitted on earlier returns this taxable year" },
     { label: "57. Creditable Tax Withheld for the Previous Quarter/s", amountCents: item57CwtPriorQuartersCents, sourceNote: "Certificates claimed on earlier filings of this taxable year" },
     { label: "58. Creditable Tax Withheld per BIR Form No. 2307 for this Quarter", amountCents: item58CwtThisQuarterCents, sourceNote: "Certificates claimed on this filing" },
-    { label: "61. Other Tax Credits/Payments", amountCents: item61OtherCreditsCents, sourceNote: "Not used" },
+    { label: "61. Other Tax Credits/Payments", amountCents: item61OtherCreditsCents, sourceNote: "As entered for this taxable year" },
     { label: "62. Total Tax Credits/Payments", amountCents: item62TotalCreditsCents, sourceNote: "55 + 56 + 57 + 58 + 61, rounded to the whole peso" },
     {
       label: "63. Tax Payable/(Overpayment)",
@@ -260,10 +260,11 @@ export function computeQuarterlyForm(input: QuarterlyFormComputationInput): Quar
  * 1701 sheet is built). Item 47 is the rounded FULL-YEAR gross — not the
  * sum of the quarters' own rounded item 49s (the form does not chain
  * quarterly figures the way 1701Q's item 50/51 do). Items 47, 52, 57, 58,
- * 59 and 60 are rounded to the whole peso first; 49, 53, 55, 56, 64 and 65
- * are then computed from those already-whole figures (56 is rounded again
- * after the × 8%, since multiplying two whole numbers by a rate can still
- * produce a fraction of a peso).
+ * 59, 60 and 63 (brief #5e §8 — "Other Tax Credits/Payments," now typed
+ * rather than always 0) are rounded to the whole peso first; 49, 53, 55,
+ * 56, 64 and 65 are then computed from those already-whole figures (56 is
+ * rounded again after the × 8%, since multiplying two whole numbers by a
+ * rate can still produce a fraction of a peso).
  */
 export function computeAnnualForm(input: AnnualFormComputationInput): AnnualFormComputationResult {
   const item47GrossSalesCents = roundToWholePesoCents(input.fullYearGrossSalesCents);
@@ -283,7 +284,7 @@ export function computeAnnualForm(input: AnnualFormComputationInput): AnnualForm
   const item58PriorPeriodPaymentsCents = roundToWholePesoCents(input.priorPeriodPaymentsQ1ToQ3Cents);
   const item59CwtQ1ToQ3Cents = roundToWholePesoCents(input.cwtQ1ToQ3Cents);
   const item60CwtQ4Cents = roundToWholePesoCents(input.cwtQ4Cents);
-  const item63OtherCreditsCents = 0;
+  const item63OtherCreditsCents = roundToWholePesoCents(input.otherCreditsCents);
   const item64TotalCreditsCents = roundToWholePesoCents(
     item57PriorYearExcessCreditCents +
       item58PriorPeriodPaymentsCents +
@@ -309,7 +310,7 @@ export function computeAnnualForm(input: AnnualFormComputationInput): AnnualForm
     { label: "58. Tax Payments for the First Three (3) Quarters", amountCents: item58PriorPeriodPaymentsCents, sourceNote: "Amounts actually remitted on this year's Q1-Q3 returns, rounded to the whole peso" },
     { label: "59. Creditable Tax Withheld for the First Three (3) Quarters", amountCents: item59CwtQ1ToQ3Cents, sourceNote: "Certificates claimed on this year's Q1-Q3 filings, rounded to the whole peso" },
     { label: "60. Creditable Tax Withheld per BIR Form No. 2307 for the 4th Quarter", amountCents: item60CwtQ4Cents, sourceNote: "Certificates claimed on the Annual filing itself, rounded to the whole peso" },
-    { label: "63. Other Tax Credits/Payments", amountCents: item63OtherCreditsCents, sourceNote: "Not used" },
+    { label: "63. Other Tax Credits/Payments", amountCents: item63OtherCreditsCents, sourceNote: "As entered for this taxable year, rounded to the whole peso" },
     { label: "64. Total Tax Credits/Payments", amountCents: item64TotalCreditsCents, sourceNote: "57 + 58 + 59 + 60 + 63" },
     {
       label: "65. Net Tax Payable/(Overpayment)",

@@ -17,6 +17,7 @@ describe("1701A form-check — PURELY_SELF_EMPLOYED, annual figures", () => {
       priorPeriodPaymentsQ1ToQ3Cents: 1_273_400, // 12,734.00
       cwtQ1ToQ3Cents: 5_455_600, // 54,556.00
       cwtQ4Cents: 1_664_700, // 16,647.00
+      otherCreditsCents: 0,
     });
 
     expect(result.item53TotalTaxableIncomeCents).toBe(142_405_600); // 1,424,056.00

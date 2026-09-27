@@ -62,6 +62,7 @@ function quarterlyBaseInput(overrides: Partial<QuarterlyFormComputationInput>): 
     priorPeriodPaymentsCents: 0,
     cwtPriorQuartersCents: 0,
     cwtThisQuarterCents: 0,
+    otherCreditsCents: 0,
     ...overrides,
   };
 }
@@ -76,6 +77,7 @@ function annualBaseInput(overrides: Partial<AnnualFormComputationInput>): Annual
     priorPeriodPaymentsQ1ToQ3Cents: 0,
     cwtQ1ToQ3Cents: 0,
     cwtQ4Cents: 0,
+    otherCreditsCents: 0,
     ...overrides,
   };
 }

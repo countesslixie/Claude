@@ -4,9 +4,11 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { clientTaxYearSchema } from "@/lib/validation/clientTaxYear";
+import { yearLevelCreditsSchema } from "@/lib/validation/yearLevelCredits";
 import { getActorId } from "@/lib/actor";
 import { logActivity } from "@/lib/activityLog";
 import { pesosToCents } from "@/lib/money";
+import { reopenPreparedFiling } from "@/lib/actions/workflowSteps";
 
 export type ClientTaxYearFormState = {
   error?: string;
@@ -132,4 +134,101 @@ export async function updateClientTaxYear(
 
   revalidatePath(`/clients/${before.clientId}`);
   redirect(`/clients/${before.clientId}`);
+}
+
+export type YearLevelCreditsFormState = {
+  error?: string;
+  fieldErrors?: Record<string, string[]>;
+  values?: Record<string, string>;
+  saved?: boolean;
+};
+
+const YEAR_LEVEL_CREDITS_FIELDS = ["priorYearExcessCredit", "otherCredits", "otherCreditsDescription"] as const;
+
+function yearLevelCreditsFromFormData(formData: FormData): Record<string, string> {
+  const values: Record<string, string> = {};
+  for (const key of YEAR_LEVEL_CREDITS_FIELDS) {
+    const v = formData.get(key);
+    values[key] = typeof v === "string" ? v : "";
+  }
+  return values;
+}
+
+/**
+ * Brief #5e §8 — items 55/57 (prior-year excess credit) and 61/63 (other
+ * tax credits/payments) edited inline from a filing's computation sheet.
+ * Both are single client-year figures (ClientTaxYear), so this writes the
+ * shared row, not anything scoped to `filingId` — but `filingId` names
+ * WHICH filing's sheet the edit came from, and its own step 3
+ * (PREPARE_RETURN) must not be Done, or the edit is refused server-side
+ * (the sheet shows these fields read-only once step 3 is Done, but that's
+ * only the client-side half of the rule).
+ *
+ * A change to either figure reopens steps 3/4 on every OTHER unfiled
+ * filing of this same taxable year whose own step 3 is already Done
+ * (brief #5d §6's reopening rule, extended by #5e §8) — reopenPreparedFiling
+ * already no-ops for a filing that's filed or whose step 3 isn't Done, so
+ * calling it for every filing of the year (including this one, where it's
+ * always a no-op since the guard above just proved step 3 isn't Done) is
+ * both correct and simple. Filed filings keep their frozen snapshot
+ * untouched, same as every other reopening trigger.
+ */
+export async function updateYearLevelCredits(
+  clientId: string,
+  taxableYear: number,
+  filingId: string,
+  _prevState: YearLevelCreditsFormState,
+  formData: FormData,
+): Promise<YearLevelCreditsFormState> {
+  const values = yearLevelCreditsFromFormData(formData);
+  const parsed = yearLevelCreditsSchema.safeParse(values);
+  if (!parsed.success) {
+    return { fieldErrors: parsed.error.flatten().fieldErrors, values };
+  }
+
+  const step3 = await prisma.workflowStep.findFirst({ where: { filingId, stepCode: "PREPARE_RETURN" } });
+  if (step3?.status === "DONE") {
+    return { error: "This filing's return is already prepared — reopen step 3 to edit these figures.", values };
+  }
+
+  const existing = await prisma.clientTaxYear.findUnique({
+    where: { clientId_taxableYear: { clientId, taxableYear } },
+  });
+  if (!existing) {
+    return { error: "No tax-year record exists yet for this client and year — add one in the client's tax years first.", values };
+  }
+
+  const priorYearExcessCreditCents = pesosToCents(parsed.data.priorYearExcessCredit);
+  const otherCreditsCents = pesosToCents(parsed.data.otherCredits);
+  const otherCreditsDescription = parsed.data.otherCreditsDescription || null;
+
+  const changed =
+    existing.priorYearExcessCreditCents !== priorYearExcessCreditCents ||
+    existing.otherCreditsCents !== otherCreditsCents ||
+    existing.otherCreditsDescription !== otherCreditsDescription;
+
+  const actorId = await getActorId();
+  const updated = await prisma.clientTaxYear.update({
+    where: { id: existing.id },
+    data: { priorYearExcessCreditCents, otherCreditsCents, otherCreditsDescription, actorId },
+  });
+
+  await logActivity({
+    entityType: "ClientTaxYear",
+    entityId: existing.id,
+    action: "UPDATE",
+    before: existing,
+    after: updated,
+    actorId,
+  });
+
+  if (changed) {
+    const filings = await prisma.filing.findMany({ where: { clientId, taxableYear, deletedAt: null } });
+    for (const f of filings) {
+      await reopenPreparedFiling(f.id);
+    }
+  }
+
+  revalidatePath(`/clients/${clientId}/filings/${filingId}`);
+  return { saved: true, values };
 }

@@ -9,8 +9,9 @@ import { isElectionBlocked } from "@/lib/workflow/election";
 import { ensureComputationSheetSaved } from "@/lib/documents/computationSheet";
 import { missingRequiredSlots, checkSendClientPackageReadiness } from "@/lib/workflow/docSlots";
 import { parseDocSlots } from "@/lib/workflow/types";
-import { WORKFLOW_GROUPS, prepareGroupBlockReason } from "@/lib/workflow/groups";
+import { WORKFLOW_GROUPS, prepareGroupBlockReason, adviseClientBlockReason } from "@/lib/workflow/groups";
 import { isResolved } from "@/lib/workflow/status";
+import { buildLiveAdviceMessageForFiling } from "@/lib/workflow/adviceMessage";
 
 export type StepActionResult = { ok: boolean; error?: string };
 
@@ -80,6 +81,17 @@ export async function markStepDone(stepId: string): Promise<StepActionResult> {
     if (reason) return { ok: false, error: reason };
   }
 
+  // Brief #5e §1 — step 4 (ADVISE_CLIENT) requires step 3 (PREPARE_RETURN)
+  // to be Done first, enforced here so it can't be bypassed by calling
+  // this action directly (the same reasoning as step 3's own check above).
+  // markGroupDone below calls this per-step in ascending sequence order,
+  // so it naturally resolves step 3 before attempting step 4 and never
+  // bypasses this rule.
+  if (step.stepCode === "ADVISE_CLIENT") {
+    const reason = adviseClientBlockReason(step.filing.workflowSteps);
+    if (reason) return { ok: false, error: reason };
+  }
+
   // Step 13 -> 14 (D29) — the one genuine sequencing dependency in the
   // workflow. Every other waiting step (notably RECEIVE_TRRC and
   // SAWT_VALIDATION itself) blocks nothing downstream.
@@ -128,6 +140,25 @@ export async function markStepDone(stepId: string): Promise<StepActionResult> {
   await logActivity({ entityType: "WorkflowStep", entityId: stepId, action: "UPDATE", before, after: updated, actorId });
   await recomputeFilingStatus(step.filingId, actorId);
   if (step.stepCode === "PREPARE_RETURN") await ensureComputationSheetSaved(step.filingId);
+
+  // Brief #5e §3 — the message is saved exactly as sent at the moment
+  // step 4 is marked Done, not rebuilt live afterward. If reopening later
+  // clears it (see reopenPreparedFiling below), marking step 4 done again
+  // rebuilds it fresh from whatever the figures are by then.
+  if (step.stepCode === "ADVISE_CLIENT") {
+    const message = await buildLiveAdviceMessageForFiling(step.filingId);
+    if (message) {
+      await prisma.filing.update({
+        where: { id: step.filingId },
+        data: {
+          adviceMessageSubject: message.subject,
+          adviceMessageBody: message.body,
+          adviceMessageSavedAt: new Date(),
+        },
+      });
+    }
+  }
+
   revalidatePath(`/clients/${step.filing.clientId}/filings/${step.filingId}`);
   revalidatePath("/filings");
 
@@ -185,6 +216,17 @@ export async function reopenPreparedFiling(filingId: string): Promise<void> {
       before: adviseClientStep,
       after: updatedAdvise,
       actorId,
+    });
+  }
+
+  // Brief #5e §3 — clear the saved message along with reopening step 4:
+  // it was sent for figures that no longer hold, so the card must show a
+  // freshly-rebuilt live preview, not the stale saved text, until step 4
+  // is marked Done again.
+  if (filing.adviceMessageSavedAt != null) {
+    await prisma.filing.update({
+      where: { id: filingId },
+      data: { adviceMessageSubject: null, adviceMessageBody: null, adviceMessageSavedAt: null, actorId },
     });
   }
 

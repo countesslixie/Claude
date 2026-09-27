@@ -53,6 +53,7 @@ describe("real filing regression — TY2026 Q1, PURELY_SELF_EMPLOYED, form figur
       priorPeriodPaymentsCents: 0,
       cwtPriorQuartersCents: 0,
       cwtThisQuarterCents,
+      otherCreditsCents: 0,
     });
 
     expect(result.item47GrossSalesCents).toBe(33_293_390); // 332,933.90

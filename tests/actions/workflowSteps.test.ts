@@ -204,8 +204,9 @@ describe("workflow step actions", () => {
 
       // RECORD_SALES and RECEIVE_2307 resolved first -- brief #4c requires
       // both before PREPARE_RETURN (step 3) can be marked done, same as
-      // Prepare's own group-level "Mark done".
-      for (const stepCode of ["RECORD_SALES", "RECEIVE_2307", "ADVISE_CLIENT", "FILE_RETURN", "MAKE_PAYMENT", "PREPARE_RETURN"]) {
+      // Prepare's own group-level "Mark done". PREPARE_RETURN must in turn
+      // precede ADVISE_CLIENT (brief #5e §1).
+      for (const stepCode of ["RECORD_SALES", "RECEIVE_2307", "PREPARE_RETURN", "ADVISE_CLIENT", "FILE_RETURN", "MAKE_PAYMENT"]) {
         const step = await prisma.workflowStep.findFirstOrThrow({ where: { filingId: filing.id, stepCode } });
         const result = await markStepDone(step.id);
         expect(result.ok).toBe(true);
@@ -324,14 +325,81 @@ describe("workflow step actions", () => {
       const nowAllowed = await markStepDone(prepareReturnStep.id);
       expect(nowAllowed.ok).toBe(true);
 
-      // Step 4 (ADVISE_CLIENT) is unaffected by this rule -- markable
-      // done directly even with steps 1/2 left untouched.
-      const { filing: otherFiling } = await makeClientWithQ2Filing("p4c-step4-unaffected");
-      const adviseStep = await prisma.workflowStep.findFirstOrThrow({
-        where: { filingId: otherFiling.id, stepCode: "ADVISE_CLIENT" },
-      });
-      const step4Result = await markStepDone(adviseStep.id);
+      // Brief #5e §1 -- step 4 (ADVISE_CLIENT) is now blocked until step 3
+      // is Done (superseding brief #4c's "step 4 is never gated" note,
+      // which was itself the bug brief #5e §1 fixes). Here step 3 is
+      // already Done (above), so step 4 succeeds.
+      const step4Result = await markStepDone(
+        (await prisma.workflowStep.findFirstOrThrow({ where: { filingId: filing.id, stepCode: "ADVISE_CLIENT" } })).id,
+      );
       expect(step4Result.ok).toBe(true);
+    });
+  });
+
+  describe("brief #5e §1: step 4 (ADVISE_CLIENT) requires step 3 (PREPARE_RETURN) to be Done first", () => {
+    it("regression: markStepDone on ADVISE_CLIENT directly is blocked while step 3 is still open, even with steps 1/2 resolved", async () => {
+      const { filing } = await makeClientWithQ2Filing("p5e-step4-gate-blocked");
+
+      // Resolve steps 1 and 2 so Prepare's own gate (brief #4c) isn't what's
+      // blocking this -- step 3 itself is deliberately left PENDING.
+      await markStepDone(
+        (await prisma.workflowStep.findFirstOrThrow({ where: { filingId: filing.id, stepCode: "RECORD_SALES" } })).id,
+      );
+      await skipStep(
+        (await prisma.workflowStep.findFirstOrThrow({ where: { filingId: filing.id, stepCode: "RECEIVE_2307" } })).id,
+        "No 2307s expected this quarter.",
+      );
+
+      const adviseStep = await prisma.workflowStep.findFirstOrThrow({
+        where: { filingId: filing.id, stepCode: "ADVISE_CLIENT" },
+      });
+      const blocked = await markStepDone(adviseStep.id);
+      expect(blocked.ok).toBe(false);
+      expect(blocked.error).toMatch(/step 3|prepared/i);
+
+      const stillPending = await prisma.workflowStep.findUniqueOrThrow({ where: { id: adviseStep.id } });
+      expect(stillPending.status).not.toBe("DONE");
+    });
+
+    it("unblocks once step 3 is Done", async () => {
+      const { filing } = await makeClientWithQ2Filing("p5e-step4-gate-unblocked");
+
+      await markStepDone(
+        (await prisma.workflowStep.findFirstOrThrow({ where: { filingId: filing.id, stepCode: "RECORD_SALES" } })).id,
+      );
+      await skipStep(
+        (await prisma.workflowStep.findFirstOrThrow({ where: { filingId: filing.id, stepCode: "RECEIVE_2307" } })).id,
+        "No 2307s expected this quarter.",
+      );
+      await markStepDone(
+        (await prisma.workflowStep.findFirstOrThrow({ where: { filingId: filing.id, stepCode: "PREPARE_RETURN" } })).id,
+      );
+
+      const adviseStep = await prisma.workflowStep.findFirstOrThrow({
+        where: { filingId: filing.id, stepCode: "ADVISE_CLIENT" },
+      });
+      const allowed = await markStepDone(adviseStep.id);
+      expect(allowed.ok).toBe(true);
+    });
+
+    it("markGroupDone processes Prepare's steps in order, so it never bypasses the gate", async () => {
+      const { filing } = await makeClientWithQ2Filing("p5e-step4-gate-group");
+
+      await markStepDone(
+        (await prisma.workflowStep.findFirstOrThrow({ where: { filingId: filing.id, stepCode: "RECORD_SALES" } })).id,
+      );
+      await skipStep(
+        (await prisma.workflowStep.findFirstOrThrow({ where: { filingId: filing.id, stepCode: "RECEIVE_2307" } })).id,
+        "No 2307s expected this quarter.",
+      );
+
+      const result = await markGroupDone(filing.id, "PREPARE");
+      expect(result.ok).toBe(true);
+
+      const step3 = await prisma.workflowStep.findFirstOrThrow({ where: { filingId: filing.id, stepCode: "PREPARE_RETURN" } });
+      const step4 = await prisma.workflowStep.findFirstOrThrow({ where: { filingId: filing.id, stepCode: "ADVISE_CLIENT" } });
+      expect(step3.status).toBe("DONE");
+      expect(step4.status).toBe("DONE");
     });
   });
 

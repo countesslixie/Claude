@@ -9,26 +9,29 @@ import {
 } from "@/lib/actions/filings";
 import { addCertificate } from "@/lib/actions/form2307";
 import { listActivePayors, createPayorInline, fillPayorDetail } from "@/lib/actions/payors";
+import { updateYearLevelCredits } from "@/lib/actions/clientTaxYears";
 import { StatusBadge } from "@/components/status-badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { CopyTextarea } from "@/components/copy-textarea";
+import { AdviceMessageCard } from "@/components/advice-message-card";
 import { WorkflowStepCard, type StepCardData } from "@/components/workflow-step-card";
 import { WorkflowGroupCard } from "@/components/workflow-group-card";
 import { RecordSalesStepCard } from "@/components/record-sales-step-card";
 import { Receive2307StepCard, type CertificateRow } from "@/components/receive-2307-step-card";
 import { NextActionControl } from "@/components/next-action-control";
 import { ComputationSheetPanel } from "@/components/computation-sheet-panel";
+import { YearLevelCreditsForm } from "@/components/year-level-credits-form";
 import { centsToPesos } from "@/lib/money";
 import { formatManilaDate, toManilaDateInputValue } from "@/lib/dates";
 import { deriveStepAging } from "@/lib/workflow/aging";
 import { countSkippedSteps, filingStatusLabel, currentStepCode } from "@/lib/workflow/status";
-import { WORKFLOW_GROUPS, currentGroupCode, summarizeGroup, prepareGroupBlockReason, type GroupStepInput } from "@/lib/workflow/groups";
+import { WORKFLOW_GROUPS, currentGroupCode, summarizeGroup, prepareGroupBlockReason, adviseClientBlockReason, type GroupStepInput } from "@/lib/workflow/groups";
 import { parseDocSlots, type DocSlotDef, type WorkflowStepStatus } from "@/lib/workflow/types";
 import { computeFilingCompleteness } from "@/lib/workflow/completeness";
 import { buildClientPackageEmail } from "@/lib/workflow/clientPackageEmail";
-import { buildClientTaxAdviceMessage } from "@/lib/workflow/clientTaxAdviceMessage";
+import { buildLiveAdviceMessageForFiling } from "@/lib/workflow/adviceMessage";
 import { ALL_PERIODS, ownSalesQuarterOf, periodToSingleQuarterCovered, quarterNumberDateRange } from "@/lib/tax/periods";
 import { extractFormSummary } from "@/lib/tax/compute";
 import type { FilingComputationResult } from "@/lib/tax/types";
@@ -216,9 +219,16 @@ export default async function FilingDetailPage({
   const prepareBlockReason = prepareGroupBlockReason(
     filing.workflowSteps.map((s) => ({ stepCode: s.stepCode, status: s.status })),
   );
+  // Brief #5e §1 — step 4's own "Mark done" needs the same step-3 gate
+  // markStepDone enforces server-side, so it can't be clicked while the
+  // return isn't prepared yet.
+  const adviseBlockReason = adviseClientBlockReason(
+    filing.workflowSteps.map((s) => ({ stepCode: s.stepCode, status: s.status })),
+  );
   const DEPENDENCY_REASON_BY_STEP_CODE: Record<string, string | null> = {
     SAWT_VALIDATION: validationDependencyReason,
     PREPARE_RETURN: prepareBlockReason,
+    ADVISE_CLIENT: adviseBlockReason,
   };
 
   const eafsStep = filing.workflowSteps.find((s) => s.stepCode === "EAFS_SUBMIT");
@@ -279,31 +289,24 @@ export default async function FilingDetailPage({
     nextPeriodDueDate: nextFiling?.adjustedDueDate ?? null,
   });
 
-  // Step 4's client advice message (brief #5d §8) — only once step 3's
-  // computation actually exists (a real sales figure recorded) and only
-  // for the two forms in scope; MIXED_INCOME's annual return (1701) has
-  // no sheet built, so it gets no message either.
+  // Year-level credits (brief #5e §8) still need this row for the
+  // computation-sheet form's initial values, independent of step 4.
   const clientTaxYear = await prisma.clientTaxYear.findUnique({
     where: { clientId_taxableYear: { clientId: filing.clientId, taxableYear: filing.taxableYear } },
   });
+
+  // Step 4's client advice message (brief #5d §8, wording/date brief #5e
+  // §9). Brief #5e §3 — once step 4 is Done, the message shown is the
+  // exact text saved at that moment (Filing.adviceMessageSubject/Body),
+  // never rebuilt from since-changed figures; while step 4 is still
+  // PENDING (including right after reopening clears the saved text), it's
+  // the live preview, built fresh from the current figures.
+  const adviseClientStep = filing.workflowSteps.find((s) => s.stepCode === "ADVISE_CLIENT");
+  const isAdviseClientDone = adviseClientStep?.status === "DONE";
   const adviceMessage =
-    hasSalesRecorded && (sheet.formType === "F1701Q" || sheet.formType === "F1701A")
-      ? buildClientTaxAdviceMessage({
-          clientRegisteredName: filing.client.registeredName,
-          clientFirstName,
-          period: filing.period,
-          taxableYear: filing.taxableYear,
-          formType: sheet.formType,
-          grossSalesCents: summaryFigures.grossSalesCents,
-          taxDueCents: summaryFigures.taxDueCents,
-          totalCreditsCents: summaryFigures.totalCreditsCents,
-          taxPayableCents: sheet.taxPayableCents,
-          isOverpayment: sheet.isOverpayment,
-          overpaymentCents: sheet.overpaymentCents,
-          adjustedDueDate: filing.adjustedDueDate,
-          yearEndCreditElection: clientTaxYear?.yearEndCreditElection,
-        })
-      : null;
+    isAdviseClientDone && filing.adviceMessageSubject && filing.adviceMessageBody
+      ? { subject: filing.adviceMessageSubject, body: filing.adviceMessageBody }
+      : await buildLiveAdviceMessageForFiling(filing.id);
 
   async function submitAmendmentAck(alertId: string, formData: FormData) {
     "use server";
@@ -316,34 +319,61 @@ export default async function FilingDetailPage({
     await dismissCompletenessNote(filingId);
   }
 
+  // Brief #5e §8 — items 55/57 and 61/63, edited inline from step 3's own
+  // card. Editable while THIS filing's step 3 isn't Done yet; read-only
+  // once it is (server-enforced too, in updateYearLevelCredits). Not
+  // applicable to MIXED_INCOME's annual return (Form 1701, no sheet built).
+  const prepareReturnStepStatus = filing.workflowSteps.find((s) => s.stepCode === "PREPARE_RETURN")?.status;
+  const boundUpdateYearLevelCredits = updateYearLevelCredits.bind(null, filing.clientId, filing.taxableYear, filing.id);
+  const yearLevelCreditsExtra =
+    sheet.formType === "F1701Q" || sheet.formType === "F1701A" ? (
+      <YearLevelCreditsForm
+        action={boundUpdateYearLevelCredits}
+        readOnly={prepareReturnStepStatus === "DONE"}
+        initialValues={{
+          priorYearExcessCredit: centsToPesos(clientTaxYear?.priorYearExcessCreditCents ?? 0),
+          otherCredits: centsToPesos(clientTaxYear?.otherCreditsCents ?? 0),
+          otherCreditsDescription: clientTaxYear?.otherCreditsDescription ?? "",
+        }}
+      />
+    ) : null;
+
   // Brief #4d — step 3's "client confirmation" box (a yes/no
   // acknowledgement plus optional note) is removed, the bookkeeper's own
   // decision. Step 3 is now just the computation sheet preview.
   const prepareReturnExtra = (
-    <ComputationSheetPanel
-      breakdown={sheet.breakdown}
-      isOverpayment={sheet.isOverpayment}
-      overpaymentCents={sheet.overpaymentCents}
-      taxPayableCents={sheet.taxPayableCents}
-      formType={sheet.formType}
-      isFrozen={isFrozen}
-      hasSalesRecorded={hasSalesRecorded}
-      period={filing.period}
-      taxableYear={filing.taxableYear}
-      incomeHref={incomeHref}
-    />
+    <div className="flex flex-col gap-2">
+      <ComputationSheetPanel
+        breakdown={sheet.breakdown}
+        isOverpayment={sheet.isOverpayment}
+        overpaymentCents={sheet.overpaymentCents}
+        taxPayableCents={sheet.taxPayableCents}
+        formType={sheet.formType}
+        isFrozen={isFrozen}
+        hasSalesRecorded={hasSalesRecorded}
+        period={filing.period}
+        taxableYear={filing.taxableYear}
+        incomeHref={incomeHref}
+      />
+      {yearLevelCreditsExtra}
+    </div>
   );
 
   // Brief #5d §8 — step 4's copyable client advice message, modeled on
   // step 16's own draft below. No slot, blocks nothing (D27) — it just
   // sits inside step 4's card with a Copy button. Nothing renders until a
-  // computation actually exists (see `adviceMessage` above).
+  // computation actually exists (see `adviceMessage` above). Brief #5e §3
+  // — collapses to a summary line once Done, showing the saved text only
+  // on request.
   const adviseClientExtra = adviceMessage ? (
-    <div className="flex flex-col gap-1">
-      <p className="text-xs font-medium text-slate-600">Message to client</p>
-      <p className="text-xs text-slate-400">Subject: {adviceMessage.subject}</p>
-      <CopyTextarea defaultValue={adviceMessage.body} rows={8} />
-    </div>
+    <AdviceMessageCard
+      isDone={isAdviseClientDone}
+      savedAtLabel={filing.adviceMessageSavedAt ? formatManilaDate(filing.adviceMessageSavedAt) : null}
+      isOverpayment={sheet.isOverpayment}
+      amountLabel={centsToPesos(sheet.isOverpayment ? sheet.overpaymentCents : sheet.taxPayableCents, { withSymbol: true })}
+      subject={adviceMessage.subject}
+      body={adviceMessage.body}
+    />
   ) : (
     <p className="text-xs text-slate-400">No computation yet — complete step 3 first.</p>
   );
@@ -423,7 +453,7 @@ export default async function FilingDetailPage({
                 requiredDocSlots={nextStep.requiredDocSlots}
                 documents={nextStep.documents}
                 dependencyBlockedReason={DEPENDENCY_REASON_BY_STEP_CODE[nextStep.stepCode] ?? null}
-                hideStart={nextStep.stepCode === "ADVISE_CLIENT"}
+                hideStart={nextStep.stepCode === "ADVISE_CLIENT" || nextStep.stepCode === "PREPARE_RETURN"}
               />
             </div>
           ) : (
@@ -601,7 +631,13 @@ export default async function FilingDetailPage({
                       step={step}
                       extra={EXTRA_BY_STEP_CODE[step.stepCode]}
                       dependencyBlockedReason={DEPENDENCY_REASON_BY_STEP_CODE[step.stepCode] ?? null}
-                      controlsMode={step.stepCode === "ADVISE_CLIENT" ? "markDoneOnly" : "full"}
+                      controlsMode={
+                        step.stepCode === "ADVISE_CLIENT"
+                          ? "markDoneOnly"
+                          : step.stepCode === "PREPARE_RETURN"
+                            ? "noStart"
+                            : "full"
+                      }
                     />
                   );
                 })}

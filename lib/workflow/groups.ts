@@ -62,6 +62,18 @@ export function prepareGroupBlockReason(steps: { stepCode: string; status: Workf
 }
 
 /**
+ * Brief #5e §1 — step 4 (ADVISE_CLIENT) could be marked done while step 3
+ * (PREPARE_RETURN) was still open, advising the client with no computation
+ * behind it. Step 4 requires step 3 to be Done — not merely resolved,
+ * since a skipped/NA return would mean there's nothing to advise on.
+ */
+export function adviseClientBlockReason(steps: { stepCode: string; status: WorkflowStepStatus }[]): string | null {
+  const step3 = steps.find((s) => s.stepCode === "PREPARE_RETURN");
+  if (step3?.status === "DONE") return null;
+  return "Can't advise the client until the return is prepared (step 3).";
+}
+
+/**
  * The group a filing currently "sits at" for board/collapsed-summary
  * purposes: the earliest group (by group order, 1-5 — NOT by raw step
  * sequence, since group 2 isn't contiguous) with anything unresolved in

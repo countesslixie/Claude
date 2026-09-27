@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   eafsDueDate,
   shiftToNextBusinessDay,
+  shiftToPreviousBusinessDay,
+  clientPaymentDueDate,
   resolveStatutoryDueDate,
   resolveAdjustedDueDate,
   deriveWorkingCalendar,
@@ -215,5 +217,39 @@ describe("deriveWorkingCalendar", () => {
   it("ANNUAL: keeps a real buffer -- Feb 15 / Mar 31, ahead of the Apr 15 statutory/adjusted deadline, of the same year as the (following-year) statutory due date", () => {
     const result = deriveWorkingCalendar("ANNUAL", D("2027-04-15"), D("2027-04-15"));
     expect(result).toEqual({ certificatesExpectedBy: D("2027-02-15"), internalFilingTarget: D("2027-03-31") });
+  });
+});
+
+/**
+ * Brief #5e §9 -- the CLIENT-facing due date shown in step 4's advice
+ * message: adjustedDueDate minus TaxRuleSet.clientPaymentLeadDays calendar
+ * days, shifted EARLIER (never later) on a weekend/holiday. Display-only:
+ * never changes adjustedDueDate/internalFilingTarget themselves.
+ */
+describe("clientPaymentDueDate", () => {
+  it("Q3 2026: BIR due date Nov 16, 2026 minus 10 days -> Nov 6, 2026 (a Friday, no shift needed)", () => {
+    const result = clientPaymentDueDate(D("2026-11-16"), 10, []);
+    expect(result).toEqual(D("2026-11-06"));
+  });
+
+  it("a raw date landing on a Sunday moves back to the preceding Friday", () => {
+    // 2026-11-25 minus 10 days = 2026-11-15, a Sunday (the same Sunday
+    // Q3's own statutory due date falls on and shifts forward from).
+    const result = clientPaymentDueDate(D("2026-11-25"), 10, []);
+    expect(result).toEqual(D("2026-11-13")); // Sunday 15th -> Saturday 14th -> Friday 13th
+  });
+
+  it("a raw date landing on a seeded holiday moves back to the preceding working day", () => {
+    // 2026-04-19 minus 10 days = 2026-04-09, Araw ng Kagitingan (a real
+    // seeded national holiday, a Thursday) -> shifts back to Wednesday
+    // 2026-04-08, which is neither a weekend nor a holiday.
+    const result = clientPaymentDueDate(D("2026-04-19"), 10, [D("2026-04-09")]);
+    expect(result).toEqual(D("2026-04-08"));
+  });
+
+  it("never shifts later -- shiftToPreviousBusinessDay only ever moves a date backward", () => {
+    const result = shiftToPreviousBusinessDay(D("2026-11-15"), []); // a Sunday
+    expect(result.getTime()).toBeLessThanOrEqual(D("2026-11-15").getTime());
+    expect(result).toEqual(D("2026-11-13"));
   });
 });

@@ -17,9 +17,15 @@ import { markGroupDone } from "@/lib/actions/workflowSteps";
  * Brief #4e — `blockReason` no longer renders as standing text under the
  * header (the bookkeeper found the same sentence appearing here, under
  * a per-step button, and as a "Missing required documents" line all at
- * once, too noisy). It still disables "Mark done" and still explains
- * why, via that button's `title` tooltip. `outstandingLabel` is
- * unaffected — the short amber summary beside the group name stays.
+ * once, too noisy). It still explains why via a tooltip (D41).
+ * `outstandingLabel` is unaffected — the short amber summary beside the
+ * group name stays.
+ *
+ * Brief #5e §5 — a disabled "Mark done" read like a button she could
+ * press. The control now has three states: a non-clickable grey
+ * "Pending" label (with the block reason as its hover tooltip) while
+ * blocked, the ordinary clickable "Mark done" button once it can be
+ * finished, and the green "Done" pill once every step is resolved.
  */
 export function WorkflowGroupCard({
   filingId,
@@ -75,16 +81,16 @@ export function WorkflowGroupCard({
           )}
           <span className="ml-auto text-xs text-slate-500 underline">{isOpen ? "Collapse" : "Expand"}</span>
         </button>
-        {!isComplete && (
-          <Button
-            size="sm"
-            disabled={isPending || !!blockReason}
-            title={blockReason ?? undefined}
-            onClick={handleMarkDone}
-          >
-            Mark done
-          </Button>
-        )}
+        {!isComplete &&
+          (blockReason ? (
+            <span title={blockReason}>
+              <StatusBadge tone="pending">Pending</StatusBadge>
+            </span>
+          ) : (
+            <Button size="sm" disabled={isPending} onClick={handleMarkDone}>
+              Mark done
+            </Button>
+          ))}
       </div>
 
       {message && <p className="px-3 pb-2 text-xs text-amber-700">{message}</p>}

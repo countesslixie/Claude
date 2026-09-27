@@ -47,6 +47,34 @@ export function shiftToNextBusinessDay(date: Date, holidays: readonly Date[]): D
   return current;
 }
 
+/**
+ * The mirror of shiftToNextBusinessDay, shifting backward instead: used
+ * where a date must never fall LATER than intended (brief #5e §9 — the
+ * client-facing payment date in step 4's advice message, which must
+ * never slip past the real BIR deadline).
+ */
+export function shiftToPreviousBusinessDay(date: Date, holidays: readonly Date[]): Date {
+  const holidayManilaDays = new Set(holidays.map(manilaCalendarDay));
+  let current = toManilaMidnightUtc(date);
+  while (isWeekend(current) || holidayManilaDays.has(manilaCalendarDay(current))) {
+    current = addDays(current, -1);
+  }
+  return current;
+}
+
+/**
+ * Brief #5e §9 — the date shown to the CLIENT in step 4's advice message:
+ * `clientPaymentLeadDays` calendar days (TaxRuleSet, locked rule #5,
+ * default 10 — never a literal in code) before the filing's own adjusted
+ * (business-day-shifted) BIR due date, itself shifted EARLIER — never
+ * later — if that lands on a weekend or a holiday in the Holiday table.
+ * Display-only: it never changes adjustedDueDate or internalFilingTarget.
+ */
+export function clientPaymentDueDate(adjustedDueDate: Date, leadDays: number, holidays: readonly Date[]): Date {
+  const raw = addDays(adjustedDueDate, -leadDays);
+  return shiftToPreviousBusinessDay(raw, holidays);
+}
+
 /** The UTC-midnight instant representing `date`'s Asia/Manila calendar day. */
 function toManilaMidnightUtc(date: Date): Date {
   const manila = DateTime.fromJSDate(date).setZone(MANILA_ZONE);

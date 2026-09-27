@@ -31,6 +31,21 @@ export function formatManilaDate(value: Date | string | null | undefined): strin
 }
 
 /**
+ * Same as formatManilaDate, but with the full month name, e.g.
+ * "November 6, 2026" — used where a date is written out to the client
+ * (brief #5e §9's advice message), never for the app's own internal
+ * displays.
+ */
+export function formatManilaDateLong(value: Date | string | null | undefined): string {
+  if (!value) return "—";
+  const dt =
+    typeof value === "string"
+      ? DateTime.fromISO(value, { zone: "utc" }).setZone(MANILA_ZONE)
+      : DateTime.fromJSDate(value, { zone: "utc" }).setZone(MANILA_ZONE);
+  return dt.isValid ? dt.toFormat("MMMM d, yyyy") : "—";
+}
+
+/**
  * The Asia/Manila calendar day a stored instant falls on, as "yyyy-MM-dd"
  * -- for comparing two dates by calendar day rather than raw instant. Two
  * Dates that fall on the same Manila day but carry different times-of-day

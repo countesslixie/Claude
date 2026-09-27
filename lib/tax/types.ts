@@ -119,6 +119,13 @@ export interface QuarterlyFormComputationInput {
   cwtPriorQuartersCents: number;
   /** Item 58 — certificates claimed on this filing, unrounded. */
   cwtThisQuarterCents: number;
+  /**
+   * Item 61 — "Other Tax Credits/Payments," the form's "(specify)" box
+   * (brief #5e §8). One figure per client-year (ClientTaxYear.otherCreditsCents),
+   * unrounded — same treatment as items 55-58 above; only their sum
+   * (item 62) rounds.
+   */
+  otherCreditsCents: number;
 }
 
 export interface QuarterlyFormComputationResult {
@@ -135,7 +142,7 @@ export interface QuarterlyFormComputationResult {
   item56PriorPeriodPaymentsCents: number;
   item57CwtPriorQuartersCents: number;
   item58CwtThisQuarterCents: number;
-  /** Item 61 — always 0, shown with no input field. */
+  /** Item 61 — "Other Tax Credits/Payments," typed (brief #5e §8; was always 0 under brief #5d). */
   item61OtherCreditsCents: number;
   item62TotalCreditsCents: number;
   /** Item 63 — 0 when the filing is an overpayment instead. */
@@ -168,6 +175,12 @@ export interface AnnualFormComputationInput {
   cwtQ1ToQ3Cents: number;
   /** Item 60 input — certificates claimed on the ANNUAL filing itself, unrounded. */
   cwtQ4Cents: number;
+  /**
+   * Item 63 input — "Other Tax Credits/Payments," the form's "(specify)"
+   * box (brief #5e §8; ClientTaxYear.otherCreditsCents), unrounded —
+   * rounded individually like items 57-60, before summing into item 64.
+   */
+  otherCreditsCents: number;
 }
 
 export interface AnnualFormComputationResult {
@@ -185,7 +198,7 @@ export interface AnnualFormComputationResult {
   item58PriorPeriodPaymentsCents: number;
   item59CwtQ1ToQ3Cents: number;
   item60CwtQ4Cents: number;
-  /** Item 63 — always 0, shown with no input field. */
+  /** Item 63 — "Other Tax Credits/Payments," typed and rounded (brief #5e §8; was always 0 under brief #5d). */
   item63OtherCreditsCents: number;
   item64TotalCreditsCents: number;
   /** Item 65 — 0 when the filing is an overpayment instead. */

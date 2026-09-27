@@ -10,6 +10,7 @@ import { deleteCertificate, type CertificateFormState } from "@/lib/actions/form
 import { skipStep } from "@/lib/actions/workflowSteps";
 import { uploadDocument } from "@/lib/actions/documents";
 import { centsToPesos, bpsToPercentLabel } from "@/lib/money";
+import { formatManilaDate, manilaDateInputToJsDate } from "@/lib/dates";
 import type { SavedPayor } from "@/lib/actions/payors";
 import type { SelectableAtcCode } from "@/components/atc-code-select";
 
@@ -107,6 +108,12 @@ export function Receive2307StepCard({
   const [showAddForm, setShowAddForm] = useState(false);
   const [openMore, setOpenMore] = useState<Set<string>>(new Set());
   const [openScanUpload, setOpenScanUpload] = useState<Set<string>>(new Set());
+  // Brief #5e §7 — per-certificate feedback for a scan upload/replace: an
+  // error shown beside that row's own picker (not the card's bottom
+  // banner, which is for the card's other actions), and a short
+  // confirmation note once a replace succeeds.
+  const [scanErrors, setScanErrors] = useState<Map<string, string>>(new Map());
+  const [replacedNotes, setReplacedNotes] = useState<Map<string, string>>(new Map());
 
   const isResolved = status === "DONE" || status === "SKIPPED";
   // Brief #5a — collapsed by default once resolved, the same "summary
@@ -130,14 +137,33 @@ export function Receive2307StepCard({
     setFn(next);
   }
 
-  function handleScanUpload(certId: string, formData: FormData) {
+  function handleScanUpload(certId: string, formData: FormData, isReplace: boolean) {
     formData.set("workflowStepId", stepId);
     formData.set("docSlotCode", "form2307_scan");
     formData.set("form2307Id", certId);
-    setMessage(null);
+    const documentDateValue = String(formData.get("documentDate") ?? "");
+    setScanErrors((prev) => {
+      const next = new Map(prev);
+      next.delete(certId);
+      return next;
+    });
     startTransition(async () => {
       const result = await uploadDocument(formData);
-      if (!result.ok) setMessage(result.error ?? "Upload failed.");
+      if (!result.ok) {
+        // Brief #5e §7 — on failure, keep the picker open with the error
+        // beside it, not just a generic banner at the bottom of the card.
+        setScanErrors((prev) => new Map(prev).set(certId, result.error ?? "Upload failed."));
+        return;
+      }
+      // Brief #5e §7 — on success: close the picker and date field, and
+      // show a short confirmation. The new file's name already appears as
+      // the row's scan link once `certificates` refreshes with the new
+      // server data (uploadDocument's revalidatePath).
+      toggleSet(openScanUpload, setOpenScanUpload, certId);
+      if (isReplace) {
+        const label = documentDateValue ? formatManilaDate(manilaDateInputToJsDate(documentDateValue)) : formatManilaDate(new Date());
+        setReplacedNotes((prev) => new Map(prev).set(certId, label));
+      }
     });
   }
 
@@ -219,6 +245,9 @@ export function Receive2307StepCard({
                 ) : (
                   <p className="mt-1 text-xs text-amber-700">Scan required for this row.</p>
                 )}
+                {replacedNotes.has(c.id) && (
+                  <p className="mt-0.5 text-xs text-emerald-700">Replaced {replacedNotes.get(c.id)}</p>
+                )}
                 {!locked && !openScanUpload.has(c.id) && (
                   <div className="mt-1 flex items-center gap-3">
                     <button
@@ -239,7 +268,10 @@ export function Receive2307StepCard({
                 )}
                 {!locked && openScanUpload.has(c.id) && (
                   <>
-                    <form action={(fd) => handleScanUpload(c.id, fd)} className="mt-1 flex items-center gap-1.5">
+                    <form
+                      action={(fd) => handleScanUpload(c.id, fd, c.scans.length > 0)}
+                      className="mt-1 flex items-center gap-1.5"
+                    >
                       <Input type="file" name="file" required className="h-8 text-xs" />
                       <Input
                         type="date"
@@ -257,6 +289,9 @@ export function Receive2307StepCard({
                       >
                         Cancel
                       </button>
+                      {scanErrors.has(c.id) && (
+                        <span className="text-xs text-red-600">{scanErrors.get(c.id)}</span>
+                      )}
                     </form>
                     <button
                       type="button"

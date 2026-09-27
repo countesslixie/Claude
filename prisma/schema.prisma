@@ -329,6 +329,14 @@ model ClientTaxYear {
   priorYearExcessCreditCents Int                   @default(0)
   yearEndCreditElection      YearEndCreditElection @default(NA)
 
+  // Brief #5e §8 — item 61 (1701Q) / item 63 (1701A), "Other Tax
+  // Credits/Payments" — the form's own "(specify)" box. One figure per
+  // client-year, same rule as priorYearExcessCreditCents above: the same
+  // full amount appears on every return of that year (locked rule #1,
+  // SPEC §16 item 7), never a lowered/used-up figure.
+  otherCreditsCents       Int     @default(0)
+  otherCreditsDescription String?
+
   thresholdBreachedAt DateTime?
 
   createdAt DateTime @default(now())
@@ -458,6 +466,15 @@ model Filing {
   // attached across the filing's steps. Amber, never blocking. Dismissing
   // it hides it on this filing; it does not reappear on its own.
   completenessNoteDismissedAt DateTime?
+
+  // Brief #5e §3 — step 4's client advice message, saved exactly as sent
+  // at the moment ADVISE_CLIENT is marked Done (lib/actions/workflowSteps.ts's
+  // markStepDone). Kept unchanged by any later edit; cleared when
+  // reopenPreparedFiling resets step 4 back to PENDING, so the card knows
+  // to show the live-rebuilt preview again instead of stale saved text.
+  adviceMessageSubject String?
+  adviceMessageBody    String?
+  adviceMessageSavedAt DateTime?
 
   notes String?
 
@@ -645,6 +662,12 @@ model TaxRuleSet {
 
   sawtDeadlineOffsetDays Int @default(0) // from return deadline
   eafsDeadlineOffsetDays Int @default(15) // from date of filing
+
+  // Brief #5e §9 — locked rule #5: the date shown to the CLIENT in step
+  // 4's advice message is this many calendar days before the filing's own
+  // adjusted BIR due date (shifted earlier on a weekend/holiday). Never a
+  // literal in code; display-only, changes no real deadline.
+  clientPaymentLeadDays Int @default(10)
 
   // Late filing exposure (informational only — see SPEC.md 3.7)
   surchargeRateBps          Int?
