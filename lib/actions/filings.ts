@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getActorId } from "@/lib/actor";
 import { logActivity } from "@/lib/activityLog";
 import { generateFilingsForClientYear } from "@/lib/workflow/filingGeneration";
-import { recomputeReceive2307Status } from "@/lib/actions/workflowSteps";
+import { recomputeReceive2307Status, reopenPreparedFiling } from "@/lib/actions/workflowSteps";
 
 export type GenerateFilingsResult =
   | { ok: true; createdCount: number; skippedCount: number }
@@ -92,6 +92,9 @@ export async function setAllCertificatesReceived(filingId: string, received: boo
   });
 
   await recomputeReceive2307Status(filingId);
+  // Brief #5d §6 — unticking "all received" reopens steps 3/4 if step 3
+  // was already Done (ticking it does not).
+  if (!received) await reopenPreparedFiling(filingId);
   revalidatePath(`/clients/${before.clientId}/filings/${filingId}`);
 }
 

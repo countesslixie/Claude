@@ -319,6 +319,8 @@ computeFiling(input: FilingComputationInput): FilingComputationResult
 
 ### Worked examples — implement these as passing tests
 
+> **Brief #5d, 2026-09-27 — whole-peso rounding.** The 8% computation now follows the BIR form's own line items and rounds half-up to the whole peso at the items the form rounds (item 49/51/54/62/63 on 1701Q; item 47/52/56/57/58/59/60/64/65 on 1701A), not half-up to the centavo throughout as this section originally specified. Money is still stored as integer centavos (a rounded line is simply a multiple of 100); only Example E's figures below actually change under this — the others were already round numbers.
+
 **Example A — purely self-employed, 8%, all receipts subject to 5% CWT, TY2026**
 
 | Period | Period receipts | Cumulative | Less ₱250K | × 8% | Cum. CWT | Prior payments | Payable |
@@ -336,7 +338,7 @@ Note how the Q1 overpayment is absorbed automatically by the cumulative mechanis
 
 **Example D — non-operating income.** Gross receipts ₱2,000,000 + non-operating ₱100,000 → both enter the base; assert cumulative gross ₱2,100,000.
 
-**Example E — rounding.** Gross ₱333,333.33 → base ₱83,333.33 → tax ₱6,666.67. Assert half-up rounding to the centavo and that no floating-point drift appears across four cumulative periods.
+**Example E — rounding.** Gross ₱333,333.33 → item 49 ₱333,333.00 → base (item 53) ₱83,333.00 → tax due (item 54) **₱6,667.00** (brief #5d — was ₱6,666.67 under the old centavo rounding). Assert half-up rounding to the whole peso and that no floating-point drift appears across four cumulative periods, and that a quarter's cumulative income (item 51) is always the sum of each quarter's own separately-rounded item 49, never a rounded raw multi-quarter total.
 
 ---
 

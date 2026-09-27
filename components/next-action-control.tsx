@@ -28,12 +28,15 @@ export function NextActionControl({
   requiredDocSlots,
   documents,
   dependencyBlockedReason = null,
+  hideStart = false,
 }: {
   stepId: string;
   status: string;
   requiredDocSlots: DocSlotLike[];
   documents: AttachedDocument[];
   dependencyBlockedReason?: string | null;
+  /** Brief #5d §7 — step 4 (ADVISE_CLIENT) has no Start control; only Mark done remains. */
+  hideStart?: boolean;
 }) {
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
@@ -51,7 +54,7 @@ export function NextActionControl({
   return (
     <div className="flex flex-col gap-1">
       <div className="flex flex-wrap items-center gap-1.5">
-        {status === "PENDING" && (
+        {status === "PENDING" && !hideStart && (
           <Button size="sm" disabled={isPending} onClick={() => run(() => markStepInProgress(stepId))}>
             Start
           </Button>

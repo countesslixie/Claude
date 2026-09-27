@@ -335,6 +335,22 @@ describe("workflow step actions", () => {
     });
   });
 
+  describe("brief #5d §7: step 4 (ADVISE_CLIENT) is no longer a waiting step", () => {
+    it("markStepWaitingExternal is refused server-side for step 4", async () => {
+      const { filing } = await makeClientWithQ2Filing("p5d-step4-no-waiting");
+      const adviseStep = await prisma.workflowStep.findFirstOrThrow({
+        where: { filingId: filing.id, stepCode: "ADVISE_CLIENT" },
+      });
+      expect(adviseStep.isWaitingState).toBe(false);
+
+      const result = await markStepWaitingExternal(adviseStep.id);
+      expect(result.ok).toBe(false);
+
+      const unchanged = await prisma.workflowStep.findUniqueOrThrow({ where: { id: adviseStep.id } });
+      expect(unchanged.status).not.toBe("WAITING_EXTERNAL");
+    });
+  });
+
   describe("brief #4a/#4b: markGroupDone", () => {
     it("brief #4b -- Prepare's Mark done is blocked until steps 1 and 2 are resolved", async () => {
       const { filing } = await makeClientWithQ2Filing("p4-group-prepare-blocked");

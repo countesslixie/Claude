@@ -9,7 +9,7 @@ import { pesosToCents, centsToPesos } from "@/lib/money";
 import { formatManilaDate } from "@/lib/dates";
 import { checkAndRecordAmendments } from "@/lib/filingComputation";
 import { salesQuarterEndDate, filingPeriodForSalesQuarter } from "@/lib/tax/periods";
-import { markStepDone, markStepWaitingExternal } from "@/lib/actions/workflowSteps";
+import { markStepDone, markStepWaitingExternal, reopenPreparedFiling } from "@/lib/actions/workflowSteps";
 import type { SalesQuarter } from "@/lib/tax/types";
 
 export type QuarterlySalesFormState = {
@@ -118,6 +118,29 @@ export async function saveQuarterlySales(
   const existing = await prisma.quarterlySales.findUnique({
     where: { clientId_taxableYear_quarter: { clientId, taxableYear, quarter } },
   });
+  const existingCustomers = existing
+    ? await prisma.quarterlySalesCustomer.findMany({ where: { quarterlySalesId: existing.id } })
+    : [];
+
+  // Brief #5d §6 — a FINAL save only reopens steps 3/4 if the figures
+  // behind the computation actually changed: any payor row (name or
+  // amount), the non-operating income figure, or the no-sales flag. Notes
+  // aren't part of the computation, so a notes-only edit doesn't count.
+  const signature = (customers: { customerName: string; amountCents: number }[], nonOpCents: number, noSales: boolean) =>
+    JSON.stringify({
+      customers: customers.map((c) => `${c.customerName.trim()}::${c.amountCents}`).sort(),
+      nonOpCents,
+      noSales,
+    });
+  const oldSignature = existing
+    ? signature(existingCustomers, existing.nonOperatingIncomeCents, existing.noSalesThisQuarter)
+    : null;
+  const newSignature = signature(
+    parsed.data.noSalesThisQuarter ? [] : parsed.data.customers.map((c) => ({ customerName: c.customerName, amountCents: pesosToCents(c.amount) })),
+    nonOperatingIncomeCents,
+    parsed.data.noSalesThisQuarter,
+  );
+  const figuresChanged = oldSignature !== newSignature;
 
   const actorId = await getActorId();
   const now = new Date();
@@ -199,11 +222,18 @@ export async function saveQuarterlySales(
           }
         }
         finalizedStep1 = true;
+        // Brief #5d §6 — a final save that actually changed the figures
+        // behind the computation reopens steps 3/4 if step 3 was already
+        // Done (a no-op re-save doesn't).
+        if (figuresChanged) await reopenPreparedFiling(filing.id);
       } else if (step.status === "DONE") {
         // Brief #4d — saving as draft after Edit reverts a previously-
         // final quarter: step 1 goes back to "waiting on client" the
         // same way it reads before it's ever been saved final.
         await markStepWaitingExternal(step.id);
+        // Brief #5d §6 — a draft save already reopens step 1 (above); it
+        // now reopens steps 3/4 too, unconditionally (same as step 1).
+        await reopenPreparedFiling(filing.id);
       }
     }
   }

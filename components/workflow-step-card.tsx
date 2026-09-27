@@ -60,12 +60,15 @@ export function WorkflowStepCard({
   step,
   dependencyBlockedReason = null,
   extra,
+  controlsMode = "full",
 }: {
   step: StepCardData;
   /** A blocking reason from another step's state, e.g. step 13 -> 14 (D29). */
   dependencyBlockedReason?: string | null;
   /** Step-specific content rendered inside the card, above the doc slots (sales entry link, certificate cutoff, computation sheet, client package). */
   extra?: React.ReactNode;
+  /** Brief #5d §7 — step 4 (ADVISE_CLIENT) has no Start, Mark waiting, or Skip; only Mark done remains. */
+  controlsMode?: "full" | "markDoneOnly";
 }) {
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
@@ -120,7 +123,7 @@ export function WorkflowStepCard({
         <div>
           <p className="text-sm font-medium text-slate-900">
             {step.sequence}. {step.title}
-            {step.isWaitingState && step.waitingOnLabel && (
+            {step.status === "WAITING_EXTERNAL" && step.waitingOnLabel && (
               <span className="ml-1 text-xs font-normal text-slate-400">waiting on {step.waitingOnLabel}</span>
             )}
           </p>
@@ -272,17 +275,17 @@ export function WorkflowStepCard({
 
       {!isResolved && (
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
-          {step.status === "PENDING" && (
+          {controlsMode === "full" && step.status === "PENDING" && (
             <Button size="sm" variant="secondary" disabled={isPending} onClick={() => run(() => markStepInProgress(step.id))}>
               Start
             </Button>
           )}
-          {step.isWaitingState && step.status !== "WAITING_EXTERNAL" && (
+          {controlsMode === "full" && step.isWaitingState && step.status !== "WAITING_EXTERNAL" && (
             <Button size="sm" variant="secondary" disabled={isPending} onClick={() => run(() => markStepWaitingExternal(step.id))}>
               Mark waiting
             </Button>
           )}
-          {step.status === "WAITING_EXTERNAL" && (
+          {controlsMode === "full" && step.status === "WAITING_EXTERNAL" && (
             <Button size="sm" variant="secondary" disabled={isPending} onClick={() => run(() => logFollowUp(step.id))}>
               Log follow-up ({step.followUpCount})
             </Button>
@@ -295,20 +298,24 @@ export function WorkflowStepCard({
           >
             Mark done
           </Button>
-          <Input
-            placeholder="Skip reason"
-            value={skipReason}
-            onChange={(e) => setSkipReason(e.target.value)}
-            className="h-8 w-40 text-xs"
-          />
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={isPending || !skipReason.trim()}
-            onClick={() => run(() => skipStep(step.id, skipReason))}
-          >
-            Skip
-          </Button>
+          {controlsMode === "full" && (
+            <>
+              <Input
+                placeholder="Skip reason"
+                value={skipReason}
+                onChange={(e) => setSkipReason(e.target.value)}
+                className="h-8 w-40 text-xs"
+              />
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={isPending || !skipReason.trim()}
+                onClick={() => run(() => skipStep(step.id, skipReason))}
+              >
+                Skip
+              </Button>
+            </>
+          )}
         </div>
       )}
 

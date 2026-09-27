@@ -229,13 +229,16 @@ const WORKFLOW_STEP_TEMPLATE: Array<{
     // No slot at all (D27) — advising the client is an action the
     // bookkeeper performs elsewhere; asking her to prove it was rejected
     // outright ("No need for an email proof").
+    //
+    // Brief #5d §7 — not a waiting step: she sends the advice message
+    // (its own copyable draft, lib/workflow/clientTaxAdviceMessage.ts) and
+    // marks this done herself: no Start, no Mark waiting, no expected
+    // response clock. It was never actually something the client responds
+    // to in a way worth tracking.
     stepCode: "ADVISE_CLIENT",
     sequence: 4,
     title: "Advise client of tax payable",
     category: "CLIENT_COMM",
-    isWaitingState: true,
-    waitingOnLabel: "Client",
-    expectedResponseDays: 5,
     requiredDocSlots: [],
   },
   {
@@ -377,8 +380,16 @@ async function seedWorkflowStepTemplate() {
       isConditional: step.isConditional ?? false,
       conditionExpression: step.conditionExpression,
       isWaitingState: step.isWaitingState ?? false,
-      waitingOnLabel: step.waitingOnLabel,
-      expectedResponseDays: step.expectedResponseDays,
+      // Brief #5d — `?? null`, not a bare pass-through: an `undefined`
+      // value in a Prisma `update` means "leave whatever's already
+      // there," not "clear it" (unlike `create`, where it just omits the
+      // field). Reseeding ADVISE_CLIENT's now-removed waitingOnLabel/
+      // expectedResponseDays over an EXISTING database with `update:
+      // fields` would otherwise silently keep the stale "Client"/5 values
+      // forever — the same class of bug this file's own comment above
+      // already flags for `update: {}`.
+      waitingOnLabel: step.waitingOnLabel ?? null,
+      expectedResponseDays: step.expectedResponseDays ?? null,
       requiredDocSlots: JSON.stringify(step.requiredDocSlots),
     };
     await prisma.workflowStepTemplate.upsert({

@@ -9,7 +9,7 @@ import { manilaDateInputToJsDate } from "@/lib/dates";
 import { pesosToCents, percentToBps } from "@/lib/money";
 import { periodToSingleQuarterCovered } from "@/lib/tax/periods";
 import { recomputeRequiresSawt } from "@/lib/workflow/filingGeneration";
-import { recomputeReceive2307Status } from "@/lib/actions/workflowSteps";
+import { recomputeReceive2307Status, reopenPreparedFiling } from "@/lib/actions/workflowSteps";
 import { setAllCertificatesReceived } from "@/lib/actions/filings";
 import { saveDocumentForStep } from "@/lib/actions/documents";
 
@@ -171,6 +171,9 @@ export async function addCertificate(
   // saveDocumentForStep above already recomputed step 2's status (it
   // always does, for a RECEIVE_2307 step) — no need to do it again here.
   await recomputeRequiresSawt(filing.clientId, filing.taxableYear, filing.period);
+  // Brief #5d §6 — adding a certificate reopens steps 3/4 if step 3 was
+  // already Done.
+  await reopenPreparedFiling(filing.id);
   revalidatePath(`/clients/${filing.clientId}/filings/${filing.id}`);
 
   return { saved: true };
@@ -216,6 +219,9 @@ export async function deleteCertificate(certificateId: string, reason: string): 
     } else {
       await recomputeReceive2307Status(filing.id);
     }
+    // Brief #5d §6 — removing a certificate reopens steps 3/4 if step 3
+    // was already Done.
+    await reopenPreparedFiling(filing.id);
     revalidatePath(`/clients/${filing.clientId}/filings/${filing.id}`);
   }
 

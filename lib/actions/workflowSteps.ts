@@ -135,6 +135,65 @@ export async function markStepDone(stepId: string): Promise<StepActionResult> {
 }
 
 /**
+ * Brief #5d §6 — while a filing's own return isn't filed yet (step 5,
+ * FILE_RETURN, not DONE), a change to the figures behind the computation
+ * — made after step 3 (PREPARE_RETURN) was marked Done — reopens both
+ * step 3 and step 4 (ADVISE_CLIENT): the return needs re-preparing and
+ * the client needs re-advising with the corrected figures. Callers are
+ * lib/actions/quarterlySales.ts (a figures-changing final save, or any
+ * draft save) and lib/actions/form2307.ts (adding/removing a certificate,
+ * or unticking "all received"). A no-op call — step 3 isn't currently
+ * Done, or the filing is already filed — does nothing. The Prepare
+ * group's own "Mark done" reverts from a Done pill back to a button as a
+ * consequence, since it's derived live from its steps' status.
+ */
+export async function reopenPreparedFiling(filingId: string): Promise<void> {
+  const filing = await prisma.filing.findUnique({ where: { id: filingId }, include: { workflowSteps: true } });
+  if (!filing) return;
+
+  const fileReturnStep = filing.workflowSteps.find((s) => s.stepCode === "FILE_RETURN");
+  if (fileReturnStep?.status === "DONE") return; // filed filings are unaffected
+
+  const prepareReturnStep = filing.workflowSteps.find((s) => s.stepCode === "PREPARE_RETURN");
+  if (!prepareReturnStep || prepareReturnStep.status !== "DONE") return; // nothing to reopen
+
+  const actorId = await getActorId();
+
+  const updatedPrepare = await prisma.workflowStep.update({
+    where: { id: prepareReturnStep.id },
+    data: { status: "PENDING", completedAt: null, actorId },
+  });
+  await logActivity({
+    entityType: "WorkflowStep",
+    entityId: prepareReturnStep.id,
+    action: "UPDATE",
+    before: prepareReturnStep,
+    after: updatedPrepare,
+    actorId,
+  });
+
+  const adviseClientStep = filing.workflowSteps.find((s) => s.stepCode === "ADVISE_CLIENT");
+  if (adviseClientStep && adviseClientStep.status !== "PENDING") {
+    const updatedAdvise = await prisma.workflowStep.update({
+      where: { id: adviseClientStep.id },
+      data: { status: "PENDING", completedAt: null, actorId },
+    });
+    await logActivity({
+      entityType: "WorkflowStep",
+      entityId: adviseClientStep.id,
+      action: "UPDATE",
+      before: adviseClientStep,
+      after: updatedAdvise,
+      actorId,
+    });
+  }
+
+  await recomputeFilingStatus(filingId, actorId);
+  revalidatePath(`/clients/${filing.clientId}/filings/${filingId}`);
+  revalidatePath("/filings");
+}
+
+/**
  * Brief #4a — one "Mark done" per group, marking every unresolved step in
  * that group at once (a clean quarter is five clicks, not sixteen). This
  * calls the exact same markStepDone() as the per-step control above, in

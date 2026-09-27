@@ -28,7 +28,9 @@ import { WORKFLOW_GROUPS, currentGroupCode, summarizeGroup, prepareGroupBlockRea
 import { parseDocSlots, type DocSlotDef, type WorkflowStepStatus } from "@/lib/workflow/types";
 import { computeFilingCompleteness } from "@/lib/workflow/completeness";
 import { buildClientPackageEmail } from "@/lib/workflow/clientPackageEmail";
+import { buildClientTaxAdviceMessage } from "@/lib/workflow/clientTaxAdviceMessage";
 import { ALL_PERIODS, ownSalesQuarterOf, periodToSingleQuarterCovered, quarterNumberDateRange } from "@/lib/tax/periods";
+import { extractFormSummary } from "@/lib/tax/compute";
 import type { FilingComputationResult } from "@/lib/tax/types";
 
 const STATUS_TONE: Record<string, "pending" | "progress" | "waiting" | "overdue" | "done"> = {
@@ -253,6 +255,12 @@ export default async function FilingDetailPage({
 
   const incomeHref = `/clients/${id}/income?filingId=${filing.id}`;
 
+  // Brief #5d — the sheet's shape now depends on formType (1701Q/1701A get
+  // the new item-numbered result, MIXED_INCOME's 1701 keeps the old
+  // cumulative one); extractFormSummary normalizes the figures either
+  // shape needs for a client-facing message, including a pre-#5d frozen
+  // snapshot that predates the new shape despite sharing a formType.
+  const summaryFigures = extractFormSummary(sheet);
   const clientFirstName = filing.client.registeredName.trim().split(/\s+/)[0] ?? filing.client.registeredName;
   const clientEmail = buildClientPackageEmail({
     clientRegisteredName: filing.client.registeredName,
@@ -260,16 +268,42 @@ export default async function FilingDetailPage({
     period: filing.period,
     taxableYear: filing.taxableYear,
     filedAt: filing.filedAt,
-    grossSalesCents: sheet.cumulativeGrossSalesCents,
-    taxDueCents: sheet.incomeTaxDueCents,
-    cwtCents: sheet.cumulativeCwtCents,
+    grossSalesCents: summaryFigures.grossSalesCents,
+    taxDueCents: summaryFigures.taxDueCents,
+    cwtCents: summaryFigures.cwtCents,
     isOverpayment: sheet.isOverpayment,
     finalAmountCents: sheet.isOverpayment ? sheet.overpaymentCents : sheet.taxPayableCents,
-    hasCertificates: sheet.cumulativeCwtCents > 0,
+    hasCertificates: summaryFigures.cwtCents > 0,
     eafsConfirmationSaved,
     nextPeriodLabel: nextPeriod,
     nextPeriodDueDate: nextFiling?.adjustedDueDate ?? null,
   });
+
+  // Step 4's client advice message (brief #5d §8) — only once step 3's
+  // computation actually exists (a real sales figure recorded) and only
+  // for the two forms in scope; MIXED_INCOME's annual return (1701) has
+  // no sheet built, so it gets no message either.
+  const clientTaxYear = await prisma.clientTaxYear.findUnique({
+    where: { clientId_taxableYear: { clientId: filing.clientId, taxableYear: filing.taxableYear } },
+  });
+  const adviceMessage =
+    hasSalesRecorded && (sheet.formType === "F1701Q" || sheet.formType === "F1701A")
+      ? buildClientTaxAdviceMessage({
+          clientRegisteredName: filing.client.registeredName,
+          clientFirstName,
+          period: filing.period,
+          taxableYear: filing.taxableYear,
+          formType: sheet.formType,
+          grossSalesCents: summaryFigures.grossSalesCents,
+          taxDueCents: summaryFigures.taxDueCents,
+          totalCreditsCents: summaryFigures.totalCreditsCents,
+          taxPayableCents: sheet.taxPayableCents,
+          isOverpayment: sheet.isOverpayment,
+          overpaymentCents: sheet.overpaymentCents,
+          adjustedDueDate: filing.adjustedDueDate,
+          yearEndCreditElection: clientTaxYear?.yearEndCreditElection,
+        })
+      : null;
 
   async function submitAmendmentAck(alertId: string, formData: FormData) {
     "use server";
@@ -300,6 +334,20 @@ export default async function FilingDetailPage({
     />
   );
 
+  // Brief #5d §8 — step 4's copyable client advice message, modeled on
+  // step 16's own draft below. No slot, blocks nothing (D27) — it just
+  // sits inside step 4's card with a Copy button. Nothing renders until a
+  // computation actually exists (see `adviceMessage` above).
+  const adviseClientExtra = adviceMessage ? (
+    <div className="flex flex-col gap-1">
+      <p className="text-xs font-medium text-slate-600">Message to client</p>
+      <p className="text-xs text-slate-400">Subject: {adviceMessage.subject}</p>
+      <CopyTextarea defaultValue={adviceMessage.body} rows={8} />
+    </div>
+  ) : (
+    <p className="text-xs text-slate-400">No computation yet — complete step 3 first.</p>
+  );
+
   const sendClientPackageExtra = (
     <div className="flex flex-col gap-3">
       <a href={`/api/filings/${filing.id}/package`}>
@@ -317,6 +365,7 @@ export default async function FilingDetailPage({
 
   const EXTRA_BY_STEP_CODE: Record<string, React.ReactNode> = {
     PREPARE_RETURN: prepareReturnExtra,
+    ADVISE_CLIENT: adviseClientExtra,
     SEND_CLIENT_PACKAGE: sendClientPackageExtra,
   };
 
@@ -374,6 +423,7 @@ export default async function FilingDetailPage({
                 requiredDocSlots={nextStep.requiredDocSlots}
                 documents={nextStep.documents}
                 dependencyBlockedReason={DEPENDENCY_REASON_BY_STEP_CODE[nextStep.stepCode] ?? null}
+                hideStart={nextStep.stepCode === "ADVISE_CLIENT"}
               />
             </div>
           ) : (
@@ -551,6 +601,7 @@ export default async function FilingDetailPage({
                       step={step}
                       extra={EXTRA_BY_STEP_CODE[step.stepCode]}
                       dependencyBlockedReason={DEPENDENCY_REASON_BY_STEP_CODE[step.stepCode] ?? null}
+                      controlsMode={step.stepCode === "ADVISE_CLIENT" ? "markDoneOnly" : "full"}
                     />
                   );
                 })}
