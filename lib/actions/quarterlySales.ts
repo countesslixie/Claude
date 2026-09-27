@@ -8,7 +8,8 @@ import { logActivity } from "@/lib/activityLog";
 import { pesosToCents, centsToPesos } from "@/lib/money";
 import { formatManilaDate } from "@/lib/dates";
 import { checkAndRecordAmendments } from "@/lib/filingComputation";
-import { salesQuarterEndDate, filingPeriodForSalesQuarter } from "@/lib/tax/periods";
+import { salesQuarterEndDate, filingPeriodForSalesQuarter, outsideSalesQuartersFor } from "@/lib/tax/periods";
+import { getStartingFigures } from "@/lib/startingFigures";
 import { markStepDone, markStepWaitingExternal, reopenPreparedFiling } from "@/lib/actions/workflowSteps";
 import type { SalesQuarter } from "@/lib/tax/types";
 
@@ -93,6 +94,15 @@ export async function saveQuarterlySales(
 
   const client = await prisma.client.findUnique({ where: { id: clientId } });
   if (!client) return { error: "Client not found." };
+
+  // Brief #5f §8 — a quarter "filed outside the app" (starting figures)
+  // can never have sales entered for it in the app; the starting figures
+  // replace it in every computation instead.
+  const startingFigures = await getStartingFigures(clientId, taxableYear);
+  const outsideQuarters = outsideSalesQuartersFor(startingFigures?.latestOutsideReturn ?? "NONE");
+  if (outsideQuarters.includes(quarter)) {
+    return { error: `${quarter} ${taxableYear} was filed outside the app — sales can't be entered for it here.`, values };
+  }
 
   // A quarter is read-only once its own return is filed (step 5,
   // FILE_RETURN, DONE) — a filing for a later quarter/year that's already

@@ -7,7 +7,8 @@ import { saveQuarterlySales } from "@/lib/actions/quarterlySales";
 import { listActivePayors, createPayorInline } from "@/lib/actions/payors";
 import { centsToPesos } from "@/lib/money";
 import { currentTaxableYearManila, formatManilaDate } from "@/lib/dates";
-import { ownSalesQuarterOf, filingPeriodForSalesQuarter } from "@/lib/tax/periods";
+import { ownSalesQuarterOf, filingPeriodForSalesQuarter, outsideSalesQuartersFor } from "@/lib/tax/periods";
+import { getStartingFigures } from "@/lib/startingFigures";
 import type { SalesQuarter } from "@/lib/tax/types";
 
 const QUARTERS: SalesQuarter[] = ["Q1", "Q2", "Q3", "Q4"];
@@ -77,6 +78,13 @@ export default async function IncomePage({
 
   const editableQuarter: SalesQuarter | null = openFiling ? ownSalesQuarterOf(openFiling.period as never) : null;
 
+  // Brief #5f §8 — a quarter "filed outside the app" (starting figures)
+  // can't be entered here at all; it renders as a plain note, never a
+  // form, never editable, never even shown in the read-only table's usual
+  // shape.
+  const startingFigures = await getStartingFigures(id, taxableYear);
+  const outsideQuarters = new Set(outsideSalesQuartersFor(startingFigures?.latestOutsideReturn ?? "NONE"));
+
   // Brief #5a — each row's name field (labeled "Payor" on screen since
   // brief #5b; internal name customerName is unchanged) offers the
   // client's saved payor list, with free typing still allowed.
@@ -92,6 +100,16 @@ export default async function IncomePage({
   const yearTotalNonOperatingCents = rows.reduce((sum, r) => sum + r.nonOperatingIncomeCents, 0);
 
   function readOnlyRow(quarter: SalesQuarter) {
+    if (outsideQuarters.has(quarter)) {
+      return (
+        <tr key={quarter}>
+          <td>{quarter}</td>
+          <td colSpan={3} className="text-slate-400">
+            Filed outside the app
+          </td>
+        </tr>
+      );
+    }
     const row = byQuarter.get(quarter);
     const { filing, locked } = lockInfoFor(quarter);
     const customersLabel = !row
@@ -208,6 +226,19 @@ export default async function IncomePage({
           {QUARTERS.map((quarter) => {
             const row = byQuarter.get(quarter);
             const { locked, finalized, filing } = lockInfoFor(quarter);
+            if (outsideQuarters.has(quarter)) {
+              return (
+                <div key={quarter} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                  <div className="mb-1 flex items-baseline justify-between">
+                    <h2 className="text-sm font-semibold text-slate-900">{quarter}</h2>
+                    <span className="text-xs text-slate-400">filed outside the app</span>
+                  </div>
+                  <p className="text-sm text-slate-500">
+                    Covered by this client&apos;s starting figures — see the client&apos;s Taxable years row.
+                  </p>
+                </div>
+              );
+            }
             if (locked) {
               return (
                 <div key={quarter} className="rounded-lg border border-slate-200 bg-slate-50 p-4">

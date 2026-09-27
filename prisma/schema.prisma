@@ -67,6 +67,21 @@ enum SalesQuarter {
   Q4
 }
 
+// Brief #5f §8 — a mid-year client's latest return filed OUTSIDE the app,
+// from her own Excel/eBIRForms records. NONE means the client starts in
+// the app from Q1; Q1/Q2/Q3 mean that quarter (and every quarter up to
+// it) was filed outside the app, so the app's first return is the next
+// one in sequence (Q2/Q3/ANNUAL respectively). There is no "ANNUAL"
+// value here — the Annual can never itself have been filed outside the
+// app while leaving a later in-app period, since it's the last period of
+// the year.
+enum LatestOutsideReturn {
+  NONE
+  Q1
+  Q2
+  Q3
+}
+
 enum Form2307Status {
   RECEIVED
   RECORDED
@@ -212,13 +227,14 @@ model Client {
   updatedAt DateTime @updatedAt
   actorId   String?
 
-  taxYears       ClientTaxYear[]
-  quarterlySales QuarterlySales[]
-  form2307s      Form2307[]
-  filings        Filing[]
-  documents      Document[]
-  sawtBatches    SawtBatch[]
-  payors         Payor[]
+  taxYears        ClientTaxYear[]
+  quarterlySales  QuarterlySales[]
+  form2307s       Form2307[]
+  filings         Filing[]
+  documents       Document[]
+  sawtBatches     SawtBatch[]
+  payors          Payor[]
+  startingFigures StartingFigures[]
 
   @@index([isActive])
 }
@@ -279,8 +295,8 @@ model QuarterlySales {
   quarter     SalesQuarter
 
   grossSalesCents         Int
-  nonOperatingIncomeCents Int @default(0)
-  noSalesThisQuarter      Boolean @default(false)
+  nonOperatingIncomeCents Int       @default(0)
+  noSalesThisQuarter      Boolean   @default(false)
   finalizedAt             DateTime?
 
   // Brief #4c — the "where this figure came from" field is removed
@@ -326,16 +342,14 @@ model ClientTaxYear {
   electionStatus        ElectionStatus @default(NOT_YET_ELECTED)
   electionEvidenceDocId String?
 
+  // Brief #5f §4 — item 55, display-only from here on. The only place it
+  // is ENTERED is the starting figures page (StartingFigures below); this
+  // column stays the field the tax engine actually reads, and still
+  // appears in full on every return of the year (locked rule #1, SPEC §16
+  // item 7). Otherwise 0 — automatic carry-over from last year's Annual
+  // overpayment is deferred to the Pay group work (not built here).
   priorYearExcessCreditCents Int                   @default(0)
   yearEndCreditElection      YearEndCreditElection @default(NA)
-
-  // Brief #5e §8 — item 61 (1701Q) / item 63 (1701A), "Other Tax
-  // Credits/Payments" — the form's own "(specify)" box. One figure per
-  // client-year, same rule as priorYearExcessCreditCents above: the same
-  // full amount appears on every return of that year (locked rule #1,
-  // SPEC §16 item 7), never a lowered/used-up figure.
-  otherCreditsCents       Int     @default(0)
-  otherCreditsDescription String?
 
   thresholdBreachedAt DateTime?
 
@@ -343,8 +357,63 @@ model ClientTaxYear {
   updatedAt DateTime @updatedAt
   actorId   String?
 
+  startingFigures StartingFigures?
+
   @@unique([clientId, taxableYear])
   @@index([taxableYear])
+}
+
+// Brief #5f §8 — the handful of figures a mid-year client brings into the
+// app from her own outside-the-app filing (Excel/eBIRForms). One row per
+// client-year, entered once from the client's Taxable years row, and
+// carried forward into the app's own first return of the year and into
+// the Annual (see lib/filingComputation.ts). Editable until that year's
+// first in-app return is filed (step 5, FILE_RETURN, DONE) — enforced
+// server-side in lib/actions/startingFigures.ts, not stored as a separate
+// flag here, since it's fully derived from the Filing/WorkflowStep rows
+// that already exist.
+model StartingFigures {
+  id       String @id @default(cuid())
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id])
+
+  taxableYear Int
+
+  clientTaxYearId String        @unique
+  clientTaxYear   ClientTaxYear @relation(fields: [clientTaxYearId], references: [id])
+
+  latestOutsideReturn LatestOutsideReturn
+
+  // Item 55 — always entered here, regardless of latestOutsideReturn
+  // (even a from-Q1 client's prior-year excess credit, if any, is entered
+  // this way — see ClientTaxYear.priorYearExcessCreditCents, which this
+  // writes through to on every save). The remaining fields below only
+  // apply when latestOutsideReturn is not NONE and are 0 otherwise.
+  priorYearExcessCreditCents Int @default(0)
+
+  // Item 51 of the latest outside return.
+  cumulativeIncomeCents            Int     @default(0)
+  // Item 57 of the latest outside return.
+  withholdingPreviousQuartersCents Int     @default(0)
+  // Item 58 of the latest outside return.
+  withholdingThisQuarterCents      Int     @default(0)
+  // Item 56 of the latest outside return.
+  paymentsPreviousQuartersCents    Int     @default(0)
+  // Her proof of payment for the latest outside return (0 if it was an overpayment).
+  amountPaidThisReturnCents        Int     @default(0)
+  // Item 61 of the latest outside return — feeds the in-app inheritance
+  // chain on Filing.otherCreditsCents (brief #5f §3).
+  otherCreditsCents                Int     @default(0)
+  otherCreditsDescription          String?
+  // Optional, defaults to 0 — non-operating income earned so far this
+  // year before the app took over. Can't exceed cumulativeIncomeCents.
+  nonOperatingIncomeCents          Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  actorId   String?
+
+  @@unique([clientId, taxableYear])
 }
 
 model Form2307 {
@@ -475,6 +544,28 @@ model Filing {
   adviceMessageSubject String?
   adviceMessageBody    String?
   adviceMessageSavedAt DateTime?
+
+  // Brief #5f §3 — item 61 (1701Q) / item 63 (1701A), "Other Tax
+  // Credits/Payments." One figure PER RETURN now (supersedes brief #5e's
+  // year-level ClientTaxYear.otherCreditsCents) — it can change from
+  // quarter to quarter. Null means "not yet saved on this filing," which
+  // is what makes the inheritance chain in lib/filingComputation.ts's
+  // effectiveOtherCreditsFor work: never store an inherited figure by
+  // copying it in, only the fact that nothing has been saved here yet.
+  // Locked once this filing's own step 5 (FILE_RETURN) is DONE.
+  otherCreditsCents       Int?
+  otherCreditsDescription String?
+
+  // Brief #5f §8 — true for a Filing row that predates a client-year's
+  // starting figures naming its period "filed outside the app" (the
+  // ordinary case is simpler: generateFilingsForClientYear just never
+  // creates a Filing row for such a period at all, so most outside
+  // periods carry no row and this flag never comes into play). Set/
+  // cleared by lib/actions/startingFigures.ts's saveStartingFigures
+  // whenever the chosen latestOutsideReturn changes. A true row carries
+  // no workflow, is excluded from the board and dashboard, and renders on
+  // the client page as "Filed outside the app," never as ordinary work.
+  filedOutsideApp Boolean @default(false)
 
   notes String?
 

@@ -23,8 +23,10 @@ describe("saveQuarterlySales", () => {
     if (createdClientIds.length === 0) return;
     await prisma.quarterlySalesCustomer.deleteMany({ where: { quarterlySales: { clientId: { in: createdClientIds } } } });
     await prisma.quarterlySales.deleteMany({ where: { clientId: { in: createdClientIds } } });
+    await prisma.startingFigures.deleteMany({ where: { clientId: { in: createdClientIds } } });
     await prisma.workflowStep.deleteMany({ where: { filing: { clientId: { in: createdClientIds } } } });
     await prisma.filing.deleteMany({ where: { clientId: { in: createdClientIds } } });
+    await prisma.clientTaxYear.deleteMany({ where: { clientId: { in: createdClientIds } } });
     await prisma.client.deleteMany({ where: { id: { in: createdClientIds } } });
   });
 
@@ -205,5 +207,40 @@ describe("saveQuarterlySales", () => {
       where: { clientId_taxableYear_quarter: { clientId: client.id, taxableYear: 2026, quarter: "Q2" } },
     });
     expect(row).toBeNull(); // nothing was written
+  });
+
+  it("brief #5f §8: sales can't be entered for a quarter filed outside the app", async () => {
+    const client = await prisma.client.create({
+      data: {
+        code: `qs-outside-${Date.now()}`,
+        registeredName: "Quarterly Sales Outside-The-App Test Client",
+        tin: "555666778",
+        rdoCode: "999",
+        registeredAddress: "N/A",
+        taxpayerType: "PURELY_SELF_EMPLOYED",
+        booksType: "MANUAL",
+      },
+    });
+    createdClientIds.push(client.id);
+    const taxYear = await prisma.clientTaxYear.create({
+      data: { clientId: client.id, taxableYear: 2026, regime: "RATE_8_PERCENT", electionStatus: "ELECTED" },
+    });
+    await prisma.startingFigures.create({
+      data: { clientId: client.id, taxableYear: 2026, clientTaxYearId: taxYear.id, latestOutsideReturn: "Q2" },
+    });
+
+    const result = await saveQuarterlySales(
+      client.id,
+      2026,
+      "Q1",
+      {},
+      formDataOf({ intent: "final" }, [{ customerName: "Too early", amount: "1000" }]),
+    );
+    expect(result.error).toMatch(/outside the app/i);
+
+    const row = await prisma.quarterlySales.findUnique({
+      where: { clientId_taxableYear_quarter: { clientId: client.id, taxableYear: 2026, quarter: "Q1" } },
+    });
+    expect(row).toBeNull();
   });
 });

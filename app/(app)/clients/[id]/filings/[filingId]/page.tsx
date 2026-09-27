@@ -1,15 +1,15 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { assembleAndComputeFiling, hasSalesRecordedForPeriod } from "@/lib/filingComputation";
+import { assembleAndComputeFiling, hasSalesRecordedForPeriod, effectiveOtherCreditsFor } from "@/lib/filingComputation";
 import {
   setAllCertificatesReceived,
   acknowledgeAmendmentAlert,
   dismissCompletenessNote,
+  updateFilingOtherCredits,
 } from "@/lib/actions/filings";
 import { addCertificate } from "@/lib/actions/form2307";
 import { listActivePayors, createPayorInline, fillPayorDetail } from "@/lib/actions/payors";
-import { updateYearLevelCredits } from "@/lib/actions/clientTaxYears";
 import { StatusBadge } from "@/components/status-badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -22,7 +22,7 @@ import { RecordSalesStepCard } from "@/components/record-sales-step-card";
 import { Receive2307StepCard, type CertificateRow } from "@/components/receive-2307-step-card";
 import { NextActionControl } from "@/components/next-action-control";
 import { ComputationSheetPanel } from "@/components/computation-sheet-panel";
-import { YearLevelCreditsForm } from "@/components/year-level-credits-form";
+import { OtherCreditsForm } from "@/components/other-credits-form";
 import { centsToPesos } from "@/lib/money";
 import { formatManilaDate, toManilaDateInputValue } from "@/lib/dates";
 import { deriveStepAging } from "@/lib/workflow/aging";
@@ -289,11 +289,16 @@ export default async function FilingDetailPage({
     nextPeriodDueDate: nextFiling?.adjustedDueDate ?? null,
   });
 
-  // Year-level credits (brief #5e §8) still need this row for the
-  // computation-sheet form's initial values, independent of step 4.
+  // Item 55 (brief #5f §4) — display-only on step 3, still stored on
+  // ClientTaxYear, entered only via the starting figures page.
   const clientTaxYear = await prisma.clientTaxYear.findUnique({
     where: { clientId_taxableYear: { clientId: filing.clientId, taxableYear: filing.taxableYear } },
   });
+
+  // Brief #5f §1/§5 — step 4 (ADVISE_CLIENT) shows nothing (no message, no
+  // Copy button, no hover text) until step 3 (PREPARE_RETURN) is Done.
+  const prepareReturnStepStatus = filing.workflowSteps.find((s) => s.stepCode === "PREPARE_RETURN")?.status;
+  const isPrepareReturnDone = prepareReturnStepStatus === "DONE";
 
   // Step 4's client advice message (brief #5d §8, wording/date brief #5e
   // §9). Brief #5e §3 — once step 4 is Done, the message shown is the
@@ -303,10 +308,11 @@ export default async function FilingDetailPage({
   // the live preview, built fresh from the current figures.
   const adviseClientStep = filing.workflowSteps.find((s) => s.stepCode === "ADVISE_CLIENT");
   const isAdviseClientDone = adviseClientStep?.status === "DONE";
-  const adviceMessage =
-    isAdviseClientDone && filing.adviceMessageSubject && filing.adviceMessageBody
+  const adviceMessage = isPrepareReturnDone
+    ? isAdviseClientDone && filing.adviceMessageSubject && filing.adviceMessageBody
       ? { subject: filing.adviceMessageSubject, body: filing.adviceMessageBody }
-      : await buildLiveAdviceMessageForFiling(filing.id);
+      : await buildLiveAdviceMessageForFiling(filing.id)
+    : null;
 
   async function submitAmendmentAck(alertId: string, formData: FormData) {
     "use server";
@@ -319,30 +325,60 @@ export default async function FilingDetailPage({
     await dismissCompletenessNote(filingId);
   }
 
-  // Brief #5e §8 — items 55/57 and 61/63, edited inline from step 3's own
-  // card. Editable while THIS filing's step 3 isn't Done yet; read-only
-  // once it is (server-enforced too, in updateYearLevelCredits). Not
-  // applicable to MIXED_INCOME's annual return (Form 1701, no sheet built).
-  const prepareReturnStepStatus = filing.workflowSteps.find((s) => s.stepCode === "PREPARE_RETURN")?.status;
-  const boundUpdateYearLevelCredits = updateYearLevelCredits.bind(null, filing.clientId, filing.taxableYear, filing.id);
-  const yearLevelCreditsExtra =
+  // Brief #5f §3 — item 61/63, edited from step 3's own card, above the
+  // computation sheet (§2). One figure PER RETURN (Filing.otherCreditsCents),
+  // inheriting from the return before it (or from starting figures) until
+  // this filing's own value is saved; locked for good once this filing's
+  // own step 5 (FILE_RETURN) is Done — read straight off the frozen
+  // computation sheet in that case, since a filing can be filed without
+  // ever explicitly saving item 61 (it just silently inherited), and the
+  // inheritance chain is a live, dynamic read that must not shift a filed
+  // return's own figure retroactively.
+  const otherCreditsHasSavedValue = filing.otherCreditsCents != null;
+  let otherCreditsAmountCents: number;
+  let otherCreditsDescriptionValue: string;
+  let otherCreditsSourceLabel: string | null = null;
+  if (isFilingLocked && isFrozen) {
+    otherCreditsAmountCents =
+      "item61OtherCreditsCents" in sheet
+        ? sheet.item61OtherCreditsCents
+        : "item63OtherCreditsCents" in sheet
+          ? sheet.item63OtherCreditsCents
+          : (filing.otherCreditsCents ?? 0);
+    otherCreditsDescriptionValue = filing.otherCreditsDescription ?? "";
+  } else {
+    const inheritance = await effectiveOtherCreditsFor(filing.clientId, filing.taxableYear, filing.period);
+    otherCreditsAmountCents = inheritance.effectiveCents;
+    otherCreditsDescriptionValue = inheritance.effectiveDescription;
+    otherCreditsSourceLabel = inheritance.sourceLabel;
+  }
+  const boundUpdateFilingOtherCredits = updateFilingOtherCredits.bind(null, filing.id);
+  const otherCreditsExtra =
     sheet.formType === "F1701Q" || sheet.formType === "F1701A" ? (
-      <YearLevelCreditsForm
-        action={boundUpdateYearLevelCredits}
-        readOnly={prepareReturnStepStatus === "DONE"}
-        initialValues={{
-          priorYearExcessCredit: centsToPesos(clientTaxYear?.priorYearExcessCreditCents ?? 0),
-          otherCredits: centsToPesos(clientTaxYear?.otherCreditsCents ?? 0),
-          otherCreditsDescription: clientTaxYear?.otherCreditsDescription ?? "",
-        }}
+      <OtherCreditsForm
+        action={boundUpdateFilingOtherCredits}
+        locked={isFilingLocked}
+        hasSavedValue={otherCreditsHasSavedValue}
+        amountCents={otherCreditsAmountCents}
+        description={otherCreditsDescriptionValue}
+        sourceLabel={otherCreditsSourceLabel}
       />
     ) : null;
 
   // Brief #4d — step 3's "client confirmation" box (a yes/no
   // acknowledgement plus optional note) is removed, the bookkeeper's own
-  // decision. Step 3 is now just the computation sheet preview.
+  // decision. Brief #5f §2 — the credits box (item 55, then item 61) now
+  // renders ABOVE the computation sheet: she fills in the credits first,
+  // then reads the result.
   const prepareReturnExtra = (
     <div className="flex flex-col gap-2">
+      {(sheet.formType === "F1701Q" || sheet.formType === "F1701A") && (
+        <p className="text-xs text-slate-600">
+          Prior year&apos;s excess credit (item 55):{" "}
+          <span className="font-medium">{centsToPesos(clientTaxYear?.priorYearExcessCreditCents ?? 0, { withSymbol: true })}</span>
+        </p>
+      )}
+      {otherCreditsExtra}
       <ComputationSheetPanel
         breakdown={sheet.breakdown}
         isOverpayment={sheet.isOverpayment}
@@ -355,16 +391,15 @@ export default async function FilingDetailPage({
         taxableYear={filing.taxableYear}
         incomeHref={incomeHref}
       />
-      {yearLevelCreditsExtra}
     </div>
   );
 
   // Brief #5d §8 — step 4's copyable client advice message, modeled on
   // step 16's own draft below. No slot, blocks nothing (D27) — it just
-  // sits inside step 4's card with a Copy button. Nothing renders until a
-  // computation actually exists (see `adviceMessage` above). Brief #5e §3
-  // — collapses to a summary line once Done, showing the saved text only
-  // on request.
+  // sits inside step 4's card with a Copy button. Brief #5f §1/§5 —
+  // nothing renders at all until step 3 is Done (adviceMessage is null
+  // until then). Brief #5e §3 — collapses to a summary line once Done,
+  // showing the saved text only on request.
   const adviseClientExtra = adviceMessage ? (
     <AdviceMessageCard
       isDone={isAdviseClientDone}
@@ -374,9 +409,7 @@ export default async function FilingDetailPage({
       subject={adviceMessage.subject}
       body={adviceMessage.body}
     />
-  ) : (
-    <p className="text-xs text-slate-400">No computation yet — complete step 3 first.</p>
-  );
+  ) : null;
 
   const sendClientPackageExtra = (
     <div className="flex flex-col gap-3">
@@ -631,12 +664,9 @@ export default async function FilingDetailPage({
                       step={step}
                       extra={EXTRA_BY_STEP_CODE[step.stepCode]}
                       dependencyBlockedReason={DEPENDENCY_REASON_BY_STEP_CODE[step.stepCode] ?? null}
+                      suppressTooltip={step.stepCode === "ADVISE_CLIENT"}
                       controlsMode={
-                        step.stepCode === "ADVISE_CLIENT"
-                          ? "markDoneOnly"
-                          : step.stepCode === "PREPARE_RETURN"
-                            ? "noStart"
-                            : "full"
+                        step.stepCode === "ADVISE_CLIENT" || step.stepCode === "PREPARE_RETURN" ? "markDoneOnly" : "full"
                       }
                     />
                   );

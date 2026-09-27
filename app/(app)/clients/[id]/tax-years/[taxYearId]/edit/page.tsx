@@ -2,7 +2,6 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { ClientTaxYearForm } from "@/components/client-tax-year-form";
 import { updateClientTaxYear } from "@/lib/actions/clientTaxYears";
-import { centsToPesos } from "@/lib/money";
 
 export default async function EditClientTaxYearPage({
   params,
@@ -22,7 +21,6 @@ export default async function EditClientTaxYearPage({
     taxableYear: String(taxYear.taxableYear),
     regime: taxYear.regime,
     electionStatus: taxYear.electionStatus,
-    priorYearExcessCredit: centsToPesos(taxYear.priorYearExcessCreditCents),
     yearEndCreditElection: taxYear.yearEndCreditElection,
   };
 

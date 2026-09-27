@@ -1,11 +1,12 @@
 import { prisma } from "@/lib/prisma";
-import { ALL_PERIODS } from "@/lib/tax/periods";
+import { ALL_PERIODS, outsidePeriodsFor } from "@/lib/tax/periods";
 import {
   resolveStatutoryDueDate,
   resolveAdjustedDueDate,
   deriveWorkingCalendar,
 } from "@/lib/tax/deadlines";
 import { resolveFormType } from "@/lib/tax/compute";
+import { getStartingFigures } from "@/lib/startingFigures";
 import type { Period } from "@/lib/tax/types";
 import { getActorId } from "@/lib/actor";
 import { logActivity } from "@/lib/activityLog";
@@ -22,9 +23,18 @@ import { logActivity } from "@/lib/activityLog";
 export async function generateFilingsForClientYear(
   clientId: string,
   taxableYear: number,
-): Promise<{ createdPeriods: Period[]; skippedPeriods: Period[] }> {
+): Promise<{ createdPeriods: Period[]; skippedPeriods: Period[]; outsidePeriods: Period[] }> {
   const client = await prisma.client.findUniqueOrThrow({ where: { id: clientId } });
   const ruleSet = await prisma.taxRuleSet.findUniqueOrThrow({ where: { taxableYear } });
+
+  // Brief #5f §8 — a period "filed outside the app" gets no Filing row at
+  // all: no workflow, never on the board or dashboard, no deadline to
+  // track. This is the chosen representation — see lib/actions/
+  // startingFigures.ts's saveStartingFigures for the rare edge case where
+  // a Filing already exists for a period that starting figures later name
+  // as outside (flagged Filing.filedOutsideApp there instead of removed).
+  const startingFigures = await getStartingFigures(clientId, taxableYear);
+  const outsidePeriodsSet = new Set(outsidePeriodsFor(startingFigures?.latestOutsideReturn ?? "NONE"));
 
   // Holidays can matter in either calendar year touched by this taxable
   // year's returns (a quarterly due date falls within taxableYear itself;
@@ -57,6 +67,7 @@ export async function generateFilingsForClientYear(
   const actorId = await getActorId();
   const createdPeriods: Period[] = [];
   const skippedPeriods: Period[] = [];
+  const outsidePeriods: Period[] = [];
 
   for (const period of ALL_PERIODS) {
     const existing = await prisma.filing.findUnique({
@@ -64,6 +75,10 @@ export async function generateFilingsForClientYear(
     });
     if (existing) {
       skippedPeriods.push(period);
+      continue;
+    }
+    if (outsidePeriodsSet.has(period)) {
+      outsidePeriods.push(period);
       continue;
     }
 
@@ -104,7 +119,7 @@ export async function generateFilingsForClientYear(
     createdPeriods.push(period);
   }
 
-  return { createdPeriods, skippedPeriods };
+  return { createdPeriods, skippedPeriods, outsidePeriods };
 }
 
 interface StepTemplateRow {

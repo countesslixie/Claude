@@ -14,6 +14,12 @@ export type Period = "Q1" | "Q2" | "Q3" | "ANNUAL";
  * the mapping between them.
  */
 export type SalesQuarter = "Q1" | "Q2" | "Q3" | "Q4";
+/**
+ * A mid-year client's latest return filed OUTSIDE the app (brief #5f §8,
+ * StartingFigures.latestOutsideReturn). NONE means the client starts in
+ * the app from Q1.
+ */
+export type LatestOutsideReturn = "NONE" | "Q1" | "Q2" | "Q3";
 export type TaxpayerType = "PURELY_SELF_EMPLOYED" | "MIXED_INCOME";
 export type FormType = "F1701Q" | "F1701A" | "F1701";
 
@@ -120,9 +126,11 @@ export interface QuarterlyFormComputationInput {
   /** Item 58 — certificates claimed on this filing, unrounded. */
   cwtThisQuarterCents: number;
   /**
-   * Item 61 — "Other Tax Credits/Payments," the form's "(specify)" box
-   * (brief #5e §8). One figure per client-year (ClientTaxYear.otherCreditsCents),
-   * unrounded — same treatment as items 55-58 above; only their sum
+   * Item 61 — "Other Tax Credits/Payments," the form's "(specify)" box.
+   * One figure PER RETURN (brief #5f §3, superseding #5e's year-level
+   * ClientTaxYear.otherCreditsCents; Filing.otherCreditsCents, inherited
+   * from the previous return or the starting figures until saved on this
+   * one), unrounded — same treatment as items 55-58 above; only their sum
    * (item 62) rounds.
    */
   otherCreditsCents: number;
@@ -177,8 +185,9 @@ export interface AnnualFormComputationInput {
   cwtQ4Cents: number;
   /**
    * Item 63 input — "Other Tax Credits/Payments," the form's "(specify)"
-   * box (brief #5e §8; ClientTaxYear.otherCreditsCents), unrounded —
-   * rounded individually like items 57-60, before summing into item 64.
+   * box (brief #5f §3; Filing.otherCreditsCents — one figure per return),
+   * unrounded — rounded individually like items 57-60, before summing
+   * into item 64.
    */
   otherCreditsCents: number;
 }

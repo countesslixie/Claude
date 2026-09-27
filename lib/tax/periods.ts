@@ -1,4 +1,4 @@
-import type { Period, SalesQuarter } from "./types";
+import type { LatestOutsideReturn, Period, SalesQuarter } from "./types";
 
 /**
  * The only valid periods for a taxable year. There is no Q4 quarterly
@@ -181,5 +181,50 @@ export function ownSalesQuarterOf(period: Period): SalesQuarter {
       return "Q3";
     case "ANNUAL":
       return "Q4";
+  }
+}
+
+/**
+ * Brief #5f §8 — the declared-sales quarters a mid-year client's starting
+ * figures cover ("filed outside the app"). Q4 is never included: the
+ * latest an outside return can be is Q3, so Q4's own sales are always
+ * entered in the app (they feed the Annual, whether or not the Annual
+ * itself is the app's first return). Sales can't be entered for a quarter
+ * this returns (lib/actions/quarterlySales.ts), and the tax engine's
+ * assembly (lib/filingComputation.ts) skips any of these quarters even if
+ * a stray row exists for one (e.g. leftover seed data) — the starting
+ * figures replace it, never add to it.
+ */
+export function outsideSalesQuartersFor(latest: LatestOutsideReturn): readonly SalesQuarter[] {
+  switch (latest) {
+    case "NONE":
+      return [];
+    case "Q1":
+      return ["Q1"];
+    case "Q2":
+      return ["Q1", "Q2"];
+    case "Q3":
+      return ["Q1", "Q2", "Q3"];
+  }
+}
+
+/**
+ * The filing-period analogue of outsideSalesQuartersFor above — the
+ * periods that were "filed outside the app," so no Filing is generated
+ * for them (lib/workflow/filingGeneration.ts) and no certificates or
+ * prior-period payments from them ever feed a live computation
+ * (lib/filingComputation.ts). ANNUAL is never included — see
+ * LatestOutsideReturn's own doc comment.
+ */
+export function outsidePeriodsFor(latest: LatestOutsideReturn): readonly Period[] {
+  switch (latest) {
+    case "NONE":
+      return [];
+    case "Q1":
+      return ["Q1"];
+    case "Q2":
+      return ["Q1", "Q2"];
+    case "Q3":
+      return ["Q1", "Q2", "Q3"];
   }
 }

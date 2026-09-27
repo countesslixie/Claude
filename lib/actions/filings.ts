@@ -4,11 +4,14 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getActorId } from "@/lib/actor";
 import { logActivity } from "@/lib/activityLog";
+import { pesosToCents } from "@/lib/money";
 import { generateFilingsForClientYear } from "@/lib/workflow/filingGeneration";
-import { recomputeReceive2307Status } from "@/lib/actions/workflowSteps";
+import { recomputeReceive2307Status, reopenPreparedFiling } from "@/lib/actions/workflowSteps";
+import { otherCreditsSchema } from "@/lib/validation/otherCredits";
+import { ALL_PERIODS } from "@/lib/tax/periods";
 
 export type GenerateFilingsResult =
-  | { ok: true; createdCount: number; skippedCount: number }
+  | { ok: true; createdCount: number; skippedCount: number; outsideCount: number }
   | { ok: false; error: string };
 
 /**
@@ -23,10 +26,10 @@ export async function generateFilingsAction(clientId: string, taxableYear: numbe
   }
 
   try {
-    const { createdPeriods, skippedPeriods } = await generateFilingsForClientYear(clientId, taxableYear);
+    const { createdPeriods, skippedPeriods, outsidePeriods } = await generateFilingsForClientYear(clientId, taxableYear);
     revalidatePath(`/clients/${clientId}`);
     revalidatePath("/filings");
-    return { ok: true, createdCount: createdPeriods.length, skippedCount: skippedPeriods.length };
+    return { ok: true, createdCount: createdPeriods.length, skippedCount: skippedPeriods.length, outsideCount: outsidePeriods.length };
   } catch (err) {
     if (err instanceof Error && err.message.includes("TaxRuleSet")) {
       return { ok: false, error: `No TaxRuleSet exists for taxable year ${taxableYear}. Add one in Settings first.` };
@@ -126,4 +129,81 @@ export async function dismissCompletenessNote(filingId: string): Promise<void> {
   });
 
   revalidatePath(`/clients/${before.clientId}/filings/${filingId}`);
+}
+
+export type OtherCreditsFormState = {
+  error?: string;
+  fieldErrors?: Record<string, string[]>;
+  values?: Record<string, string>;
+  saved?: boolean;
+};
+
+/**
+ * Brief #5f §3 — item 61 (1701Q) / item 63 (1701A) is now one figure PER
+ * RETURN (Filing.otherCreditsCents), replacing brief #5e's year-level
+ * ClientTaxYear.otherCreditsCents. Locked once THIS filing's own step 5
+ * (FILE_RETURN) is DONE, enforced here, not just by the form hiding its
+ * Edit button.
+ *
+ * A saved change reopens this filing's own steps 3/4 (via
+ * reopenPreparedFiling, a no-op if step 3 isn't Done or the filing is
+ * filed) and propagates forward: every LATER filing of the same year that
+ * still inherits (its own otherCreditsCents is still null) also reopens,
+ * stopping at the first one with its own saved value — that one no longer
+ * depends on this filing's figure, so nothing past it is affected.
+ */
+export async function updateFilingOtherCredits(
+  filingId: string,
+  _prevState: OtherCreditsFormState,
+  formData: FormData,
+): Promise<OtherCreditsFormState> {
+  const values = {
+    otherCredits: String(formData.get("otherCredits") ?? ""),
+    otherCreditsDescription: String(formData.get("otherCreditsDescription") ?? ""),
+  };
+  const parsed = otherCreditsSchema.safeParse(values);
+  if (!parsed.success) {
+    return { fieldErrors: parsed.error.flatten().fieldErrors, values };
+  }
+
+  const filing = await prisma.filing.findUnique({
+    where: { id: filingId },
+    include: { workflowSteps: { where: { stepCode: "FILE_RETURN" } } },
+  });
+  if (!filing) return { error: "Filing not found.", values };
+  if (filing.workflowSteps[0]?.status === "DONE") {
+    return { error: "This return has already been filed — item 61 is locked.", values };
+  }
+
+  const otherCreditsCents = pesosToCents(parsed.data.otherCredits);
+  const otherCreditsDescription = parsed.data.otherCreditsDescription || null;
+  const changed = filing.otherCreditsCents !== otherCreditsCents || filing.otherCreditsDescription !== otherCreditsDescription;
+
+  const actorId = await getActorId();
+  const updated = await prisma.filing.update({
+    where: { id: filingId },
+    data: { otherCreditsCents, otherCreditsDescription, actorId },
+  });
+
+  await logActivity({ entityType: "Filing", entityId: filingId, action: "UPDATE", before: filing, after: updated, actorId });
+
+  if (changed) {
+    await reopenPreparedFiling(filingId);
+
+    const yearFilings = await prisma.filing.findMany({
+      where: { clientId: filing.clientId, taxableYear: filing.taxableYear, deletedAt: null, filedOutsideApp: false },
+    });
+    const ordered = ALL_PERIODS.map((p) => yearFilings.find((f) => f.period === p)).filter(
+      (f): f is NonNullable<typeof f> => f != null,
+    );
+    const startIndex = ordered.findIndex((f) => f.id === filingId);
+    for (let i = startIndex + 1; i < ordered.length; i++) {
+      const later = ordered[i];
+      if (later.otherCreditsCents != null) break; // chain broken — later filings no longer depend on this one
+      await reopenPreparedFiling(later.id);
+    }
+  }
+
+  revalidatePath(`/clients/${filing.clientId}/filings/${filingId}`);
+  return { saved: true, values };
 }

@@ -87,7 +87,7 @@ export function buildClientTaxAdviceMessage(input: ClientTaxAdviceMessageInput):
     }
   }
 
-  bodyLines.push("", "If you have any questions, please feel free to let me know.", "", "Thank you!");
+  bodyLines.push("", "Thank you!");
 
   return { subject, body: bodyLines.join("\n") };
 }

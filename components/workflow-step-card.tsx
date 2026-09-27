@@ -59,21 +59,28 @@ export interface StepCardData {
 export function WorkflowStepCard({
   step,
   dependencyBlockedReason = null,
+  suppressTooltip = false,
   extra,
   controlsMode = "full",
 }: {
   step: StepCardData;
   /** A blocking reason from another step's state, e.g. step 13 -> 14 (D29). */
   dependencyBlockedReason?: string | null;
+  /**
+   * Brief #5f §5 — step 4 (ADVISE_CLIENT) shows its disabled "Mark done"
+   * with no hover text while step 3 isn't Done yet (she's fine without
+   * it). The button stays disabled either way; this only drops the
+   * `title` tooltip that would otherwise explain why.
+   */
+  suppressTooltip?: boolean;
   /** Step-specific content rendered inside the card, above the doc slots (sales entry link, certificate cutoff, computation sheet, client package). */
   extra?: React.ReactNode;
   /**
-   * Brief #5d §7 — "markDoneOnly": step 4 (ADVISE_CLIENT) has no Start,
-   * Mark waiting, or Skip; only Mark done remains. Brief #5e §4 —
-   * "noStart": step 3 (PREPARE_RETURN) never needs a separate Start; it
-   * keeps only Mark done and Skip.
+   * Brief #5d §7 / #5f §1 — "markDoneOnly": no Start, Mark waiting, or
+   * Skip; only Mark done remains. Used by step 3 (PREPARE_RETURN — brief
+   * #5f §1 removes Skip from it entirely) and step 4 (ADVISE_CLIENT).
    */
-  controlsMode?: "full" | "markDoneOnly" | "noStart";
+  controlsMode?: "full" | "markDoneOnly";
 }) {
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
@@ -298,12 +305,12 @@ export function WorkflowStepCard({
           <Button
             size="sm"
             disabled={isPending || !!blockReason}
-            title={blockReason ?? undefined}
+            title={suppressTooltip ? undefined : (blockReason ?? undefined)}
             onClick={() => run(() => markStepDone(step.id))}
           >
             Mark done
           </Button>
-          {(controlsMode === "full" || controlsMode === "noStart") && (
+          {controlsMode === "full" && (
             <>
               <Input
                 placeholder="Skip reason"

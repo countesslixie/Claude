@@ -11,6 +11,7 @@ import { stepDueDate } from "@/lib/workflow/dueDate";
 import { missingRequiredSlots } from "@/lib/workflow/docSlots";
 import { parseDocSlots } from "@/lib/workflow/types";
 import { logFollowUpAction } from "@/lib/actions/workflowSteps";
+import { cumulativeGrossForThreshold } from "@/lib/vatThreshold";
 
 const AGING_BADGE_TONE: Record<AgingTone, StatusTone> = { green: "done", amber: "waiting", red: "overdue" };
 
@@ -25,7 +26,7 @@ export default async function DashboardPage() {
   const currentYear = currentTaxableYearManila();
 
   const activeFilings = await prisma.filing.findMany({
-    where: { deletedAt: null, status: { not: "COMPLETE" } },
+    where: { deletedAt: null, filedOutsideApp: false, status: { not: "COMPLETE" } },
     include: {
       client: true,
       workflowSteps: { orderBy: { sequence: "asc" }, include: { documents: { where: { deletedAt: null } } } },
@@ -123,11 +124,10 @@ export default async function DashboardPage() {
   const thresholdAlerts: Array<{ clientName: string; pct: number }> = [];
   if (ruleSet) {
     for (const client of activeClients) {
-      const sum = await prisma.quarterlySales.aggregate({
-        where: { clientId: client.id, taxableYear: currentYear },
-        _sum: { grossSalesCents: true, nonOperatingIncomeCents: true },
-      });
-      const cumulativeGross = (sum._sum.grossSalesCents ?? 0) + (sum._sum.nonOperatingIncomeCents ?? 0);
+      // Brief #5f §8 — includes a mid-year client's starting cumulative
+      // income: she can already be close to the VAT threshold before the
+      // app ever saw a peso of hers.
+      const cumulativeGross = await cumulativeGrossForThreshold(client.id, currentYear);
       const pct = cumulativeGross / ruleSet.vatThresholdCents;
       if (pct >= 0.8) thresholdAlerts.push({ clientName: client.registeredName, pct });
     }

@@ -37,7 +37,9 @@ export function GenerateFilingsForm({ clientId, defaultYear }: { clientId: strin
       {state && (
         <p className={`text-xs ${state.ok ? "text-slate-500" : "text-red-600"}`}>
           {state.ok
-            ? `Created ${state.createdCount} filing(s), skipped ${state.skippedCount} (already existed).`
+            ? `Created ${state.createdCount} filing(s), skipped ${state.skippedCount} (already existed)${
+                state.outsideCount > 0 ? `, ${state.outsideCount} filed outside the app` : ""
+              }.`
             : state.error}
         </p>
       )}

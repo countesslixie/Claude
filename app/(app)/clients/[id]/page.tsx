@@ -6,7 +6,7 @@ import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { StatusBadge } from "@/components/status-badge";
 import { GenerateFilingsForm } from "@/components/generate-filings-form";
 import { formatManilaDate, currentTaxableYearManila } from "@/lib/dates";
-import { bpsToPercentLabel, centsToPesos } from "@/lib/money";
+import { bpsToPercentLabel } from "@/lib/money";
 import { countSkippedSteps, filingStatusLabel } from "@/lib/workflow/status";
 
 const LABELS: Record<string, string> = {
@@ -170,8 +170,8 @@ export default async function ClientDetailPage({
                     <th>Year</th>
                     <th>Regime</th>
                     <th>Election status</th>
-                    <th>Prior-year excess credit</th>
                     <th>Threshold breached</th>
+                    <th></th>
                     <th></th>
                   </tr>
                 </thead>
@@ -189,8 +189,15 @@ export default async function ClientDetailPage({
                           <StatusBadge tone="waiting">{LABELS[ty.electionStatus]}</StatusBadge>
                         )}
                       </td>
-                      <td>{centsToPesos(ty.priorYearExcessCreditCents)}</td>
                       <td>{ty.thresholdBreachedAt ? formatManilaDate(ty.thresholdBreachedAt) : "—"}</td>
+                      <td>
+                        <Link
+                          href={`/clients/${client.id}/tax-years/${ty.id}/starting-figures`}
+                          className="text-sm text-slate-600 hover:underline"
+                        >
+                          Starting figures
+                        </Link>
+                      </td>
                       <td>
                         <Link
                           href={`/clients/${client.id}/tax-years/${ty.id}/edit`}
@@ -228,33 +235,51 @@ export default async function ClientDetailPage({
                   </tr>
                 </thead>
                 <tbody>
-                  {client.filings.map((f) => (
-                    <tr key={f.id}>
-                      <td>{f.taxableYear}</td>
-                      <td>{f.period}</td>
-                      <td>{f.formType}</td>
-                      <td>{formatManilaDate(f.adjustedDueDate)}</td>
-                      <td>
-                        {f.status === "COMPLETE" ? (
-                          <StatusBadge tone="done">{filingStatusLabel(f.status, countSkippedSteps(f.workflowSteps))}</StatusBadge>
-                        ) : f.status === "BLOCKED" ? (
-                          <StatusBadge tone="overdue">{f.status}</StatusBadge>
-                        ) : f.status === "WAITING_BIR" || f.status === "WAITING_CLIENT" ? (
-                          <StatusBadge tone="waiting">{f.status}</StatusBadge>
-                        ) : (
-                          <StatusBadge tone="pending">{f.status}</StatusBadge>
-                        )}
-                      </td>
-                      <td>
-                        <Link
-                          href={`/clients/${client.id}/filings/${f.id}`}
-                          className="text-sm text-slate-600 hover:underline"
-                        >
-                          Open
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
+                  {client.filings.map((f) => {
+                    // Brief #5f §8 — a period named "filed outside the app"
+                    // by starting figures renders here, never as ordinary
+                    // work: no status, no link, no deadline.
+                    if (f.filedOutsideApp) {
+                      return (
+                        <tr key={f.id}>
+                          <td>{f.taxableYear}</td>
+                          <td>{f.period}</td>
+                          <td>{f.formType}</td>
+                          <td>—</td>
+                          <td colSpan={2} className="text-slate-400">
+                            Filed outside the app
+                          </td>
+                        </tr>
+                      );
+                    }
+                    return (
+                      <tr key={f.id}>
+                        <td>{f.taxableYear}</td>
+                        <td>{f.period}</td>
+                        <td>{f.formType}</td>
+                        <td>{formatManilaDate(f.adjustedDueDate)}</td>
+                        <td>
+                          {f.status === "COMPLETE" ? (
+                            <StatusBadge tone="done">{filingStatusLabel(f.status, countSkippedSteps(f.workflowSteps))}</StatusBadge>
+                          ) : f.status === "BLOCKED" ? (
+                            <StatusBadge tone="overdue">{f.status}</StatusBadge>
+                          ) : f.status === "WAITING_BIR" || f.status === "WAITING_CLIENT" ? (
+                            <StatusBadge tone="waiting">{f.status}</StatusBadge>
+                          ) : (
+                            <StatusBadge tone="pending">{f.status}</StatusBadge>
+                          )}
+                        </td>
+                        <td>
+                          <Link
+                            href={`/clients/${client.id}/filings/${f.id}`}
+                            className="text-sm text-slate-600 hover:underline"
+                          >
+                            Open
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             )}

@@ -388,6 +388,14 @@ export async function skipStep(stepId: string, reason: string): Promise<StepActi
   const step = await prisma.workflowStep.findUnique({ where: { id: stepId }, include: { filing: true } });
   if (!step) return { ok: false, error: "Step not found." };
 
+  // Brief #5f §1 — step 3 (PREPARE_RETURN) can no longer be skipped at
+  // all; it's the heart of the app. Enforced here, not just by the UI
+  // removing the Skip control, so it can't be bypassed by calling this
+  // action directly.
+  if (step.stepCode === "PREPARE_RETURN") {
+    return { ok: false, error: "Step 3 (prepare the return) can't be skipped — only marked done." };
+  }
+
   const actorId = await getActorId();
   const updated = await prisma.workflowStep.update({
     where: { id: stepId },

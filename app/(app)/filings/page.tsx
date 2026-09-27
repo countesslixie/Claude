@@ -40,6 +40,7 @@ export default async function FilingsBoardPage({
   const filings = await prisma.filing.findMany({
     where: {
       deletedAt: null,
+      filedOutsideApp: false,
       ...(params.clientId ? { clientId: params.clientId } : {}),
       ...(params.taxableYear ? { taxableYear: Number(params.taxableYear) } : {}),
       ...(params.status ? { status: params.status as never } : {}),

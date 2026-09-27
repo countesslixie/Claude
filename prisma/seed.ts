@@ -38,6 +38,7 @@
 import { PrismaClient } from "@prisma/client";
 import { DateTime } from "luxon";
 import { deriveFilingStatus } from "../lib/workflow/status";
+import { generateFilingsForClientYear } from "../lib/workflow/filingGeneration";
 
 const prisma = new PrismaClient();
 const MANILA_ZONE = "Asia/Manila";
@@ -668,6 +669,94 @@ async function seedClientC(actorId: string) {
 }
 
 /**
+ * Brief #5f §8 — a fourth sample client joining the app mid-year, for
+ * TY2026 only (no TY2025 history — she's new to the practice this year).
+ * Her latest return filed outside the app is Q2, so Q3 is the first
+ * return done in the app; Q1 and Q2 get no Filing row at all
+ * (generateFilingsForClientYear skips them once StartingFigures exists —
+ * this is the "outside the app" representation this brief chose). Round,
+ * illustrative figures, matching what her latest outside 1701Q would have
+ * shown:
+ *   - Item 55 (prior year's excess credit): ₱0
+ *   - Item 51 (cumulative income through Q2): ₱500,000
+ *   - Item 57 (CWT for previous quarters, i.e. Q1's): ₱10,000
+ *   - Item 58 (CWT for that quarter, i.e. Q2's own): ₱15,000
+ *   - Item 56 (payments for previous quarters, i.e. what was paid on Q1): ₱2,000
+ *   - Amount paid for Q2 itself: ₱8,000
+ *   - Item 61 (other tax credits/payments): ₱0
+ *   - Non-operating income so far this year: ₱0
+ * Q3 itself is left entirely fresh (no sales, no certificates) so the Q3
+ * filing is walkable end to end from a live walkthrough, same as the
+ * three existing clients' own fresh Q3 filings above.
+ */
+async function seedClientD(actorId: string) {
+  const client = await prisma.client.upsert({
+    where: { code: "garcia-r" },
+    update: {},
+    create: {
+      code: "garcia-r",
+      registeredName: "Rosario Garcia",
+      tin: "567891234",
+      branchCode: "000",
+      rdoCode: "044",
+      registeredAddress: "34 Aguinaldo St, Marikina City, Metro Manila",
+      email: "rosario.garcia@example.com",
+      mobile: "0917-000-0004",
+      taxpayerType: "PURELY_SELF_EMPLOYED",
+      lineOfBusiness: "Graphic design services",
+      civilStatus: "SINGLE",
+      booksType: "MANUAL",
+      swornDeclarationOnFile: true,
+      swornDeclarationYear: 2026,
+      defaultWithholdingRateBps: 500,
+      recognitionBasis: "COLLECTION",
+      engagedSince: new Date("2026-01-15T00:00:00.000Z"),
+      actorId,
+    },
+  });
+
+  const taxYear = await prisma.clientTaxYear.upsert({
+    where: { clientId_taxableYear: { clientId: client.id, taxableYear: 2026 } },
+    update: {},
+    create: {
+      clientId: client.id,
+      taxableYear: 2026,
+      regime: "RATE_8_PERCENT",
+      electionStatus: "ELECTED",
+      priorYearExcessCreditCents: 0,
+      actorId,
+    },
+  });
+
+  await prisma.startingFigures.upsert({
+    where: { clientId_taxableYear: { clientId: client.id, taxableYear: 2026 } },
+    update: {},
+    create: {
+      clientId: client.id,
+      taxableYear: 2026,
+      clientTaxYearId: taxYear.id,
+      latestOutsideReturn: "Q2",
+      priorYearExcessCreditCents: 0,
+      cumulativeIncomeCents: CENTS(500_000),
+      withholdingPreviousQuartersCents: CENTS(10_000),
+      withholdingThisQuarterCents: CENTS(15_000),
+      paymentsPreviousQuartersCents: CENTS(2_000),
+      amountPaidThisReturnCents: CENTS(8_000),
+      otherCreditsCents: 0,
+      otherCreditsDescription: null,
+      nonOperatingIncomeCents: 0,
+      actorId,
+    },
+  });
+
+  // Reuses the exact production filing-generation code path — it skips
+  // Q1/Q2 automatically now that StartingFigures names them outside the
+  // app, and generates fresh Q3/ANNUAL filings the same way any other
+  // client's filings are generated.
+  await generateFilingsForClientYear(client.id, 2026);
+}
+
+/**
  * Brief #5a — a few starter "Customers / payors" entries per sample
  * client, so the picker isn't empty on a fresh database. Matches the
  * names already seeded as Form2307 payors / QuarterlySalesCustomer rows
@@ -1295,6 +1384,7 @@ async function main() {
   await seedClientC(user.id);
   await seedPayors(user.id);
   await seedTY2026Cycle(user.id);
+  await seedClientD(user.id);
   console.log("Seed complete.");
 }
 

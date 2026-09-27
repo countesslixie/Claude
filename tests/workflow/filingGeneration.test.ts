@@ -17,6 +17,8 @@ describe("generateFilingsForClientYear", () => {
     await prisma.workflowStep.deleteMany({ where: { filing: { clientId: { in: createdClientIds } } } });
     await prisma.filing.deleteMany({ where: { clientId: { in: createdClientIds } } });
     await prisma.form2307.deleteMany({ where: { clientId: { in: createdClientIds } } });
+    await prisma.startingFigures.deleteMany({ where: { clientId: { in: createdClientIds } } });
+    await prisma.clientTaxYear.deleteMany({ where: { clientId: { in: createdClientIds } } });
     await prisma.client.deleteMany({ where: { id: { in: createdClientIds } } });
   });
 
@@ -98,6 +100,34 @@ describe("generateFilingsForClientYear", () => {
 
     const count = await prisma.filing.count({ where: { clientId: client.id, taxableYear: 2026 } });
     expect(count).toBe(4); // not 8
+  });
+
+  it("brief #5f §8: a client's starting figures skip generating Filing rows for the periods filed outside the app", async () => {
+    const client = await prisma.client.create({
+      data: {
+        code: `p3-gen-outside-${Date.now()}`,
+        registeredName: "Phase 3 Outside-The-App Test Client",
+        tin: "444555666",
+        rdoCode: "999",
+        registeredAddress: "N/A",
+        taxpayerType: "PURELY_SELF_EMPLOYED",
+        booksType: "MANUAL",
+      },
+    });
+    createdClientIds.push(client.id);
+    const taxYear = await prisma.clientTaxYear.create({
+      data: { clientId: client.id, taxableYear: 2026, regime: "RATE_8_PERCENT", electionStatus: "ELECTED" },
+    });
+    await prisma.startingFigures.create({
+      data: { clientId: client.id, taxableYear: 2026, clientTaxYearId: taxYear.id, latestOutsideReturn: "Q2" },
+    });
+
+    const result = await generateFilingsForClientYear(client.id, 2026);
+    expect(result.createdPeriods.sort()).toEqual(["ANNUAL", "Q3"]);
+    expect(result.outsidePeriods.sort()).toEqual(["Q1", "Q2"]);
+
+    const filings = await prisma.filing.findMany({ where: { clientId: client.id, taxableYear: 2026 } });
+    expect(filings.map((f) => f.period).sort()).toEqual(["ANNUAL", "Q3"]); // no rows at all for Q1/Q2 — never BLOCKED, no workflow, no deadline
   });
 
   it("instantiates the full 16-step checklist per filing, with steps 11-14 NA and RECEIVE_2307 waiting from certificatesExpectedBy", async () => {

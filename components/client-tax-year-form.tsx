@@ -98,18 +98,6 @@ export function ClientTaxYearForm({
         </div>
 
         <div className="flex flex-col gap-1">
-          <Label htmlFor="priorYearExcessCredit">Prior-year excess credit (₱)</Label>
-          <Input
-            id="priorYearExcessCredit"
-            name="priorYearExcessCredit"
-            defaultValue={v("priorYearExcessCredit") || "0"}
-          />
-          {errs("priorYearExcessCredit")?.map((e) => (
-            <p key={e} className="text-xs text-red-600">{e}</p>
-          ))}
-        </div>
-
-        <div className="flex flex-col gap-1">
           <Label htmlFor="yearEndCreditElection">Year-end credit election</Label>
           <Select
             id="yearEndCreditElection"

@@ -6,6 +6,10 @@ import { buildClientTaxAdviceMessage, type ClientTaxAdviceMessageInput } from "@
  * the bookkeeper's own wording. Only 1701Q/1701A are in scope; the caller
  * decides not to render it at all for MIXED_INCOME's annual return (Form
  * 1701), which has no sheet built.
+ *
+ * Brief #5f §6 — the "If you have any questions, please feel free to let
+ * me know." line is removed from every variant; each now ends with the
+ * payment/overpayment paragraph, then "Thank you!".
  */
 function baseInput(overrides: Partial<ClientTaxAdviceMessageInput> = {}): ClientTaxAdviceMessageInput {
   return {
@@ -42,8 +46,6 @@ describe("buildClientTaxAdviceMessage", () => {
         "",
         "Please let me know when you plan to make the payment, or if you would like me to advance the payment on your behalf.",
         "",
-        "If you have any questions, please feel free to let me know.",
-        "",
         "Thank you!",
       ].join("\n"),
     );
@@ -73,8 +75,6 @@ describe("buildClientTaxAdviceMessage", () => {
         "Overpayment: ₱6,500.00",
         "",
         "There is nothing to pay this quarter. The overpayment will be applied to your next return this year.",
-        "",
-        "If you have any questions, please feel free to let me know.",
         "",
         "Thank you!",
       ].join("\n"),
@@ -141,5 +141,19 @@ describe("buildClientTaxAdviceMessage", () => {
   it("keeps the existing subject line format", () => {
     const message = buildClientTaxAdviceMessage(baseInput());
     expect(message.subject).toBe("Maria Santos — 1701Q Q3 2026 computation");
+  });
+
+  it("brief #5f §6: no variant contains the 'questions' line, and every variant ends with 'Thank you!'", () => {
+    const payable = buildClientTaxAdviceMessage(baseInput());
+    const quarterlyOverpayment = buildClientTaxAdviceMessage(
+      baseInput({ isOverpayment: true, overpaymentCents: 1_000_00, taxPayableCents: 0 }),
+    );
+    const annualOverpayment = buildClientTaxAdviceMessage(
+      baseInput({ period: "ANNUAL", formType: "F1701A", isOverpayment: true, overpaymentCents: 1_000_00, taxPayableCents: 0 }),
+    );
+    for (const message of [payable, quarterlyOverpayment, annualOverpayment]) {
+      expect(message.body).not.toMatch(/questions/i);
+      expect(message.body.endsWith("Thank you!")).toBe(true);
+    }
   });
 });

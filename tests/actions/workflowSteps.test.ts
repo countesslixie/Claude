@@ -131,6 +131,20 @@ describe("workflow step actions", () => {
     expect(updated.skippedReason).toBeTruthy();
   });
 
+  it("brief #5f §1: step 3 (PREPARE_RETURN) can never be skipped, even with a reason, enforced server-side", async () => {
+    const { filing } = await makeClientWithQ2Filing("p3-step3-noskip");
+    const step3 = await prisma.workflowStep.findFirstOrThrow({
+      where: { filingId: filing.id, stepCode: "PREPARE_RETURN" },
+    });
+
+    const blocked = await skipStep(step3.id, "Trying to skip anyway.");
+    expect(blocked.ok).toBe(false);
+    expect(blocked.error).toMatch(/can't be skipped/i);
+
+    const unchanged = await prisma.workflowStep.findUniqueOrThrow({ where: { id: step3.id } });
+    expect(unchanged.status).not.toBe("SKIPPED");
+  });
+
   it("§9.4/§5.4: marking PREPARE_RETURN done saves the app's own computation sheet into the vault, with no upload", async () => {
     const { filing } = await makeClientWithQ2Filing("p3-step-compsheet");
 
