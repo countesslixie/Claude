@@ -4,6 +4,7 @@ import path from "node:path";
 import JSZip from "jszip";
 import { prisma } from "@/lib/prisma";
 import { uploadDocument } from "@/lib/actions/documents";
+import { markStepDone } from "@/lib/actions/workflowSteps";
 import { generateFilingsForClientYear } from "@/lib/workflow/filingGeneration";
 import { GET } from "@/app/api/filings/[id]/package/route";
 
@@ -45,6 +46,13 @@ describe("GET /api/filings/[id]/package", () => {
     const filing = await prisma.filing.findUniqueOrThrow({
       where: { clientId_taxableYear_period: { clientId: client.id, taxableYear: 2026, period: "Q2" } },
     });
+
+    // Brief #5k §4 (D67) -- SAVE_FORM_COPY is now locked until step 5
+    // (FILE_RETURN) is Done.
+    const fileReturnStep = await prisma.workflowStep.findFirstOrThrow({
+      where: { filingId: filing.id, stepCode: "FILE_RETURN" },
+    });
+    await markStepDone(fileReturnStep.id);
 
     // Attach a document to SAVE_FORM_COPY (step 7)...
     const formCopyStep = await prisma.workflowStep.findFirstOrThrow({

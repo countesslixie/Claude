@@ -132,6 +132,7 @@ Order for a new client: add the client → add the tax year → enter the starti
 - Filing status is **derived** from its steps, never hand-set: all `DONE`/`NA`/`SKIPPED` → `COMPLETE`.
 - **`SKIPPED` requires a written reason** and stays visibly distinct from `NA`. **A skipped step sits in its group, in place, in step order — never hidden the way `NA` is — and can be undone (D60, brief #5i).** An Undo skip control restores it to whatever its own rules say next, not to a generic "not started."
 - **The "waiting on …" label shows only for a step actually waiting right now (D52, brief #5d)** — it keys on the step's live status, not the step template's permanent "this step can wait" flag, which previously left a stale "waiting on X" reading beside an already-Done pill on five different steps.
+- **Steps 5, 6, 7 and 10 (the File group) have no Start and no Skip (D65, brief #5k, her decision), enforced server-side.** Step 5 (renamed "File return via eBIRForms," D66 — she doesn't use eFPS) keeps only Mark done. **Steps 6, 7 and 10 lose Mark done too (D67, brief #5k)** — each unlocks only once step 5 is Done, then shows its upload box directly (no "Attach" link) and completes itself the moment the document is attached, the same self-completing shape steps 1/2 already use. A new upload against an already-Done one of these three is a one-for-one Replace (D46's pattern); removing the only file reverts the step to Pending. Step 10 alone also keeps Mark waiting, available once step 5 is Done; uploading the TRRC marks it Done and clears any waiting state either way.
 
 ### Workflow groups (D32)
 
@@ -162,6 +163,8 @@ Group membership is a fixed lookup table (`lib/workflow/groups.ts`), not the `ca
 | A document delivered **to someone else** | Optional, hidden, never blocking | 15 only |
 
 Step 2 (D35, brief #4b) blocks on its own terms — "all certificates received" ticked and every certificate row has its own scan attached — rather than one step-level slot, since it now holds a variable number of certificate rows instead of a single document. **As of D46 (brief #5a), this is satisfied by construction:** a certificate cannot be created without its scan, so a row lacking one is no longer reachable through ordinary use — the rule itself is unchanged. **While "all certificates received" is ticked, no row can be added or removed** (D47, brief #5a) — enforced server-side, not only by hiding the Add/Remove controls; unticking restores both.
+
+**Steps 6, 7 and 10 (D67, brief #5k) are self-completing like step 2, but locked behind step 5.** Each carries exactly one required doc slot and unlocks only once step 5 (`FILE_RETURN`) is Done; before that, no upload box shows at all, just a muted "Available once step 5 is done" line. Once unlocked, attaching the document marks the step Done by itself — no separate Mark done — and a later upload against the same slot is a one-for-one Replace (D46's pattern), the prior file soft-deleted. The lock is enforced in the upload action itself (`lib/actions/documents.ts`'s `saveDocumentForStep`), not only by the UI hiding the box.
 
 Step 15 (eAFS) is the documented exception: its confirmation goes to the client, not to her, and often never reaches her. Blocking would strand a filing on a file she cannot obtain. **Do not "fix" this inconsistency.**
 

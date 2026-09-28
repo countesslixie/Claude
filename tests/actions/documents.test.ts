@@ -3,6 +3,7 @@ import { rm } from "node:fs/promises";
 import path from "node:path";
 import { prisma } from "@/lib/prisma";
 import { uploadDocument } from "@/lib/actions/documents";
+import { markStepDone } from "@/lib/actions/workflowSteps";
 import { generateFilingsForClientYear } from "@/lib/workflow/filingGeneration";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
@@ -76,6 +77,14 @@ describe("uploadDocument", () => {
     expect(storedFile.toString()).toBe(fileContent);
 
     // Second upload, identical content, different slot -> warns, doesn't block.
+    // Brief #5k §4 (D67) -- SAVE_SUBMISSION_SS is now locked until step 5
+    // (FILE_RETURN) is Done, so that's resolved first; this test is about
+    // the duplicate-hash warning, not the new File-group lock.
+    const fileReturnStep = await prisma.workflowStep.findFirstOrThrow({
+      where: { filingId: filing.id, stepCode: "FILE_RETURN" },
+    });
+    await markStepDone(fileReturnStep.id);
+
     const step2 = await prisma.workflowStep.findFirstOrThrow({
       where: { filingId: filing.id, stepCode: "SAVE_SUBMISSION_SS" },
     });

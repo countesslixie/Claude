@@ -9,6 +9,7 @@ import { CertificateForm } from "@/components/certificate-form";
 import { deleteCertificate, type CertificateFormState } from "@/lib/actions/form2307";
 import { skipStep, unskipStep } from "@/lib/actions/workflowSteps";
 import { uploadDocument } from "@/lib/actions/documents";
+import { fileTooLargeMessage } from "@/lib/upload";
 import { centsToPesos, bpsToPercentLabel } from "@/lib/money";
 import { formatManilaDate, manilaDateInputToJsDate } from "@/lib/dates";
 import type { SavedPayor } from "@/lib/actions/payors";
@@ -138,15 +139,26 @@ export function Receive2307StepCard({
   }
 
   function handleScanUpload(certId: string, formData: FormData, isReplace: boolean) {
-    formData.set("workflowStepId", stepId);
-    formData.set("docSlotCode", "form2307_scan");
-    formData.set("form2307Id", certId);
-    const documentDateValue = String(formData.get("documentDate") ?? "");
     setScanErrors((prev) => {
       const next = new Map(prev);
       next.delete(certId);
       return next;
     });
+    // D64 (brief #5k §1) — same client-side size check as every other
+    // upload control, shown beside this row's own picker rather than the
+    // card's bottom banner (brief #5e §7's convention for scan errors).
+    const file = formData.get("file");
+    if (file instanceof File) {
+      const tooLarge = fileTooLargeMessage(file);
+      if (tooLarge) {
+        setScanErrors((prev) => new Map(prev).set(certId, tooLarge));
+        return;
+      }
+    }
+    formData.set("workflowStepId", stepId);
+    formData.set("docSlotCode", "form2307_scan");
+    formData.set("form2307Id", certId);
+    const documentDateValue = String(formData.get("documentDate") ?? "");
     startTransition(async () => {
       const result = await uploadDocument(formData);
       if (!result.ok) {

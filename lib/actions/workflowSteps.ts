@@ -9,7 +9,11 @@ import { isElectionBlocked } from "@/lib/workflow/election";
 import { ensureComputationSheetSaved } from "@/lib/documents/computationSheet";
 import { missingRequiredSlots, checkSendClientPackageReadiness } from "@/lib/workflow/docSlots";
 import { parseDocSlots } from "@/lib/workflow/types";
-import { prepareGroupBlockReason, adviseClientBlockReason } from "@/lib/workflow/groups";
+import {
+  prepareGroupBlockReason,
+  adviseClientBlockReason,
+  FILE_GROUP_NO_START_NO_SKIP,
+} from "@/lib/workflow/groups";
 import { buildLiveAdviceMessageForFiling } from "@/lib/workflow/adviceMessage";
 
 export type StepActionResult = { ok: boolean; error?: string };
@@ -383,9 +387,70 @@ export async function recomputeReceive2307Status(filingId: string): Promise<void
   }
 }
 
+/**
+ * D67 (brief #5k §4) — steps 6, 7 and 10 (SAVE_SUBMISSION_SS,
+ * SAVE_FORM_COPY, RECEIVE_TRRC) are self-completing the same way step 2
+ * is (D46): each carries exactly one required doc slot, and attaching
+ * its document marks the step DONE directly, with no separate "Mark
+ * done" left to click. Called after every upload/removal against one of
+ * these three steps (lib/actions/documents.ts's saveDocumentForStep /
+ * deleteDocument). Reverts to PENDING — never back to WAITING_EXTERNAL,
+ * even for step 10 — if the document is removed (or replaced away
+ * without a replacement) and none remains: a step whose only file just
+ * vanished isn't "now actively waiting," it's simply not done, the same
+ * PENDING state it started in (§4.4). The election hard-blocker (D27)
+ * still applies, mirroring recomputeReceive2307Status's own check: an
+ * unconfirmed Q1 election leaves the step un-done regardless of what's
+ * attached, since these three steps bypass markStepDone's own check
+ * entirely by completing themselves here instead.
+ */
+export async function recomputeFileGroupDocStepStatus(stepId: string): Promise<void> {
+  const step = await prisma.workflowStep.findUnique({
+    where: { id: stepId },
+    include: { filing: true, documents: { where: { deletedAt: null } } },
+  });
+  if (!step) return;
+
+  const hasDoc = step.documents.length > 0;
+  const actorId = await getActorId();
+
+  if (hasDoc && step.status !== "DONE") {
+    const clientTaxYear = await prisma.clientTaxYear.findUnique({
+      where: { clientId_taxableYear: { clientId: step.filing.clientId, taxableYear: step.filing.taxableYear } },
+    });
+    if (isElectionBlocked(step.filing.period, clientTaxYear?.electionStatus)) return;
+
+    const updated = await prisma.workflowStep.update({
+      where: { id: step.id },
+      data: { status: "DONE", completedAt: new Date(), startedAt: step.startedAt ?? new Date(), actorId },
+    });
+    await logActivity({ entityType: "WorkflowStep", entityId: step.id, action: "UPDATE", before: step, after: updated, actorId });
+    await recomputeFilingStatus(step.filingId, actorId);
+    revalidatePath(`/clients/${step.filing.clientId}/filings/${step.filingId}`);
+    revalidatePath("/filings");
+  } else if (!hasDoc && step.status === "DONE") {
+    const updated = await prisma.workflowStep.update({
+      where: { id: step.id },
+      data: { status: "PENDING", completedAt: null, actorId },
+    });
+    await logActivity({ entityType: "WorkflowStep", entityId: step.id, action: "UPDATE", before: step, after: updated, actorId });
+    await recomputeFilingStatus(step.filingId, actorId);
+    revalidatePath(`/clients/${step.filing.clientId}/filings/${step.filingId}`);
+    revalidatePath("/filings");
+  }
+}
+
 export async function markStepInProgress(stepId: string): Promise<StepActionResult> {
   const step = await prisma.workflowStep.findUnique({ where: { id: stepId }, include: { filing: true } });
   if (!step) return { ok: false, error: "Step not found." };
+
+  // D65 (brief #5k §2) — steps 5-7/10 have no Start, enforced here so it
+  // can't be bypassed by calling this action directly (the same
+  // reasoning as step 3's own PREPARE_RETURN checks elsewhere in this
+  // file).
+  if (FILE_GROUP_NO_START_NO_SKIP.includes(step.stepCode)) {
+    return { ok: false, error: "This step has no separate 'in progress' state — it's marked done directly." };
+  }
 
   const actorId = await getActorId();
   const updated = await prisma.workflowStep.update({
@@ -435,6 +500,14 @@ export async function skipStep(stepId: string, reason: string): Promise<StepActi
   // action directly.
   if (step.stepCode === "PREPARE_RETURN") {
     return { ok: false, error: "Step 3 (prepare the return) can't be skipped — only marked done." };
+  }
+
+  // D65 (brief #5k §2) — steps 5, 6, 7 and 10 (File group) can't be
+  // skipped either, the bookkeeper's decision: File is a fixed sequence
+  // of documents she always needs, not one with a step that might not
+  // apply. Enforced here, not just by the UI removing the Skip control.
+  if (FILE_GROUP_NO_START_NO_SKIP.includes(step.stepCode)) {
+    return { ok: false, error: "This step can't be skipped — only marked done." };
   }
 
   const actorId = await getActorId();

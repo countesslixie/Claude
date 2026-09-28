@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 *Instructions for Claude Code working on this repository.*
-*Last reconciled: 2026-09-28 — brief #5j, covering brief #5i (skipped steps stay visible and undoable, no group-level "Mark done," the group counter, plain status labels — closing out the Prepare group), on top of brief #5h (briefs #5d-#5g), brief #5c, brief #5b, brief #5a, and the documentation pass (brief #4f) through briefs #4c-#4e.*
+*Last reconciled: 2026-09-28 — brief #5k, the File group's first walkthrough (one bug — the 1 MB upload crash, D64 — plus three changes to how steps 5-7/10 work, D65-D67), on top of brief #5j (documentation pass covering brief #5i — skipped steps stay visible and undoable, no group-level "Mark done," the group counter, plain status labels — closing out the Prepare group), brief #5h (briefs #5d-#5g), brief #5c, brief #5b, brief #5a, and the documentation pass (brief #4f) through briefs #4c-#4e.*
 
 ---
 
@@ -56,7 +56,10 @@ Next.js 15 App Router · TypeScript strict · Prisma + SQLite (`data/app.db`) ·
                                election.ts, clientPackageEmail.ts,
                                groups.ts (the five-group rollup, D32;
                                prepareGroupBlockReason, brief #4b;
-                               adviseClientBlockReason, D51, brief #5e),
+                               adviseClientBlockReason, D51, brief #5e;
+                               FILE_GROUP_NO_START_NO_SKIP/
+                               FILE_GROUP_SELF_COMPLETING_STEP_CODES,
+                               D65/D67, brief #5k),
                                clientTaxAdviceMessage.ts (step 4's message,
                                D51), adviceMessage.ts (live/saved assembly),
                                status.ts (filingStatusLabel/stepStatusLabel,
@@ -68,6 +71,8 @@ Next.js 15 App Router · TypeScript strict · Prisma + SQLite (`data/app.db`) ·
 /lib/reconciliation.ts         the single annual certificates-vs-declared-sales check
 /lib/startingFigures.ts        starting-figures reads (D56, brief #5f)
 /lib/vatThreshold.ts           VAT threshold monitor, includes starting income (brief #5f)
+/lib/upload.ts                 MAX_UPLOAD_BYTES/fileTooLargeMessage(), the client-side
+                               file-size check every upload control runs first (D64, brief #5k)
 /lib/actions/                  Server Actions — the I/O boundary. quarterlySales.ts
                                (saveQuarterlySales, D33), form2307.ts
                                (addCertificate/deleteCertificate, D34, now
@@ -77,14 +82,21 @@ Next.js 15 App Router · TypeScript strict · Prisma + SQLite (`data/app.db`) ·
                                workflowSteps.ts (reopenPreparedFiling, D50, briefs
                                #5d-#5f; unskipStep/reopenSkippedReceive2307, D60/D61,
                                brief #5i — markGroupDone is gone, deleted by the
-                               same brief, D62), filings.ts (updateFilingOtherCredits,
-                               D55, brief #5f)
+                               same brief, D62; recomputeFileGroupDocStepStatus,
+                               D67, brief #5k — steps 6/7/10's self-completing
+                               rule, the skipStep/markStepInProgress refusals for
+                               D65), filings.ts (updateFilingOtherCredits,
+                               D55, brief #5f), documents.ts (saveDocumentForStep
+                               enforces the 25 MB limit and the step-5 lock for
+                               steps 6/7/10, D64/D67, brief #5k)
 /lib/dates.ts                  manilaCalendarDay(), formatManilaDate()
 /lib/money.ts                  centsToPesos(), formatBreakdownAmount() (D59, brief #5g)
 /components/                   next-action-control.tsx, computation-sheet-panel.tsx,
                                quarterly-sales-card.tsx, record-sales-step-card.tsx,
                                receive-2307-step-card.tsx, certificate-form.tsx
                                (brief #5a), workflow-step-card.tsx,
+                               file-group-doc-step-card.tsx (steps 6/7/10's
+                               bespoke self-completing card, D67, brief #5k),
                                workflow-group-card.tsx, copy-textarea.tsx,
                                payor-name-field.tsx, atc-code-select.tsx,
                                atc-code-form.tsx, payor-form.tsx (brief #5a),
@@ -98,6 +110,8 @@ Next.js 15 App Router · TypeScript strict · Prisma + SQLite (`data/app.db`) ·
 /app/fonts/plus-jakarta-sans/  Plus Jakarta Sans, committed into the repo and
                                loaded via next/font/local — never next/font/google
                                (D58, brief #5g; locked rule #7)
+/next.config.ts                experimental.serverActions.bodySizeLimit = "25mb"
+                               (D64, brief #5k) — the only non-default entry
 /prisma/                       schema, migrations, seed
 /storage/                      gitignored document vault
 /data/                         gitignored SQLite db
@@ -155,6 +169,8 @@ A missing quarter is zero, not an error — but a filing whose OWN quarter has n
 
 **Step 2 (D35, brief #4b) blocks on its own terms, not one step-level slot.** It holds a variable number of certificate rows (`Form2307`, `claimedOnFilingId` pointing at this filing), each with its own scan (`Document.form2307Id`). Step 2 is `DONE` only once `Filing.certificatesAllReceivedAt` is set **and** every row has a scan — implemented in `lib/actions/workflowSteps.ts`'s `recomputeReceive2307Status`, called after every certificate add/delete and every scan upload/removal. Unlike step 1, this is a genuine two-way toggle: unticking "all received" reverts step 2 to not-done, so a late-arriving certificate can be entered before this filing is filed. Step 2's own doc-slot in `WorkflowStepTemplate`/`WorkflowStep` is now empty (`[]`) — do not re-add a step-level slot for it.
 
+**Steps 6, 7 and 10 (D67, brief #5k) are self-completing too, like step 2, but locked behind step 5.** Each carries exactly one required doc slot and unlocks — upload box shown, no "Attach" link — only once step 5 (`FILE_RETURN`) is `DONE`; before that the card shows nothing but a muted "Available once step 5 is done" line, no controls at all. Attaching the document marks the step `DONE` by itself, with no separate "Mark done" left on the card (`lib/actions/workflowSteps.ts`'s `recomputeFileGroupDocStepStatus`, called from `lib/actions/documents.ts`'s `saveDocumentForStep`/`deleteDocument`, the same shape `recomputeReceive2307Status` already has). A new upload against the same step+slot is a one-for-one **Replace** (D46's pattern) — the old file is soft-deleted, never accumulated. Removing the only file reverts the step to `PENDING`, never `WAITING_EXTERNAL`. The lock is enforced in `saveDocumentForStep` itself, not only by the UI hiding the box — see `components/file-group-doc-step-card.tsx`.
+
 **Step 15 (eAFS) is a documented exception, not an oversight.** Its confirmation email goes to the client, not to the bookkeeper, and often never reaches her. Blocking would strand a filing on a file she cannot obtain; removing the slot would make a document she does sometimes receive impossible to keep. If you find one optional slot sitting among seven required ones, this is why. Leave it. Step 16's client email draft asks her to forward the eAFS confirmation, but only when it isn't already on file (`lib/workflow/clientPackageEmail.ts`) — the one moment in the cycle she's writing to that client anyway.
 
 **The election check is the one other hard block** (`lib/workflow/election.ts`, `isElectionBlocked`, wired into `markStepDone`) and guards a wrong tax rate, not a missing file: an unconfirmed election may default to graduated rates, making a Q1 filing's computation wrong regardless of documents. Only Q1 is blocked.
@@ -196,6 +212,8 @@ The sixteen steps are wrapped in five groups: **Prepare** (1–4), **File** (5, 
 **The "waiting on …" label only shows for a step actually waiting right now (D52, brief #5d).** It keys on the step's live `WAITING_EXTERNAL` status, not the step template's permanent `isWaitingState` flag — the old version stayed stuck reading "waiting on X" beside an already-Done `RECORD_SALES`, `RECEIVE_2307`, `RECEIVE_TRRC`, `SAWT_ACK` or `SAWT_VALIDATION`.
 
 **Still held for a later brief:** a derived group-level waiting state generally beyond Prepare (waiting elsewhere in the workflow is still per-step, surfaced only in the collapsed group's summary, unchanged from before grouping). See `CURRENT_STATE.md` for the fuller list.
+
+**Built in brief #5k (2026-09-28): the File group's first walkthrough.** Steps 5, 6, 7 and 10 lose Start and Skip entirely (D65) — `FILE_GROUP_NO_START_NO_SKIP` in `lib/workflow/groups.ts`, enforced inside `skipStep` and `markStepInProgress` (`lib/actions/workflowSteps.ts`) regardless of caller, joining step 3's existing no-skip exception (D54). **Step 5 keeps Mark done** (`controlsMode="markDoneOnly"` on the generic `WorkflowStepCard`, same mechanism as steps 3/4) and was renamed "File return via eBIRForms" — she doesn't use eFPS (D66). **Steps 6, 7 and 10 lose Mark done too** — see "The blocking rule" above (D67) for how they unlock, self-complete, and Replace. Step 10 alone keeps **Mark waiting**, available once step 5 is Done; uploading the TRRC marks it Done and clears any waiting state, whether or not it was ever marked waiting first — the "waiting on …" label (D52) disappears on its own since it keys on live status. Step 10 does **not** auto-enter waiting the moment step 5 is Done — a reasonable idea, but not something she asked for.
 
 ## Coding conventions
 
@@ -291,7 +309,7 @@ Will hold real TINs and income data under the Data Privacy Act from November 202
 
 See `CURRENT_STATE.md`. In short:
 
-1. **Walk the File group (steps 5, 6, 7, 10), then the Pay group (steps 8, 9).** File has never been walked on its own. Pay's own build, once walked: amount paid (feeding item 56/58), and the prior-year carry-over from a client's own Annual overpayment. The Prepare group (steps 1-4) is now closed — walked and fixed across briefs #4c-#4e, #5a, #5d-#5f, #5g's look, and #5i's finish.
+1. **Walk the Pay group (steps 8, 9), the last group untouched.** Pay's own build, once walked: amount paid (feeding item 56/58), and the prior-year carry-over from a client's own Annual overpayment. Step 9 (`SAVE_PROOF_PAYMENT`) still has the Attach-then-Mark-done pattern brief #5k just retired for steps 6/7/10 — deliberately left alone for her to decide on when Pay is walked, not assumed to want the same treatment. The Prepare group (steps 1-4) closed across briefs #4c-#4e, #5a, #5d-#5f, #5g's look, and #5i's finish; the File group (steps 5, 6, 7, 10) closed in its first walkthrough, brief #5k — one bug fixed (the 1 MB upload crash, D64) and three changes to how the steps work (D65/D66/D67).
 2. **Before live data in November:** back up `data/app.db`, `storage/`, and the `.env` file (she raised this 2026-09-26, deferring the how until real data exists).
 3. Build the **document archive browse view** — client → year, with a whole-year zip. It serves what she named as the most important thing the app does, and it is the only genuinely new build left in the backlog.
 4. Confirm the ATC codes against BIR at `/settings/atc-codes` (brief #5a).

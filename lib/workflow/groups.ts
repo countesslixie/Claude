@@ -40,6 +40,39 @@ export function groupForStepCode(stepCode: string): WorkflowGroupDef | undefined
 }
 
 /**
+ * D65 (brief #5k §2) — steps 5, 6, 7 and 10 have no Start and no Skip.
+ * File is a document-and-filing sequence she works through in a fixed
+ * order (file it, save the screenshot, save the form copy, get the
+ * TRRC) — there's no decision point in it worth a written skip reason,
+ * unlike MAKE_PAYMENT or the SAWT steps. Enforced server-side in
+ * skipStep and markStepInProgress (lib/actions/workflowSteps.ts), not
+ * just by the UI removing the controls.
+ */
+export const FILE_GROUP_NO_START_NO_SKIP: readonly string[] = [
+  "FILE_RETURN",
+  "SAVE_SUBMISSION_SS",
+  "SAVE_FORM_COPY",
+  "RECEIVE_TRRC",
+];
+
+/**
+ * D67 (brief #5k §4) — steps 6, 7 and 10 (SAVE_SUBMISSION_SS,
+ * SAVE_FORM_COPY, RECEIVE_TRRC): each carries exactly one required doc
+ * slot, unlocks only once step 5 (FILE_RETURN) is Done, and completes
+ * itself the moment that slot's document is attached — the file IS the
+ * step (D27), the same reasoning RECEIVE_2307 already applies (D46).
+ * Consulted both by the upload action (lib/actions/documents.ts, to
+ * refuse attaching before step 5 is Done and to auto-complete/revert the
+ * step afterward) and by the filing page (to render the bespoke locked
+ * card instead of the generic WorkflowStepCard).
+ */
+export const FILE_GROUP_SELF_COMPLETING_STEP_CODES: readonly string[] = [
+  "SAVE_SUBMISSION_SS",
+  "SAVE_FORM_COPY",
+  "RECEIVE_TRRC",
+];
+
+/**
  * Brief #5i §3 — the fixed step-code -> global step number (1-16) lookup,
  * for naming exactly which steps are still unresolved in a group's
  * Pending tooltip (e.g. "Step 3 and step 4 not done."), without needing

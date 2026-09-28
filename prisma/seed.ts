@@ -243,9 +243,11 @@ const WORKFLOW_STEP_TEMPLATE: Array<{
     requiredDocSlots: [],
   },
   {
+    // D66 (brief #5k §3) -- she doesn't use eFPS; renamed from "File
+    // return via eBIRForms/eFPS".
     stepCode: "FILE_RETURN",
     sequence: 5,
-    title: "File return via eBIRForms/eFPS",
+    title: "File return via eBIRForms",
     category: "FILING",
     requiredDocSlots: [],
   },
@@ -414,6 +416,20 @@ async function seedWorkflowStepTemplate() {
   await prisma.workflowStepTemplate.updateMany({
     where: { stepCode: { notIn: currentStepCodes } },
     data: { isActive: false },
+  });
+
+  // D66 (brief #5k §3) -- a WorkflowStep row keeps its own copy of title,
+  // taken from the template only once, when it's first instantiated
+  // (instantiateWorkflowSteps below). The template upsert above changes
+  // FILE_RETURN's title for every FUTURE filing, but a filing already in
+  // the database still carries the old "File return via eBIRForms/eFPS"
+  // on its own row -- the same class of bug CLAUDE.md's "Database rules"
+  // already flags for the WorkflowStepTemplate upsert itself. Backfilled
+  // here so a plain reseed actually reaches already-created filings,
+  // rather than only ever taking effect on a brand-new one.
+  await prisma.workflowStep.updateMany({
+    where: { stepCode: "FILE_RETURN", title: "File return via eBIRForms/eFPS" },
+    data: { title: "File return via eBIRForms" },
   });
 }
 

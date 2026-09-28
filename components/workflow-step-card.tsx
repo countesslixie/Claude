@@ -15,6 +15,7 @@ import {
 import { uploadDocument } from "@/lib/actions/documents";
 import { stepBlockReason } from "@/lib/workflow/docSlots";
 import { stepStatusLabel } from "@/lib/workflow/status";
+import { fileTooLargeMessage } from "@/lib/upload";
 import type { WorkflowStepStatus } from "@/lib/workflow/types";
 
 const STEP_STATUS_TONE: Record<string, StatusTone> = {
@@ -108,6 +109,17 @@ export function WorkflowStepCard({
   }
 
   function handleUpload(slotCode: string, formData: FormData) {
+    // D64 (brief #5k §1) — check the file's size before it ever leaves
+    // the browser: a too-large file must show this plain line, never
+    // Next's own Server Action error overlay.
+    const file = formData.get("file");
+    if (file instanceof File) {
+      const tooLarge = fileTooLargeMessage(file);
+      if (tooLarge) {
+        setMessage(tooLarge);
+        return;
+      }
+    }
     formData.set("workflowStepId", step.id);
     formData.set("docSlotCode", slotCode);
     setMessage(null);

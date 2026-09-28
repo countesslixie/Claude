@@ -10,6 +10,7 @@ import { AtcCodeSelect, type SelectableAtcCode } from "@/components/atc-code-sel
 import type { CertificateFormState } from "@/lib/actions/form2307";
 import type { SavedPayor } from "@/lib/actions/payors";
 import { bpsToPercentLabel } from "@/lib/money";
+import { fileTooLargeMessage } from "@/lib/upload";
 
 /**
  * Brief #5a — step 2's "Add certificate" form. Everything that used to
@@ -66,6 +67,24 @@ export function CertificateForm({
   // value that was dismissed (so re-typing something new re-offers it).
   const [dismissedFillBack, setDismissedFillBack] = useState<Record<string, string>>({});
   const [fillBackSaving, setFillBackSaving] = useState<string | null>(null);
+  // D64 (brief #5k §1) — checked client-side as soon as a file is picked,
+  // and re-checked on submit so the save can never actually fire with an
+  // oversized file selected.
+  const [fileSizeError, setFileSizeError] = useState<string | null>(null);
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    setFileSizeError(file ? fileTooLargeMessage(file) : null);
+  }
+
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    const file = (e.currentTarget.elements.namedItem("file") as HTMLInputElement | null)?.files?.[0];
+    const tooLarge = file ? fileTooLargeMessage(file) : null;
+    if (tooLarge) {
+      e.preventDefault();
+      setFileSizeError(tooLarge);
+    }
+  }
 
   const matchedPayor = payorName.trim()
     ? localPayors.find((p) => p.name.toLowerCase() === payorName.trim().toLowerCase())
@@ -165,7 +184,7 @@ export function CertificateForm({
 
   return (
     <>
-    <form action={formAction} className="mt-1 flex flex-col gap-2 rounded border border-line p-2">
+    <form action={formAction} onSubmit={handleSubmit} className="mt-1 flex flex-col gap-2 rounded border border-line p-2">
       {state.error && <p className="text-xs text-red">{state.error}</p>}
 
       <div className="grid grid-cols-2 gap-2">
@@ -279,7 +298,8 @@ export function CertificateForm({
         </div>
         <div className="flex flex-col gap-0.5">
           <Label htmlFor="cert-file">Scan</Label>
-          <Input id="cert-file" name="file" type="file" required className="h-9 text-xs" />
+          <Input id="cert-file" name="file" type="file" required className="h-9 text-xs" onChange={handleFileChange} />
+          {fileSizeError && <p className="text-xs text-red">{fileSizeError}</p>}
           {errs("file")?.map((e) => (
             <p key={e} className="text-xs text-red">
               {e}
@@ -298,7 +318,7 @@ export function CertificateForm({
       </div>
 
       <div className="flex items-center gap-2">
-        <Button type="submit" size="sm" disabled={isPending}>
+        <Button type="submit" size="sm" disabled={isPending || !!fileSizeError}>
           {isPending ? "Saving…" : "Save certificate"}
         </Button>
         <button type="button" onClick={onCancel} className="text-xs text-faint underline">

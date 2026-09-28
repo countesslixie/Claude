@@ -7,7 +7,9 @@ import { logActivity } from "@/lib/activityLog";
 import { buildStorageRelativePath, saveDocumentFile } from "@/lib/documents/storage";
 import { computeSha256 } from "@/lib/documents/storage";
 import { manilaDateInputToJsDate, formatManilaDate } from "@/lib/dates";
-import { recomputeReceive2307Status } from "@/lib/actions/workflowSteps";
+import { recomputeReceive2307Status, recomputeFileGroupDocStepStatus } from "@/lib/actions/workflowSteps";
+import { FILE_GROUP_SELF_COMPLETING_STEP_CODES } from "@/lib/workflow/groups";
+import { MAX_UPLOAD_BYTES } from "@/lib/upload";
 
 export type UploadDocumentResult = {
   ok: boolean;
@@ -67,6 +69,30 @@ export async function saveDocumentForStep(params: {
 
   const { filing } = step;
   const { client } = filing;
+
+  // D64 (brief #5k §1) — a server-side backstop behind the client-side
+  // check every upload control now runs first: a file this large should
+  // never reach here, but if it does (a direct call, a stale client), fail
+  // cleanly rather than let Next's own Server Action body-size limit throw
+  // its dev-only error overlay.
+  if (params.file.size > MAX_UPLOAD_BYTES) {
+    const fileMb = (params.file.size / (1024 * 1024)).toFixed(1);
+    const limitMb = Math.floor(MAX_UPLOAD_BYTES / (1024 * 1024));
+    return { ok: false, error: `This file is ${fileMb} MB — the limit is ${limitMb} MB.` };
+  }
+
+  // D67 (brief #5k §4) — steps 6, 7 and 10 unlock only once step 5
+  // (FILE_RETURN) is Done. Enforced here, in the upload action itself,
+  // not just by the UI hiding the upload box, so it can't be bypassed by
+  // calling this action directly.
+  if (FILE_GROUP_SELF_COMPLETING_STEP_CODES.includes(step.stepCode)) {
+    const fileReturnStep = await prisma.workflowStep.findFirst({
+      where: { filingId: filing.id, stepCode: "FILE_RETURN" },
+    });
+    if (fileReturnStep?.status !== "DONE") {
+      return { ok: false, error: "Can't attach this document until step 5 (file the return) is marked done." };
+    }
+  }
 
   const buffer = Buffer.from(await params.file.arrayBuffer());
   const sha256 = computeSha256(buffer);
@@ -136,7 +162,25 @@ export async function saveDocumentForStep(params: {
     }
   }
 
+  // D67 (brief #5k §4) — steps 6, 7 and 10's own document is one-for-one,
+  // the same "Replace" pattern D46 gave step 2's certificate scan: a new
+  // upload against this step+slot soft-deletes whatever was there before
+  // rather than accumulating alongside it.
+  if (FILE_GROUP_SELF_COMPLETING_STEP_CODES.includes(step.stepCode)) {
+    const siblings = await prisma.document.findMany({
+      where: { workflowStepId: step.id, docSlotCode: params.docSlotCode, id: { not: created.id }, deletedAt: null },
+    });
+    for (const sibling of siblings) {
+      const updated = await prisma.document.update({
+        where: { id: sibling.id },
+        data: { deletedAt: new Date(), deletedReason: "Replaced by a newer file.", actorId },
+      });
+      await logActivity({ entityType: "Document", entityId: sibling.id, action: "DELETE", before: sibling, after: updated, actorId });
+    }
+  }
+
   if (step.stepCode === "RECEIVE_2307") await recomputeReceive2307Status(filing.id);
+  if (FILE_GROUP_SELF_COMPLETING_STEP_CODES.includes(step.stepCode)) await recomputeFileGroupDocStepStatus(step.id);
   revalidatePath(`/clients/${client.id}/filings/${filing.id}`);
 
   return { ok: true, documentId: created.id, duplicateWarning };
@@ -193,6 +237,14 @@ export async function deleteDocument(documentId: string, reason: string): Promis
 
   if (before.filingId) {
     if (before.workflowStep?.stepCode === "RECEIVE_2307") await recomputeReceive2307Status(before.filingId);
+    // D67 (brief #5k §4.4) — removing the only file behind step 6, 7 or
+    // 10 reverts that step to PENDING; no UI calls this for those steps
+    // yet (their generic doc slots only support Add/Replace today, no
+    // Remove — confirmed by grep), but the rule is enforced here so it
+    // holds regardless of what eventually calls it.
+    if (before.workflowStep && FILE_GROUP_SELF_COMPLETING_STEP_CODES.includes(before.workflowStep.stepCode)) {
+      await recomputeFileGroupDocStepStatus(before.workflowStep.id);
+    }
     revalidatePath(`/clients/${before.clientId}/filings/${before.filingId}`);
   }
 }

@@ -20,6 +20,7 @@ import { WorkflowStepCard, type StepCardData } from "@/components/workflow-step-
 import { WorkflowGroupCard } from "@/components/workflow-group-card";
 import { RecordSalesStepCard } from "@/components/record-sales-step-card";
 import { Receive2307StepCard, type CertificateRow } from "@/components/receive-2307-step-card";
+import { FileGroupDocStepCard } from "@/components/file-group-doc-step-card";
 import { NextActionControl } from "@/components/next-action-control";
 import { ComputationSheetPanel } from "@/components/computation-sheet-panel";
 import { OtherCreditsForm } from "@/components/other-credits-form";
@@ -27,7 +28,15 @@ import { centsToPesos } from "@/lib/money";
 import { formatManilaDate, toManilaDateInputValue } from "@/lib/dates";
 import { deriveStepAging } from "@/lib/workflow/aging";
 import { countSkippedSteps, filingStatusLabel, currentStepCode } from "@/lib/workflow/status";
-import { WORKFLOW_GROUPS, currentGroupCode, summarizeGroup, prepareGroupBlockReason, adviseClientBlockReason, type GroupStepInput } from "@/lib/workflow/groups";
+import {
+  WORKFLOW_GROUPS,
+  currentGroupCode,
+  summarizeGroup,
+  prepareGroupBlockReason,
+  adviseClientBlockReason,
+  FILE_GROUP_NO_START_NO_SKIP,
+  type GroupStepInput,
+} from "@/lib/workflow/groups";
 import { parseDocSlots, type DocSlotDef, type WorkflowStepStatus } from "@/lib/workflow/types";
 import { computeFilingCompleteness } from "@/lib/workflow/completeness";
 import { buildClientPackageEmail } from "@/lib/workflow/clientPackageEmail";
@@ -491,7 +500,11 @@ export default async function FilingDetailPage({
                 requiredDocSlots={nextStep.requiredDocSlots}
                 documents={nextStep.documents}
                 dependencyBlockedReason={DEPENDENCY_REASON_BY_STEP_CODE[nextStep.stepCode] ?? null}
-                hideStart={nextStep.stepCode === "ADVISE_CLIENT" || nextStep.stepCode === "PREPARE_RETURN"}
+                hideStart={
+                  nextStep.stepCode === "ADVISE_CLIENT" ||
+                  nextStep.stepCode === "PREPARE_RETURN" ||
+                  FILE_GROUP_NO_START_NO_SKIP.includes(nextStep.stepCode)
+                }
               />
             </div>
           ) : (
@@ -662,6 +675,34 @@ export default async function FilingDetailPage({
                       />
                     );
                   }
+                  // Brief #5k §4 (D67) — steps 6, 7 and 10 are self-completing
+                  // once step 5 is Done, the same reasoning steps 1/2 already
+                  // get their own bespoke cards for.
+                  if (
+                    step.stepCode === "SAVE_SUBMISSION_SS" ||
+                    step.stepCode === "SAVE_FORM_COPY" ||
+                    step.stepCode === "RECEIVE_TRRC"
+                  ) {
+                    const slot = step.requiredDocSlots[0];
+                    return (
+                      <FileGroupDocStepCard
+                        key={step.id}
+                        stepId={step.id}
+                        sequence={step.sequence}
+                        title={step.title}
+                        status={step.status}
+                        isStep5Done={isFilingLocked}
+                        slotCode={slot.slotCode}
+                        slotLabel={slot.label}
+                        documents={step.documents}
+                        hasMarkWaiting={step.stepCode === "RECEIVE_TRRC"}
+                        waitingOnLabel={step.waitingOnLabel}
+                        followUpCount={step.followUpCount}
+                        agingDaysWaiting={step.agingDaysWaiting}
+                        agingTone={step.agingTone}
+                      />
+                    );
+                  }
                   return (
                     <WorkflowStepCard
                       key={step.id}
@@ -670,7 +711,11 @@ export default async function FilingDetailPage({
                       dependencyBlockedReason={DEPENDENCY_REASON_BY_STEP_CODE[step.stepCode] ?? null}
                       suppressTooltip={step.stepCode === "ADVISE_CLIENT"}
                       controlsMode={
-                        step.stepCode === "ADVISE_CLIENT" || step.stepCode === "PREPARE_RETURN" ? "markDoneOnly" : "full"
+                        step.stepCode === "ADVISE_CLIENT" ||
+                        step.stepCode === "PREPARE_RETURN" ||
+                        step.stepCode === "FILE_RETURN"
+                          ? "markDoneOnly"
+                          : "full"
                       }
                     />
                   );

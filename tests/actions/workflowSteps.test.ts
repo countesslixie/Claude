@@ -3,9 +3,18 @@ import { rm } from "node:fs/promises";
 import path from "node:path";
 import { prisma } from "@/lib/prisma";
 import { generateFilingsForClientYear, recomputeRequiresSawt } from "@/lib/workflow/filingGeneration";
-import { uploadDocument } from "@/lib/actions/documents";
-import { markStepDone, markStepWaitingExternal, skipStep, unskipStep, logFollowUp } from "@/lib/actions/workflowSteps";
-import { summarizeGroup, WORKFLOW_GROUPS, type GroupStepInput } from "@/lib/workflow/groups";
+import { uploadDocument, deleteDocument } from "@/lib/actions/documents";
+import {
+  markStepDone,
+  markStepInProgress,
+  markStepWaitingExternal,
+  skipStep,
+  unskipStep,
+  logFollowUp,
+} from "@/lib/actions/workflowSteps";
+import { summarizeGroup, WORKFLOW_GROUPS, FILE_GROUP_NO_START_NO_SKIP, type GroupStepInput } from "@/lib/workflow/groups";
+import { checkSendClientPackageReadiness } from "@/lib/workflow/docSlots";
+import { computeFilingCompleteness } from "@/lib/workflow/completeness";
 import { parseDocSlots } from "@/lib/workflow/types";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
@@ -58,17 +67,22 @@ describe("workflow step actions", () => {
    */
   it("markStepDone is blocked while a required doc slot is empty, succeeds once filled", async () => {
     const { filing } = await makeClientWithQ2Filing("p3-step-done");
+    // Brief #5k §4 (D67) -- SAVE_PROOF_PAYMENT (Pay group), not
+    // SAVE_FORM_COPY (File group, now locked until step 5/FILE_RETURN is
+    // Done and self-completing on upload -- see the dedicated File-group
+    // tests below). This test is about the generic doc-slot blocking rule
+    // (D27) itself.
     const step = await prisma.workflowStep.findFirstOrThrow({
-      where: { filingId: filing.id, stepCode: "SAVE_FORM_COPY" },
+      where: { filingId: filing.id, stepCode: "SAVE_PROOF_PAYMENT" },
     });
 
     const blocked = await markStepDone(step.id);
     expect(blocked.ok).toBe(false);
 
     const formData = new FormData();
-    formData.set("file", new File(["form-bytes"], "form.pdf", { type: "application/pdf" }));
+    formData.set("file", new File(["proof-bytes"], "proof.pdf", { type: "application/pdf" }));
     formData.set("workflowStepId", step.id);
-    formData.set("docSlotCode", "filed_form");
+    formData.set("docSlotCode", "proof");
     formData.set("documentDate", "2026-08-15");
     await uploadDocument(formData);
 
@@ -644,6 +658,265 @@ describe("workflow step actions", () => {
       const step4 = await prisma.workflowStep.findUniqueOrThrow({ where: { id: step4Id } });
       expect(step3.status).toBe("PENDING");
       expect(step4.status).toBe("PENDING");
+    });
+  });
+
+  describe("brief #5k: the File group's first walkthrough (steps 5, 6, 7, 10)", () => {
+    it("D65: skipStep refuses all four File-group step codes, server-side", async () => {
+      const { filing } = await makeClientWithQ2Filing("p5k-skip-refused");
+
+      for (const stepCode of FILE_GROUP_NO_START_NO_SKIP) {
+        const step = await prisma.workflowStep.findFirstOrThrow({ where: { filingId: filing.id, stepCode } });
+        const result = await skipStep(step.id, "Trying to skip anyway.");
+        expect(result.ok).toBe(false);
+        expect(result.error).toMatch(/can't be skipped/i);
+        const unchanged = await prisma.workflowStep.findUniqueOrThrow({ where: { id: step.id } });
+        expect(unchanged.status).not.toBe("SKIPPED");
+      }
+    });
+
+    it("D65: markStepInProgress (Start) refuses all four File-group step codes, server-side", async () => {
+      const { filing } = await makeClientWithQ2Filing("p5k-start-refused");
+
+      for (const stepCode of FILE_GROUP_NO_START_NO_SKIP) {
+        const step = await prisma.workflowStep.findFirstOrThrow({ where: { filingId: filing.id, stepCode } });
+        const result = await markStepInProgress(step.id);
+        expect(result.ok).toBe(false);
+        const unchanged = await prisma.workflowStep.findUniqueOrThrow({ where: { id: step.id } });
+        expect(unchanged.status).not.toBe("IN_PROGRESS");
+      }
+    });
+
+    it("D65: FILE_RETURN (step 5) itself keeps Mark done -- only Start and Skip are gone", async () => {
+      const { filing } = await makeClientWithQ2Filing("p5k-step5-markdone-ok");
+      const fileReturnStep = await prisma.workflowStep.findFirstOrThrow({
+        where: { filingId: filing.id, stepCode: "FILE_RETURN" },
+      });
+      expect((await markStepDone(fileReturnStep.id)).ok).toBe(true);
+    });
+
+    it("D67: attaching a document to steps 6, 7 or 10 is refused while step 5 isn't Done", async () => {
+      const { filing } = await makeClientWithQ2Filing("p5k-attach-locked");
+
+      for (const [stepCode, slotCode] of [
+        ["SAVE_SUBMISSION_SS", "submission_screenshot"],
+        ["SAVE_FORM_COPY", "filed_form"],
+        ["RECEIVE_TRRC", "trrc"],
+      ] as const) {
+        const step = await prisma.workflowStep.findFirstOrThrow({ where: { filingId: filing.id, stepCode } });
+        const formData = new FormData();
+        formData.set("file", new File(["bytes"], "file.pdf", { type: "application/pdf" }));
+        formData.set("workflowStepId", step.id);
+        formData.set("docSlotCode", slotCode);
+        formData.set("documentDate", "2026-08-15");
+        const result = await uploadDocument(formData);
+        expect(result.ok).toBe(false);
+        expect(result.error).toMatch(/step 5/i);
+        const unchanged = await prisma.workflowStep.findUniqueOrThrow({ where: { id: step.id } });
+        expect(unchanged.status).not.toBe("DONE");
+      }
+    });
+
+    it("D67: once step 5 is Done, attaching the document marks steps 6/7 Done automatically -- no Mark done needed", async () => {
+      const { filing } = await makeClientWithQ2Filing("p5k-attach-unlocked");
+      const fileReturnStep = await prisma.workflowStep.findFirstOrThrow({
+        where: { filingId: filing.id, stepCode: "FILE_RETURN" },
+      });
+      expect((await markStepDone(fileReturnStep.id)).ok).toBe(true);
+
+      for (const [stepCode, slotCode] of [
+        ["SAVE_SUBMISSION_SS", "submission_screenshot"],
+        ["SAVE_FORM_COPY", "filed_form"],
+      ] as const) {
+        const step = await prisma.workflowStep.findFirstOrThrow({ where: { filingId: filing.id, stepCode } });
+        const formData = new FormData();
+        formData.set("file", new File(["bytes"], "file.pdf", { type: "application/pdf" }));
+        formData.set("workflowStepId", step.id);
+        formData.set("docSlotCode", slotCode);
+        formData.set("documentDate", "2026-08-15");
+        const result = await uploadDocument(formData);
+        expect(result.ok).toBe(true);
+
+        const updated = await prisma.workflowStep.findUniqueOrThrow({ where: { id: step.id } });
+        expect(updated.status).toBe("DONE");
+        expect(updated.completedAt).not.toBeNull();
+      }
+    });
+
+    it("D67 §4.4: replacing the only file keeps the step Done, with the old file soft-deleted (one-for-one, D46's pattern)", async () => {
+      const { filing } = await makeClientWithQ2Filing("p5k-replace");
+      const fileReturnStep = await prisma.workflowStep.findFirstOrThrow({
+        where: { filingId: filing.id, stepCode: "FILE_RETURN" },
+      });
+      await markStepDone(fileReturnStep.id);
+
+      const step = await prisma.workflowStep.findFirstOrThrow({
+        where: { filingId: filing.id, stepCode: "SAVE_FORM_COPY" },
+      });
+      const firstUpload = new FormData();
+      firstUpload.set("file", new File(["v1"], "form-v1.pdf", { type: "application/pdf" }));
+      firstUpload.set("workflowStepId", step.id);
+      firstUpload.set("docSlotCode", "filed_form");
+      firstUpload.set("documentDate", "2026-08-15");
+      const firstResult = await uploadDocument(firstUpload);
+      expect(firstResult.ok).toBe(true);
+
+      const replaceUpload = new FormData();
+      replaceUpload.set("file", new File(["v2"], "form-v2.pdf", { type: "application/pdf" }));
+      replaceUpload.set("workflowStepId", step.id);
+      replaceUpload.set("docSlotCode", "filed_form");
+      replaceUpload.set("documentDate", "2026-08-16");
+      const replaceResult = await uploadDocument(replaceUpload);
+      expect(replaceResult.ok).toBe(true);
+
+      const updated = await prisma.workflowStep.findUniqueOrThrow({ where: { id: step.id } });
+      expect(updated.status).toBe("DONE");
+
+      const liveDocs = await prisma.document.findMany({ where: { workflowStepId: step.id, deletedAt: null } });
+      expect(liveDocs).toHaveLength(1);
+      expect(liveDocs[0].originalFilename).toBe("form-v2.pdf");
+
+      const oldDoc = await prisma.document.findFirstOrThrow({ where: { id: firstResult.documentId! } });
+      expect(oldDoc.deletedAt).not.toBeNull();
+    });
+
+    it("D67 §4.4: removing the only file reverts the step to PENDING", async () => {
+      const { filing } = await makeClientWithQ2Filing("p5k-remove-reverts");
+      const fileReturnStep = await prisma.workflowStep.findFirstOrThrow({
+        where: { filingId: filing.id, stepCode: "FILE_RETURN" },
+      });
+      await markStepDone(fileReturnStep.id);
+
+      const step = await prisma.workflowStep.findFirstOrThrow({
+        where: { filingId: filing.id, stepCode: "SAVE_FORM_COPY" },
+      });
+      const upload = new FormData();
+      upload.set("file", new File(["v1"], "form.pdf", { type: "application/pdf" }));
+      upload.set("workflowStepId", step.id);
+      upload.set("docSlotCode", "filed_form");
+      upload.set("documentDate", "2026-08-15");
+      const uploadResult = await uploadDocument(upload);
+      expect((await prisma.workflowStep.findUniqueOrThrow({ where: { id: step.id } })).status).toBe("DONE");
+
+      await deleteDocument(uploadResult.documentId!, "test: simulate the only file removed");
+
+      const reverted = await prisma.workflowStep.findUniqueOrThrow({ where: { id: step.id } });
+      expect(reverted.status).toBe("PENDING");
+    });
+
+    it("D67: a step-10 upload clears a waiting state and marks it Done -- whether or not it was marked waiting first", async () => {
+      const { filing } = await makeClientWithQ2Filing("p5k-trrc-waiting-then-upload");
+      const fileReturnStep = await prisma.workflowStep.findFirstOrThrow({
+        where: { filingId: filing.id, stepCode: "FILE_RETURN" },
+      });
+      await markStepDone(fileReturnStep.id);
+
+      const trrcStep = await prisma.workflowStep.findFirstOrThrow({
+        where: { filingId: filing.id, stepCode: "RECEIVE_TRRC" },
+      });
+      expect((await markStepWaitingExternal(trrcStep.id)).ok).toBe(true);
+      expect((await prisma.workflowStep.findUniqueOrThrow({ where: { id: trrcStep.id } })).status).toBe(
+        "WAITING_EXTERNAL",
+      );
+
+      const upload = new FormData();
+      upload.set("file", new File(["trrc-bytes"], "trrc.pdf", { type: "application/pdf" }));
+      upload.set("workflowStepId", trrcStep.id);
+      upload.set("docSlotCode", "trrc");
+      upload.set("documentDate", "2026-08-17");
+      const result = await uploadDocument(upload);
+      expect(result.ok).toBe(true);
+
+      const updated = await prisma.workflowStep.findUniqueOrThrow({ where: { id: trrcStep.id } });
+      expect(updated.status).toBe("DONE");
+    });
+
+    it("D67: a step-10 upload with no prior Mark waiting also marks it Done directly", async () => {
+      const { filing } = await makeClientWithQ2Filing("p5k-trrc-direct-upload");
+      const fileReturnStep = await prisma.workflowStep.findFirstOrThrow({
+        where: { filingId: filing.id, stepCode: "FILE_RETURN" },
+      });
+      await markStepDone(fileReturnStep.id);
+
+      const trrcStep = await prisma.workflowStep.findFirstOrThrow({
+        where: { filingId: filing.id, stepCode: "RECEIVE_TRRC" },
+      });
+      expect(trrcStep.status).toBe("PENDING");
+
+      const upload = new FormData();
+      upload.set("file", new File(["trrc-bytes"], "trrc.pdf", { type: "application/pdf" }));
+      upload.set("workflowStepId", trrcStep.id);
+      upload.set("docSlotCode", "trrc");
+      upload.set("documentDate", "2026-08-17");
+      const result = await uploadDocument(upload);
+      expect(result.ok).toBe(true);
+
+      const updated = await prisma.workflowStep.findUniqueOrThrow({ where: { id: trrcStep.id } });
+      expect(updated.status).toBe("DONE");
+    });
+
+    it("Step 16's package-readiness check still finds documents attached to steps 7/9/10 via this new path", async () => {
+      const { filing } = await makeClientWithQ2Filing("p5k-package-readiness");
+      const fileReturnStep = await prisma.workflowStep.findFirstOrThrow({
+        where: { filingId: filing.id, stepCode: "FILE_RETURN" },
+      });
+      await markStepDone(fileReturnStep.id);
+
+      for (const [stepCode, slotCode] of [
+        ["SAVE_FORM_COPY", "filed_form"],
+        ["RECEIVE_TRRC", "trrc"],
+      ] as const) {
+        const step = await prisma.workflowStep.findFirstOrThrow({ where: { filingId: filing.id, stepCode } });
+        const formData = new FormData();
+        formData.set("file", new File(["bytes"], "file.pdf", { type: "application/pdf" }));
+        formData.set("workflowStepId", step.id);
+        formData.set("docSlotCode", slotCode);
+        formData.set("documentDate", "2026-08-15");
+        await uploadDocument(formData);
+      }
+      const proofStep = await prisma.workflowStep.findFirstOrThrow({
+        where: { filingId: filing.id, stepCode: "SAVE_PROOF_PAYMENT" },
+      });
+      const proofUpload = new FormData();
+      proofUpload.set("file", new File(["proof"], "proof.pdf", { type: "application/pdf" }));
+      proofUpload.set("workflowStepId", proofStep.id);
+      proofUpload.set("docSlotCode", "proof");
+      proofUpload.set("documentDate", "2026-08-15");
+      await uploadDocument(proofUpload);
+
+      // SAWT_VALIDATION (step 14) is NA for this non-SAWT client -- excluded, not "missing".
+      const stepsWithDocs = await prisma.workflowStep.findMany({
+        where: { filingId: filing.id },
+        include: { documents: { where: { deletedAt: null } } },
+      });
+      const dependencySteps = stepsWithDocs.map((s) => ({
+        stepCode: s.stepCode,
+        status: s.status,
+        requiredDocSlots: parseDocSlots(s.requiredDocSlots),
+      }));
+      const documentsByStepCode = new Map<string, { docSlotCode: string | null; deletedAt: Date | null }[]>();
+      for (const s of stepsWithDocs) {
+        documentsByStepCode.set(s.stepCode, s.documents.map((d) => ({ docSlotCode: d.docSlotCode, deletedAt: null })));
+      }
+
+      const readiness = checkSendClientPackageReadiness(dependencySteps, documentsByStepCode);
+      expect(readiness.ok).toBe(true);
+      expect(readiness.missing).toEqual([]);
+    });
+
+    it("The completeness note doesn't count locked steps 6, 7 and 10 as missing while step 5 isn't Done", () => {
+      const gaps = computeFilingCompleteness(
+        [
+          { stepCode: "SAVE_SUBMISSION_SS", title: "Save submission-page screenshot", status: "PENDING", requiredDocSlots: [{ slotCode: "submission_screenshot", label: "Submission-page screenshot", required: true, acceptedTypes: ["pdf"] }] },
+          { stepCode: "SAVE_FORM_COPY", title: "Download and save filed form", status: "PENDING", requiredDocSlots: [{ slotCode: "filed_form", label: "Filed form PDF", required: true, acceptedTypes: ["pdf"] }] },
+          { stepCode: "RECEIVE_TRRC", title: "Receive & save BIR confirmation (TRRC)", status: "PENDING", requiredDocSlots: [{ slotCode: "trrc", label: "TRRC email/PDF", required: true, acceptedTypes: ["pdf"] }] },
+        ],
+        new Map(),
+      );
+      // PENDING steps are excluded from this note entirely (only DONE/IN_PROGRESS
+      // are scanned) -- steps 6/7/10 stay PENDING while locked, so they can
+      // never appear here as "missing," locked or not.
+      expect(gaps).toEqual([]);
     });
   });
 });
