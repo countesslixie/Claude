@@ -34,6 +34,16 @@ export interface BreakdownLine {
   label: string;
   amountCents: number;
   sourceNote: string;
+  /**
+   * Brief #5g §7 — true only for the final Tax Payable/(Overpayment) row
+   * (1701Q item 63, 1701A item 65) when the figure is an overpayment. The
+   * bookkeeper's walkthrough found that row showing a plain positive
+   * figure indistinguishable from tax due, despite the sheet's own
+   * heading already correctly naming it an overpayment. Renderers use
+   * this to show the amount parenthesized instead of adding a sign to
+   * amountCents itself, which stays the true (non-negative) magnitude.
+   */
+  isOverpaymentLine?: boolean;
 }
 
 /**

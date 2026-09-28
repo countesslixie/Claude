@@ -35,7 +35,7 @@ export default async function ClientsPage({
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-lg font-semibold text-slate-900">Clients</h1>
+        <h1 className="text-2xl font-semibold text-ink">Clients</h1>
         <Link href="/clients/new">
           <Button>New client</Button>
         </Link>
@@ -47,9 +47,9 @@ export default async function ClientsPage({
           name="q"
           defaultValue={q}
           placeholder="Search name, code, or TIN…"
-          className="h-8 w-64 rounded-md border border-slate-300 px-2 text-sm outline-none focus:border-slate-500"
+          className="h-8 w-64 rounded-md border border-line px-2 text-sm outline-none focus:border-purple-400"
         />
-        <div className="flex overflow-hidden rounded-md border border-slate-300">
+        <div className="flex overflow-hidden rounded-md border border-line">
           {[
             { value: "active", label: "Active" },
             { value: "all", label: "All" },
@@ -59,7 +59,7 @@ export default async function ClientsPage({
               key={opt.value}
               href={`/clients?status=${opt.value}${q ? `&q=${encodeURIComponent(q)}` : ""}`}
               className={`px-2.5 py-1 text-xs ${
-                status === opt.value ? "bg-slate-900 text-white" : "bg-white text-slate-600"
+                status === opt.value ? "bg-purple-600 text-white" : "bg-surface text-ink-secondary"
               }`}
             >
               {opt.label}
@@ -71,7 +71,7 @@ export default async function ClientsPage({
         </Button>
       </form>
 
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+      <div className="overflow-x-auto rounded-lg border border-line bg-surface">
         <table className="data-table">
           <thead>
             <tr>
@@ -86,12 +86,12 @@ export default async function ClientsPage({
           <tbody>
             {clients.map((c) => (
               <tr key={c.id}>
-                <td className="font-mono text-xs text-slate-500">{c.code}</td>
+                <td className="font-mono text-xs text-faint">{c.code}</td>
                 <td>
-                  <Link href={`/clients/${c.id}`} className="font-medium text-slate-900 hover:underline">
+                  <Link href={`/clients/${c.id}`} className="font-medium text-ink hover:underline">
                     {c.registeredName}
                   </Link>
-                  {c.tradeName && <span className="ml-1 text-slate-400">({c.tradeName})</span>}
+                  {c.tradeName && <span className="ml-1 text-faint">({c.tradeName})</span>}
                 </td>
                 <td className="font-mono text-xs">{c.tin}</td>
                 <td>{c.rdoCode}</td>
@@ -107,7 +107,7 @@ export default async function ClientsPage({
             ))}
             {clients.length === 0 && (
               <tr>
-                <td colSpan={6} className="py-8 text-center text-sm text-slate-400">
+                <td colSpan={6} className="py-8 text-center text-sm text-faint">
                   No clients found.
                 </td>
               </tr>

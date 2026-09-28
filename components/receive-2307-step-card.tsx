@@ -175,9 +175,9 @@ export function Receive2307StepCard({
   }
 
   return (
-    <div className="rounded-lg border border-slate-200 p-3">
+    <div className="rounded-lg border border-line p-3">
       <div className="flex items-start justify-between gap-2">
-        <p className="text-sm font-medium text-slate-900">
+        <p className="text-sm font-medium text-ink">
           {sequence}. {title}
         </p>
         <StatusBadge tone={status === "DONE" ? "done" : status === "SKIPPED" ? "pending" : "waiting"}>
@@ -185,13 +185,13 @@ export function Receive2307StepCard({
         </StatusBadge>
       </div>
 
-      {status === "SKIPPED" && skippedReason && <p className="mt-1 text-xs text-slate-500">Skipped: {skippedReason}</p>}
+      {status === "SKIPPED" && skippedReason && <p className="mt-1 text-xs text-faint">Skipped: {skippedReason}</p>}
 
       {status !== "SKIPPED" && !expanded && (
-        <p className="mt-1 text-xs text-slate-600">
+        <p className="mt-1 text-xs text-ink-secondary">
           {certificates.length} certificate{certificates.length === 1 ? "" : "s"} ·{" "}
           {centsToPesos(totalWithheldCents, { withSymbol: true })} withheld —{" "}
-          <button type="button" onClick={() => setExpanded(true)} className="underline hover:text-slate-900">
+          <button type="button" onClick={() => setExpanded(true)} className="underline hover:text-ink">
             Show rows
           </button>
         </p>
@@ -203,19 +203,19 @@ export function Receive2307StepCard({
             <button
               type="button"
               onClick={() => setExpanded(false)}
-              className="mt-1 text-xs text-slate-400 underline hover:text-slate-600"
+              className="mt-1 text-xs text-faint underline hover:text-ink-secondary"
             >
               Hide rows
             </button>
           )}
           <div className="mt-2 flex flex-col gap-2">
-            {certificates.length === 0 && <p className="text-xs text-slate-400">No certificates entered yet.</p>}
+            {certificates.length === 0 && <p className="text-xs text-faint">No certificates entered yet.</p>}
             {certificates.map((c) => (
-              <div key={c.id} className="rounded border border-slate-200 bg-slate-50 p-2">
+              <div key={c.id} className="rounded border border-line bg-background p-2">
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <p className="text-sm text-slate-900">{c.payorName}</p>
-                    <p className="text-xs text-slate-500">
+                    <p className="text-sm text-ink">{c.payorName}</p>
+                    <p className="text-xs text-faint tabular-nums">
                       {centsToPesos(c.incomePaymentCents, { withSymbol: true })} income ·{" "}
                       {centsToPesos(c.taxWithheldCents, { withSymbol: true })} withheld
                     </p>
@@ -236,31 +236,31 @@ export function Receive2307StepCard({
                   <ul className="mt-1 flex flex-col gap-0.5">
                     {c.scans.map((d) => (
                       <li key={d.id} className="text-xs">
-                        <a href={`/api/documents/${d.id}/download`} className="text-slate-700 underline hover:text-slate-900">
+                        <a href={`/api/documents/${d.id}/download`} className="text-ink-secondary underline hover:text-ink">
                           {d.originalFilename}
                         </a>
                       </li>
                     ))}
                   </ul>
                 ) : (
-                  <p className="mt-1 text-xs text-amber-700">Scan required for this row.</p>
+                  <p className="mt-1 text-xs text-amber">Scan required for this row.</p>
                 )}
                 {replacedNotes.has(c.id) && (
-                  <p className="mt-0.5 text-xs text-emerald-700">Replaced {replacedNotes.get(c.id)}</p>
+                  <p className="mt-0.5 text-xs text-green">Replaced {replacedNotes.get(c.id)}</p>
                 )}
                 {!locked && !openScanUpload.has(c.id) && (
                   <div className="mt-1 flex items-center gap-3">
                     <button
                       type="button"
                       onClick={() => toggleSet(openScanUpload, setOpenScanUpload, c.id)}
-                      className="text-xs text-slate-500 underline hover:text-slate-900"
+                      className="text-xs text-faint underline hover:text-ink"
                     >
                       {c.scans.length > 0 ? "Replace scan" : "Attach scan"}
                     </button>
                     <button
                       type="button"
                       onClick={() => toggleSet(openMore, setOpenMore, c.id)}
-                      className="text-xs text-slate-400 underline hover:text-slate-600"
+                      className="text-xs text-faint underline hover:text-ink-secondary"
                     >
                       {openMore.has(c.id) ? "Hide details" : "More"}
                     </button>
@@ -285,18 +285,18 @@ export function Receive2307StepCard({
                       <button
                         type="button"
                         onClick={() => toggleSet(openScanUpload, setOpenScanUpload, c.id)}
-                        className="text-xs text-slate-400 underline hover:text-slate-600"
+                        className="text-xs text-faint underline hover:text-ink-secondary"
                       >
                         Cancel
                       </button>
                       {scanErrors.has(c.id) && (
-                        <span className="text-xs text-red-600">{scanErrors.get(c.id)}</span>
+                        <span className="text-xs text-red">{scanErrors.get(c.id)}</span>
                       )}
                     </form>
                     <button
                       type="button"
                       onClick={() => toggleSet(openMore, setOpenMore, c.id)}
-                      className="mt-1 text-xs text-slate-400 underline hover:text-slate-600"
+                      className="mt-1 text-xs text-faint underline hover:text-ink-secondary"
                     >
                       {openMore.has(c.id) ? "Hide details" : "More"}
                     </button>
@@ -306,13 +306,13 @@ export function Receive2307StepCard({
                   <button
                     type="button"
                     onClick={() => toggleSet(openMore, setOpenMore, c.id)}
-                    className="mt-1 text-xs text-slate-400 underline hover:text-slate-600"
+                    className="mt-1 text-xs text-faint underline hover:text-ink-secondary"
                   >
                     {openMore.has(c.id) ? "Hide details" : "More"}
                   </button>
                 )}
                 {openMore.has(c.id) && (
-                  <dl className="mt-1 grid grid-cols-2 gap-1 text-xs text-slate-500">
+                  <dl className="mt-1 grid grid-cols-2 gap-1 text-xs text-faint">
                     <div>
                       <dt className="inline font-medium">TIN:</dt> {c.payorTin || "—"}
                     </div>
@@ -324,7 +324,7 @@ export function Receive2307StepCard({
                     </div>
                     <div>
                       <dt className="inline font-medium">Rate:</dt> {bpsToPercentLabel(c.withholdingRateBps)}
-                      {c.rateOverridden && <span className="ml-1 text-amber-700">(overridden from the ATC code&rsquo;s rate)</span>}
+                      {c.rateOverridden && <span className="ml-1 text-amber">(overridden from the ATC code&rsquo;s rate)</span>}
                     </div>
                     <div className="col-span-2">
                       <dt className="inline font-medium">Period:</dt> {c.periodFrom} – {c.periodTo}
@@ -363,14 +363,14 @@ export function Receive2307StepCard({
           )}
 
           {!locked && allReceived && (
-            <p className="mt-2 text-xs text-slate-500">
+            <p className="mt-2 text-xs text-faint">
               All certificates received is ticked — untick it to add or remove a certificate.
             </p>
           )}
 
           {certificates.length > 0 && (
             <>
-              <label className="mt-3 flex items-center gap-1.5 text-sm text-slate-700">
+              <label className="mt-3 flex items-center gap-1.5 text-sm text-ink-secondary">
                 <Checkbox
                   checked={allReceived}
                   disabled={isPending || locked}
@@ -379,7 +379,7 @@ export function Receive2307StepCard({
                 All certificates received
               </label>
               {allReceived && !allHaveScans && (
-                <p className="mt-1 text-xs text-amber-700">Every row needs its own scan before this step can be Done.</p>
+                <p className="mt-1 text-xs text-amber">Every row needs its own scan before this step can be Done.</p>
               )}
             </>
           )}
@@ -406,7 +406,7 @@ export function Receive2307StepCard({
         </div>
       )}
 
-      {message && <p className="mt-2 rounded bg-amber-50 px-2 py-1 text-xs text-amber-800">{message}</p>}
+      {message && <p className="mt-2 rounded bg-amber-tint px-2 py-1 text-xs text-amber">{message}</p>}
     </div>
   );
 }

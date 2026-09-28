@@ -224,9 +224,10 @@ export function computeQuarterlyForm(input: QuarterlyFormComputationInput): Quar
     { label: "61. Other Tax Credits/Payments", amountCents: item61OtherCreditsCents, sourceNote: "As entered for this taxable year" },
     { label: "62. Total Tax Credits/Payments", amountCents: item62TotalCreditsCents, sourceNote: "55 + 56 + 57 + 58 + 61, rounded to the whole peso" },
     {
-      label: "63. Tax Payable/(Overpayment)",
+      label: overpaymentCents > 0 ? "63. Tax Payable/(Overpayment) — overpayment" : "63. Tax Payable/(Overpayment)",
       amountCents: overpaymentCents > 0 ? overpaymentCents : item63PayableCents,
       sourceNote: "54 - 62. This is a preparation aid — the filed return and BIR's own assessment govern.",
+      isOverpaymentLine: overpaymentCents > 0,
     },
   ];
 
@@ -313,9 +314,10 @@ export function computeAnnualForm(input: AnnualFormComputationInput): AnnualForm
     { label: "63. Other Tax Credits/Payments", amountCents: item63OtherCreditsCents, sourceNote: "As entered for this taxable year, rounded to the whole peso" },
     { label: "64. Total Tax Credits/Payments", amountCents: item64TotalCreditsCents, sourceNote: "57 + 58 + 59 + 60 + 63" },
     {
-      label: "65. Net Tax Payable/(Overpayment)",
+      label: overpaymentCents > 0 ? "65. Net Tax Payable/(Overpayment) — overpayment" : "65. Net Tax Payable/(Overpayment)",
       amountCents: overpaymentCents > 0 ? overpaymentCents : item65PayableCents,
       sourceNote: "56 - 64. This is a preparation aid — the filed return and BIR's own assessment govern.",
+      isOverpaymentLine: overpaymentCents > 0,
     },
   ];
 

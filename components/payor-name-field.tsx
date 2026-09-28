@@ -78,16 +78,16 @@ export function PayorNameField({
         ))}
       </datalist>
       {showOffer && (
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-faint">
           Not on your saved list.{" "}
           <button
             type="button"
             onClick={() => onRequestSave!(trimmed)}
-            className="text-slate-700 underline hover:text-slate-900"
+            className="text-ink-secondary underline hover:text-ink"
           >
             {`Save "${trimmed}" to payors`}
           </button>{" "}
-          <button type="button" onClick={() => setDismissedFor(trimmed)} className="text-slate-400 underline">
+          <button type="button" onClick={() => setDismissedFor(trimmed)} className="text-faint underline">
             Not now
           </button>
         </p>

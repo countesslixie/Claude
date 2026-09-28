@@ -74,9 +74,9 @@ export function StartingFiguresForm({
 
   if (!showForm) {
     return (
-      <div className="rounded-lg border border-slate-200 bg-white p-4">
+      <div className="rounded-lg border border-line bg-surface p-4">
         <div className="mb-2 flex items-baseline justify-between">
-          <h2 className="text-sm font-semibold text-slate-900">Starting figures</h2>
+          <h2 className="text-sm font-semibold text-ink">Starting figures</h2>
           {!locked && (
             <Button type="button" size="sm" variant="secondary" onClick={() => setEditing(true)}>
               Edit
@@ -84,11 +84,11 @@ export function StartingFiguresForm({
           )}
         </div>
         {locked && (
-          <p className="mb-2 text-xs text-slate-400">
+          <p className="mb-2 text-xs text-faint">
             Locked — this year&apos;s first in-app return has already been filed.
           </p>
         )}
-        <dl className="grid grid-cols-1 gap-x-6 gap-y-1 text-sm text-slate-700 sm:grid-cols-2">
+        <dl className="grid grid-cols-1 gap-x-6 gap-y-1 text-sm text-ink-secondary sm:grid-cols-2">
           <Row label="Latest return filed outside the app" value={savedValues.latestOutsideReturn} />
           <Row label="Prior year's excess credit (item 55)" value={pesosDisplay(savedValues.priorYearExcessCredit)} />
           {savedValues.latestOutsideReturn !== "NONE" && (
@@ -111,9 +111,9 @@ export function StartingFiguresForm({
   }
 
   return (
-    <form key={formKey} action={formAction} className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4">
-      <h2 className="text-sm font-semibold text-slate-900">Starting figures</h2>
-      {state.error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{state.error}</p>}
+    <form key={formKey} action={formAction} className="flex flex-col gap-3 rounded-lg border border-line bg-surface p-4">
+      <h2 className="text-sm font-semibold text-ink">Starting figures</h2>
+      {state.error && <p className="rounded-md bg-red-tint px-3 py-2 text-sm text-red">{state.error}</p>}
 
       <div className="flex flex-col gap-1">
         <Label htmlFor="latestOutsideReturn">Latest return filed outside the app</Label>
@@ -135,7 +135,7 @@ export function StartingFiguresForm({
         <Label htmlFor="priorYearExcessCredit">Prior year&apos;s excess credit — item 55 (₱)</Label>
         <Input id="priorYearExcessCredit" name="priorYearExcessCredit" defaultValue={v("priorYearExcessCredit")} className="w-48" />
         {errs("priorYearExcessCredit")?.map((e) => (
-          <p key={e} className="text-xs text-red-600">{e}</p>
+          <p key={e} className="text-xs text-red">{e}</p>
         ))}
       </div>
 
@@ -171,7 +171,7 @@ export function StartingFiguresForm({
             <Label htmlFor="otherCreditsDescription">Other credits — specify</Label>
             <Input id="otherCreditsDescription" name="otherCreditsDescription" defaultValue={v("otherCreditsDescription")} />
             {errs("otherCreditsDescription")?.map((e) => (
-              <p key={e} className="text-xs text-red-600">{e}</p>
+              <p key={e} className="text-xs text-red">{e}</p>
             ))}
           </div>
           <Field
@@ -188,7 +188,7 @@ export function StartingFiguresForm({
           {isPending ? "Saving…" : "Save"}
         </Button>
         {hasSavedRow && (
-          <button type="button" onClick={handleCancel} className="text-xs text-slate-400 underline">
+          <button type="button" onClick={handleCancel} className="text-xs text-faint underline">
             Cancel
           </button>
         )}
@@ -213,7 +213,7 @@ function Field({
       <Label htmlFor={id}>{label}</Label>
       <Input id={id} name={id} defaultValue={defaultValue} />
       {errs?.map((e) => (
-        <p key={e} className="text-xs text-red-600">{e}</p>
+        <p key={e} className="text-xs text-red">{e}</p>
       ))}
     </div>
   );
@@ -222,7 +222,7 @@ function Field({
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</dt>
+      <dt className="text-xs font-medium uppercase tracking-wide text-faint">{label}</dt>
       <dd>{value}</dd>
     </div>
   );

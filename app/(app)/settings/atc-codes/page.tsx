@@ -18,8 +18,8 @@ export default async function AtcCodesPage() {
     <div className="mx-auto max-w-4xl">
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-semibold text-slate-900">ATC codes</h1>
-          <p className="mt-1 text-sm text-slate-500">
+          <h1 className="text-2xl font-semibold text-ink">ATC codes</h1>
+          <p className="mt-1 text-sm text-faint">
             The rate is a property of the code — the certificate form fills it in once a code is chosen.
             Never invent a code or a rate here (D19); leave it unverified until confirmed against the
             current BIR ATC list.
@@ -30,7 +30,7 @@ export default async function AtcCodesPage() {
         </Link>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+      <div className="overflow-x-auto rounded-lg border border-line bg-surface">
         <table className="data-table">
           <thead>
             <tr>
@@ -47,7 +47,7 @@ export default async function AtcCodesPage() {
             {codes.map((c) => (
               <tr key={c.id}>
                 <td className="font-mono text-xs">{c.code}</td>
-                <td className="max-w-sm text-sm text-slate-700">{c.description}</td>
+                <td className="max-w-sm text-sm text-ink-secondary">{c.description}</td>
                 <td>{bpsToPercentLabel(c.rateBps)}</td>
                 <td>{c.payeeType || "—"}</td>
                 <td>
@@ -65,7 +65,7 @@ export default async function AtcCodesPage() {
                   )}
                 </td>
                 <td>
-                  <Link href={`/settings/atc-codes/${c.id}`} className="text-sm text-slate-600 hover:underline">
+                  <Link href={`/settings/atc-codes/${c.id}`} className="text-sm text-ink-secondary hover:underline">
                     Edit
                   </Link>
                 </td>
@@ -73,7 +73,7 @@ export default async function AtcCodesPage() {
             ))}
             {codes.length === 0 && (
               <tr>
-                <td colSpan={7} className="py-8 text-center text-sm text-slate-400">
+                <td colSpan={7} className="py-8 text-center text-sm text-faint">
                   No ATC codes yet.
                 </td>
               </tr>

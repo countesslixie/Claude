@@ -47,10 +47,10 @@ export default async function Form2307RegisterPage({
     <div className="mx-auto max-w-5xl">
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-semibold text-slate-900">
+          <h1 className="text-2xl font-semibold text-ink">
             Form 2307 register — {client.registeredName}
           </h1>
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-faint">
             Read-only. Certificates are entered under step 2 of the filing they belong to (brief #4b) —
             open a filing and go to &quot;Receive Form 2307&quot; to add or remove one. A 2307 is a credit
             record — what one payor paid and withheld. It never contributes to gross sales; declared
@@ -69,15 +69,15 @@ export default async function Form2307RegisterPage({
       </div>
 
       <form className="mb-4 flex items-center gap-2" method="get">
-        <label className="text-sm text-slate-600">Year</label>
+        <label className="text-sm text-ink-secondary">Year</label>
         <input
           type="number"
           name="year"
           defaultValue={taxableYear}
-          className="h-8 w-24 rounded-md border border-slate-300 px-2 text-sm"
+          className="h-8 w-24 rounded-md border border-line px-2 text-sm"
         />
-        <label className="text-sm text-slate-600">Period</label>
-        <select name="period" defaultValue={period} className="h-8 rounded-md border border-slate-300 px-2 text-sm">
+        <label className="text-sm text-ink-secondary">Period</label>
+        <select name="period" defaultValue={period} className="h-8 rounded-md border border-line px-2 text-sm">
           {ALL_PERIODS.map((p) => (
             <option key={p} value={p}>
               {p}
@@ -89,14 +89,14 @@ export default async function Form2307RegisterPage({
         </Button>
       </form>
 
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+      <div className="overflow-x-auto rounded-lg border border-line bg-surface">
         <table className="data-table">
           <thead>
             <tr>
               <th>Payor</th>
               <th>ATC</th>
-              <th>Income payment</th>
-              <th>Tax withheld</th>
+              <th className="text-right">Income payment</th>
+              <th className="text-right">Tax withheld</th>
               <th>Rate</th>
               <th>Status</th>
               <th>Entered under</th>
@@ -107,8 +107,8 @@ export default async function Form2307RegisterPage({
               <tr key={c.id}>
                 <td>{c.payorName}</td>
                 <td className="font-mono text-xs">{c.atcCode || "—"}</td>
-                <td>{centsToPesos(c.incomePaymentCents, { withSymbol: true })}</td>
-                <td>{centsToPesos(c.taxWithheldCents, { withSymbol: true })}</td>
+                <td className="text-right tabular-nums">{centsToPesos(c.incomePaymentCents, { withSymbol: true })}</td>
+                <td className="text-right tabular-nums">{centsToPesos(c.taxWithheldCents, { withSymbol: true })}</td>
                 <td>{bpsToPercentLabel(c.withholdingRateBps)}</td>
                 <td>
                   <StatusBadge tone={STATUS_TONE[c.status] ?? "pending"}>{c.status}</StatusBadge>
@@ -126,7 +126,7 @@ export default async function Form2307RegisterPage({
             ))}
             {certificates.length === 0 && (
               <tr>
-                <td colSpan={7} className="py-8 text-center text-sm text-slate-400">
+                <td colSpan={7} className="py-8 text-center text-sm text-faint">
                   No Form 2307 certificates for this period.
                 </td>
               </tr>
@@ -135,14 +135,14 @@ export default async function Form2307RegisterPage({
         </table>
       </div>
 
-      <div className="mt-6 rounded-lg border border-slate-200 bg-white p-4">
-        <h2 className="text-sm font-semibold text-slate-900">Certificates vs. declared sales — TY{taxableYear}</h2>
-        <p className="mt-1 text-xs text-slate-500">
+      <div className="mt-6 rounded-lg border border-line bg-surface p-4">
+        <h2 className="text-sm font-semibold text-ink">Certificates vs. declared sales — TY{taxableYear}</h2>
+        <p className="mt-1 text-xs text-faint">
           Runs over the whole taxable year, not per quarter — a certificate is credited to whichever
           period is open when it arrives, so a per-quarter comparison would flag a variance almost every
           time.
         </p>
-        <p className="mt-3 text-sm text-slate-700">
+        <p className="mt-3 text-sm text-ink-secondary">
           Certificates for TY{taxableYear} total{" "}
           <span className="font-medium">{centsToPesos(reconciliation.certificatesTotalCents, { withSymbol: true })}</span>{" "}
           in income payments against{" "}
@@ -150,13 +150,13 @@ export default async function Form2307RegisterPage({
           declared gross sales.
         </p>
         {reconciliation.hasVariance ? (
-          <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800">
+          <p className="mt-3 rounded-md bg-amber-tint px-3 py-2 text-sm font-medium text-amber">
             Certificates exceed declared sales by{" "}
             {centsToPesos(reconciliation.varianceCents, { withSymbol: true })} — something is wrong here;
             check the declared sales figure before filing.
           </p>
         ) : (
-          <p className="mt-3 text-sm text-emerald-700">Certificates do not exceed declared sales.</p>
+          <p className="mt-3 text-sm text-green">Certificates do not exceed declared sales.</p>
         )}
       </div>
     </div>

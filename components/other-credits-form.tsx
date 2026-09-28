@@ -62,12 +62,12 @@ export function OtherCreditsForm({
 
   if (!showForm) {
     return (
-      <div className="rounded border border-slate-200 bg-slate-50 p-2">
+      <div className="rounded border border-line bg-background p-2">
         <div className="flex items-center justify-between gap-2">
-          <p className="text-xs font-medium text-slate-700">
+          <p className="text-xs font-medium text-ink-secondary">
             Other tax credits/payments (item 61): {centsToPesos(pesosStrToCentsSafe(savedValues.otherCredits), { withSymbol: true })}
             {savedValues.otherCreditsDescription ? ` — ${savedValues.otherCreditsDescription}` : ""}
-            {!savedNow && sourceLabel && <span className="ml-1 text-slate-400">(from {sourceLabel})</span>}
+            {!savedNow && sourceLabel && <span className="ml-1 text-faint">(from {sourceLabel})</span>}
           </p>
           {!locked && (
             <Button type="button" size="sm" variant="secondary" onClick={() => setEditing(true)}>
@@ -80,11 +80,11 @@ export function OtherCreditsForm({
   }
 
   return (
-    <form key={formKey} action={formAction} className="flex flex-col gap-2 rounded border border-slate-200 p-2">
-      <p className="text-xs font-medium text-slate-700">Other tax credits/payments (item 61)</p>
-      {state.error && <p className="text-xs text-red-600">{state.error}</p>}
+    <form key={formKey} action={formAction} className="flex flex-col gap-2 rounded border border-line p-2">
+      <p className="text-xs font-medium text-ink-secondary">Other tax credits/payments (item 61)</p>
+      {state.error && <p className="text-xs text-red">{state.error}</p>}
       {!hasSavedValue && sourceLabel && (
-        <p className="text-xs text-slate-400">Pre-filled from {sourceLabel} — edit and Save to set this filing&apos;s own figure.</p>
+        <p className="text-xs text-faint">Pre-filled from {sourceLabel} — edit and Save to set this filing&apos;s own figure.</p>
       )}
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <div className="flex flex-col gap-1">
@@ -93,7 +93,7 @@ export function OtherCreditsForm({
           </Label>
           <Input id="otherCredits" name="otherCredits" defaultValue={v("otherCredits")} className="h-8 text-xs" />
           {errs("otherCredits")?.map((e) => (
-            <p key={e} className="text-xs text-red-600">{e}</p>
+            <p key={e} className="text-xs text-red">{e}</p>
           ))}
         </div>
         <div className="flex flex-col gap-1">
@@ -107,7 +107,7 @@ export function OtherCreditsForm({
             className="h-8 text-xs"
           />
           {errs("otherCreditsDescription")?.map((e) => (
-            <p key={e} className="text-xs text-red-600">{e}</p>
+            <p key={e} className="text-xs text-red">{e}</p>
           ))}
         </div>
       </div>
@@ -116,7 +116,7 @@ export function OtherCreditsForm({
           {isPending ? "Saving…" : "Save"}
         </Button>
         {hasSavedValue && (
-          <button type="button" onClick={handleCancel} className="text-xs text-slate-400 underline">
+          <button type="button" onClick={handleCancel} className="text-xs text-faint underline">
             Cancel
           </button>
         )}

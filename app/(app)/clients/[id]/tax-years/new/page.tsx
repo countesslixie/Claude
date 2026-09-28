@@ -16,7 +16,7 @@ export default async function NewClientTaxYearPage({
 
   return (
     <div className="mx-auto max-w-xl">
-      <h1 className="mb-4 text-lg font-semibold text-slate-900">
+      <h1 className="mb-4 text-2xl font-semibold text-ink">
         New taxable year — {client.registeredName}
       </h1>
       <ClientTaxYearForm action={boundAction} submitLabel="Create tax year" />

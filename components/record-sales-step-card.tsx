@@ -34,19 +34,19 @@ export function RecordSalesStepCard({
   const isDraft = !isDone && totalCents != null;
 
   return (
-    <div className="rounded-lg border border-slate-200 p-3">
+    <div className="rounded-lg border border-line p-3">
       <div className="flex items-start justify-between gap-2">
-        <p className="text-sm font-medium text-slate-900">
+        <p className="text-sm font-medium text-ink">
           {sequence}. {title}
         </p>
         <StatusBadge tone={isDone ? "done" : "waiting"}>{isDone ? "Done" : "Waiting on client"}</StatusBadge>
       </div>
 
-      <p className="mt-1 text-sm text-slate-700">
+      <p className="mt-1 text-sm text-ink-secondary">
         {totalCents != null ? (
           <>
             Total: {centsToPesos(totalCents, { withSymbol: true })}
-            {isDraft && <span className="ml-1.5 text-xs font-medium uppercase tracking-wide text-amber-600">Draft</span>}
+            {isDraft && <span className="ml-1.5 text-xs font-medium uppercase tracking-wide text-amber">Draft</span>}
           </>
         ) : (
           "Not saved yet."

@@ -46,13 +46,13 @@ export function ClientTaxYearForm({
   return (
     <form action={formAction} className="flex flex-col gap-4">
       {state.error && (
-        <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{state.error}</p>
+        <p className="rounded-md bg-red-tint px-3 py-2 text-sm text-red">{state.error}</p>
       )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="flex flex-col gap-1">
           <Label htmlFor="taxableYear">
-            Taxable year<span className="text-red-500"> *</span>
+            Taxable year<span className="text-red"> *</span>
           </Label>
           <Input
             id="taxableYear"
@@ -62,13 +62,13 @@ export function ClientTaxYearForm({
             required
           />
           {errs("taxableYear")?.map((e) => (
-            <p key={e} className="text-xs text-red-600">{e}</p>
+            <p key={e} className="text-xs text-red">{e}</p>
           ))}
         </div>
 
         <div className="flex flex-col gap-1">
           <Label htmlFor="regime">
-            Regime<span className="text-red-500"> *</span>
+            Regime<span className="text-red"> *</span>
           </Label>
           <Select id="regime" name="regime" defaultValue={v("regime") || "RATE_8_PERCENT"} required>
             {REGIMES.map((o) => (
@@ -81,7 +81,7 @@ export function ClientTaxYearForm({
 
         <div className="flex flex-col gap-1">
           <Label htmlFor="electionStatus">
-            Election status<span className="text-red-500"> *</span>
+            Election status<span className="text-red"> *</span>
           </Label>
           <Select
             id="electionStatus"

@@ -2,9 +2,11 @@ import { Nav } from "@/components/nav";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50">
+    <div className="min-h-screen bg-background">
       <Nav />
-      <main className="flex-1 px-4 py-6">{children}</main>
+      <main className="min-h-screen pl-60">
+        <div className="px-6 py-6">{children}</div>
+      </main>
     </div>
   );
 }

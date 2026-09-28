@@ -34,7 +34,7 @@ export function AtcCodeSelect({
 }) {
   if (atcCodes.length === 0) {
     return (
-      <p className="text-sm text-amber-700">
+      <p className="text-sm text-amber">
         No ATC codes yet —{" "}
         <Link href="/settings/atc-codes" className="underline">
           add one in Settings

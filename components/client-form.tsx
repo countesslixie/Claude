@@ -49,7 +49,7 @@ function TextField({ name, label, defaultValue, errors, required, type = "text",
     <div className="flex flex-col gap-1">
       <Label htmlFor={name}>
         {label}
-        {required && <span className="text-red-500"> *</span>}
+        {required && <span className="text-red"> *</span>}
       </Label>
       <Input
         id={name}
@@ -60,7 +60,7 @@ function TextField({ name, label, defaultValue, errors, required, type = "text",
         placeholder={placeholder}
       />
       {errors?.map((e) => (
-        <p key={e} className="text-xs text-red-600">
+        <p key={e} className="text-xs text-red">
           {e}
         </p>
       ))}
@@ -87,11 +87,11 @@ export function ClientForm({
   return (
     <form action={formAction} className="flex flex-col gap-6">
       {state.error && (
-        <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{state.error}</p>
+        <p className="rounded-md bg-red-tint px-3 py-2 text-sm text-red">{state.error}</p>
       )}
 
       <fieldset className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <legend className="col-span-full text-sm font-semibold text-slate-900">
+        <legend className="col-span-full text-sm font-semibold text-ink">
           Registration
         </legend>
         <TextField
@@ -133,7 +133,7 @@ export function ClientForm({
         />
         <div className="flex flex-col gap-1 sm:col-span-2">
           <Label htmlFor="registeredAddress">
-            Registered address<span className="text-red-500"> *</span>
+            Registered address<span className="text-red"> *</span>
           </Label>
           <Textarea
             id="registeredAddress"
@@ -143,7 +143,7 @@ export function ClientForm({
             rows={2}
           />
           {errs("registeredAddress")?.map((e) => (
-            <p key={e} className="text-xs text-red-600">{e}</p>
+            <p key={e} className="text-xs text-red">{e}</p>
           ))}
         </div>
         <TextField name="email" label="Email" type="email" defaultValue={v("email")} errors={errs("email")} />
@@ -151,12 +151,12 @@ export function ClientForm({
       </fieldset>
 
       <fieldset className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <legend className="col-span-full text-sm font-semibold text-slate-900">
+        <legend className="col-span-full text-sm font-semibold text-ink">
           Tax profile
         </legend>
         <div className="flex flex-col gap-1">
           <Label htmlFor="taxpayerType">
-            Taxpayer type<span className="text-red-500"> *</span>
+            Taxpayer type<span className="text-red"> *</span>
           </Label>
           <Select id="taxpayerType" name="taxpayerType" defaultValue={v("taxpayerType")} required>
             <option value="" disabled>
@@ -169,7 +169,7 @@ export function ClientForm({
             ))}
           </Select>
           {errs("taxpayerType")?.map((e) => (
-            <p key={e} className="text-xs text-red-600">{e}</p>
+            <p key={e} className="text-xs text-red">{e}</p>
           ))}
         </div>
         <div className="flex flex-col gap-1">
@@ -204,12 +204,12 @@ export function ClientForm({
       </fieldset>
 
       <fieldset className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <legend className="col-span-full text-sm font-semibold text-slate-900">
+        <legend className="col-span-full text-sm font-semibold text-ink">
           Books & compliance
         </legend>
         <div className="flex flex-col gap-1">
           <Label htmlFor="booksType">
-            Books type<span className="text-red-500"> *</span>
+            Books type<span className="text-red"> *</span>
           </Label>
           <Select id="booksType" name="booksType" defaultValue={v("booksType")} required>
             <option value="" disabled>
@@ -222,7 +222,7 @@ export function ClientForm({
             ))}
           </Select>
           {errs("booksType")?.map((e) => (
-            <p key={e} className="text-xs text-red-600">{e}</p>
+            <p key={e} className="text-xs text-red">{e}</p>
           ))}
         </div>
         <TextField
@@ -263,7 +263,7 @@ export function ClientForm({
       </fieldset>
 
       <fieldset className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <legend className="col-span-full text-sm font-semibold text-slate-900">
+        <legend className="col-span-full text-sm font-semibold text-ink">
           Status
         </legend>
         <TextField

@@ -23,12 +23,12 @@ function Field({ name, label, defaultValue, errors, required, type = "text", pla
     <div className="flex flex-col gap-1">
       <Label htmlFor={name}>
         {label}
-        {required && <span className="text-red-500"> *</span>}
+        {required && <span className="text-red"> *</span>}
       </Label>
       <Input id={name} name={name} type={type} defaultValue={defaultValue} required={required} placeholder={placeholder} />
-      {hint && <p className="text-xs text-slate-400">{hint}</p>}
+      {hint && <p className="text-xs text-faint">{hint}</p>}
       {errors?.map((e) => (
-        <p key={e} className="text-xs text-red-600">
+        <p key={e} className="text-xs text-red">
           {e}
         </p>
       ))}
@@ -55,11 +55,11 @@ export function TaxRuleSetForm({
   return (
     <form action={formAction} className="flex flex-col gap-6">
       {state.error && (
-        <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{state.error}</p>
+        <p className="rounded-md bg-red-tint px-3 py-2 text-sm text-red">{state.error}</p>
       )}
 
       <fieldset className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <legend className="col-span-full text-sm font-semibold text-slate-900">
+        <legend className="col-span-full text-sm font-semibold text-ink">
           Effectivity
         </legend>
         <Field name="taxableYear" label="Taxable year" type="number" defaultValue={v("taxableYear")} errors={errs("taxableYear")} required />
@@ -69,7 +69,7 @@ export function TaxRuleSetForm({
       </fieldset>
 
       <fieldset className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <legend className="col-span-full text-sm font-semibold text-slate-900">
+        <legend className="col-span-full text-sm font-semibold text-ink">
           Computation constants (SPEC.md 3.2)
         </legend>
         <Field
@@ -98,7 +98,7 @@ export function TaxRuleSetForm({
       </fieldset>
 
       <fieldset className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <legend className="col-span-full text-sm font-semibold text-slate-900">
+        <legend className="col-span-full text-sm font-semibold text-ink">
           Statutory due dates (SPEC.md 3.6 — confirm against current BIR issuance)
         </legend>
         <Field name="q1DueMonthDay" label="Q1 (1701Q) due" defaultValue={v("q1DueMonthDay") || "04-15"} errors={errs("q1DueMonthDay")} required hint="MM-DD" />
@@ -115,7 +115,7 @@ export function TaxRuleSetForm({
       </fieldset>
 
       <fieldset className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <legend className="col-span-full text-sm font-semibold text-slate-900">
+        <legend className="col-span-full text-sm font-semibold text-ink">
           SAWT / eAFS offsets
         </legend>
         <Field
@@ -137,7 +137,7 @@ export function TaxRuleSetForm({
       </fieldset>
 
       <fieldset className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <legend className="col-span-full text-sm font-semibold text-slate-900">
+        <legend className="col-span-full text-sm font-semibold text-ink">
           Late filing exposure — informational only (SPEC.md 3.7)
         </legend>
         <Field

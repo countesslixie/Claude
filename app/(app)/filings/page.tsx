@@ -105,14 +105,14 @@ export default async function FilingsBoardPage({
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-lg font-semibold text-slate-900">Filing cycle board</h1>
+        <h1 className="text-2xl font-semibold text-ink">Filing cycle board</h1>
       </div>
 
       <Card className="mb-4">
         <CardBody>
           <form className="flex flex-wrap items-end gap-3" method="get">
             <div className="w-56">
-              <label className="text-xs font-medium uppercase tracking-wide text-slate-400" htmlFor="clientId">
+              <label className="text-xs font-medium uppercase tracking-wide text-faint" htmlFor="clientId">
                 Client
               </label>
               <Select id="clientId" name="clientId" defaultValue={params.clientId ?? ""}>
@@ -125,7 +125,7 @@ export default async function FilingsBoardPage({
               </Select>
             </div>
             <div className="w-32">
-              <label className="text-xs font-medium uppercase tracking-wide text-slate-400" htmlFor="taxableYear">
+              <label className="text-xs font-medium uppercase tracking-wide text-faint" htmlFor="taxableYear">
                 Year
               </label>
               <Select id="taxableYear" name="taxableYear" defaultValue={params.taxableYear ?? ""}>
@@ -138,7 +138,7 @@ export default async function FilingsBoardPage({
               </Select>
             </div>
             <div className="w-44">
-              <label className="text-xs font-medium uppercase tracking-wide text-slate-400" htmlFor="status">
+              <label className="text-xs font-medium uppercase tracking-wide text-faint" htmlFor="status">
                 Status
               </label>
               <Select id="status" name="status" defaultValue={params.status ?? ""}>
@@ -165,7 +165,7 @@ export default async function FilingsBoardPage({
       </Card>
 
       {filings.length === 0 ? (
-        <p className="text-sm text-slate-400">No filings match these filters.</p>
+        <p className="text-sm text-faint">No filings match these filters.</p>
       ) : (
         <div className="flex gap-3 overflow-x-auto pb-4">
           {columns.map((col) => (
@@ -198,24 +198,24 @@ function BoardColumn({
   return (
     <div className="w-64 flex-shrink-0">
       <div className="mb-2 flex items-center justify-between px-1">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</h2>
-        <span className="text-xs text-slate-400">{filings.length}</span>
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-faint">{title}</h2>
+        <span className="text-xs text-faint">{filings.length}</span>
       </div>
       <div className="flex flex-col gap-2">
         {filings.map((f) => (
           <Link key={f.id} href={`/clients/${f.clientId}/filings/${f.id}`}>
-            <div className="rounded-md border border-slate-200 bg-white p-2 text-sm hover:border-slate-400">
-              <p className="font-medium text-slate-900">{f.client.registeredName}</p>
-              <p className="text-xs text-slate-500">
+            <div className="rounded-md border border-line bg-surface p-2 text-sm hover:border-separator">
+              <p className="font-medium text-ink">{f.client.registeredName}</p>
+              <p className="text-xs text-faint">
                 TY{f.taxableYear} {f.period}
               </p>
               <div className="mt-1 flex items-center justify-between">
                 <StatusBadge tone={FILING_STATUS_TONE[f.status] ?? "pending"}>
                   {filingStatusLabel(f.status, countSkippedSteps(f.workflowSteps))}
                 </StatusBadge>
-                <span className="text-xs text-slate-400">{formatManilaDate(f.adjustedDueDate)}</span>
+                <span className="text-xs text-faint">{formatManilaDate(f.adjustedDueDate)}</span>
               </div>
-              {f.outstandingLabel && <p className="mt-1 text-xs text-amber-700">{f.outstandingLabel}</p>}
+              {f.outstandingLabel && <p className="mt-1 text-xs text-amber">{f.outstandingLabel}</p>}
             </div>
           </Link>
         ))}

@@ -49,16 +49,16 @@ export function PayorForm({
 
   return (
     <form ref={formRef} action={formAction} className="flex flex-col gap-3">
-      {state.error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{state.error}</p>}
+      {state.error && <p className="rounded-md bg-red-tint px-3 py-2 text-sm text-red">{state.error}</p>}
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="flex flex-col gap-1">
           <Label htmlFor="payor-name">
-            Name <span className="text-red-500">*</span>
+            Name <span className="text-red">*</span>
           </Label>
           <Input id="payor-name" name="name" defaultValue={v("name")} required />
           {errs("name")?.map((e) => (
-            <p key={e} className="text-xs text-red-600">
+            <p key={e} className="text-xs text-red">
               {e}
             </p>
           ))}
@@ -83,7 +83,7 @@ export function PayorForm({
         </div>
       </div>
 
-      <label className="flex items-center gap-1.5 text-sm text-slate-700">
+      <label className="flex items-center gap-1.5 text-sm text-ink-secondary">
         <Checkbox name="isActive" defaultChecked={activeDefault} />
         Active — offered on the picker
       </label>

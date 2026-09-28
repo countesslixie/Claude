@@ -63,23 +63,23 @@ export function WorkflowGroupCard({
   }
 
   return (
-    <div className="rounded-lg border border-slate-200">
+    <div className="rounded-lg border border-line">
       <div className="flex flex-wrap items-center justify-between gap-2 p-3">
         <button
           type="button"
           onClick={() => setIsOpen((o) => !o)}
           className="flex flex-1 flex-wrap items-center gap-2 text-left"
         >
-          <span className="text-sm font-medium text-slate-900">{name}</span>
-          <span className="text-xs text-slate-400">
+          <span className="text-sm font-medium text-ink">{name}</span>
+          <span className="text-xs text-faint">
             {doneCount} of {totalCount}
           </span>
           {isComplete ? (
             <StatusBadge tone="done">Done</StatusBadge>
           ) : (
-            outstandingLabel && <span className="text-xs text-amber-700">{outstandingLabel}</span>
+            outstandingLabel && <span className="text-xs text-amber">{outstandingLabel}</span>
           )}
-          <span className="ml-auto text-xs text-slate-500 underline">{isOpen ? "Collapse" : "Expand"}</span>
+          <span className="ml-auto text-xs text-faint underline">{isOpen ? "Collapse" : "Expand"}</span>
         </button>
         {!isComplete &&
           (blockReason ? (
@@ -93,9 +93,9 @@ export function WorkflowGroupCard({
           ))}
       </div>
 
-      {message && <p className="px-3 pb-2 text-xs text-amber-700">{message}</p>}
+      {message && <p className="px-3 pb-2 text-xs text-amber">{message}</p>}
 
-      {isOpen && <div className="flex flex-col gap-2 border-t border-slate-100 p-3">{children}</div>}
+      {isOpen && <div className="flex flex-col gap-2 border-t border-line p-3">{children}</div>}
     </div>
   );
 }

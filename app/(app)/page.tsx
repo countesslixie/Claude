@@ -196,7 +196,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="mx-auto flex w-full max-w-[1100px] flex-col gap-3">
-      <h1 className="text-lg font-semibold text-slate-900">Dashboard</h1>
+      <h1 className="text-2xl font-semibold text-ink">Dashboard</h1>
 
       <DashboardRow title="Needs my action now" count={needsActionRows.length}>
         <FilingRowsTable rows={needsActionRows} />
@@ -217,11 +217,11 @@ export default async function DashboardPage() {
       <DashboardRow title="Missing documents" count={missingDocs.length}>
         <div className="flex flex-col gap-2 p-3">
           {Array.from(missingDocsByClient.entries()).map(([clientId, bucket]) => (
-            <div key={clientId} className="rounded-md border border-slate-200 p-2">
-              <p className="text-[14px] font-medium text-slate-900">{bucket.clientName}</p>
+            <div key={clientId} className="rounded-md border border-line p-2">
+              <p className="text-[14px] font-medium text-ink">{bucket.clientName}</p>
               <ul className="mt-1 flex flex-col gap-0.5">
                 {bucket.items.map((item, i) => (
-                  <li key={i} className="text-[13px] text-slate-600">
+                  <li key={i} className="text-[13px] text-ink-secondary">
                     TY{item.filing.taxableYear} {item.filing.period} —{" "}
                     <Link href={rowHref(item.filing.id, item.filing.clientId)} className="underline">
                       {item.step.title}
@@ -238,13 +238,13 @@ export default async function DashboardPage() {
       <DashboardRow title="Threshold & election alerts" count={thresholdAlerts.length + electionAlerts.length}>
         <div className="flex flex-col gap-2 p-3">
           {thresholdAlerts.map((a) => (
-            <p key={a.clientName} className="rounded-md bg-red-50 px-3 py-2 text-[14px] text-red-800">
+            <p key={a.clientName} className="rounded-md bg-red-tint px-3 py-2 text-[14px] text-red">
               {a.clientName}: {(a.pct * 100).toFixed(0)}% of the ₱3,000,000 VAT threshold
               {a.pct >= 1 ? " — BREACHED. The 8% option ceases to apply; consult the current BIR issuance." : "."}
             </p>
           ))}
           {electionAlerts.map((c) => (
-            <p key={c.id} className="rounded-md bg-amber-50 px-3 py-2 text-[14px] text-amber-800">
+            <p key={c.id} className="rounded-md bg-amber-tint px-3 py-2 text-[14px] text-amber">
               {c.registeredName}: 8% election for TY{currentYear} is{" "}
               {c.taxYears[0]?.electionStatus ?? "not recorded"} — Q1 filings are blocked until confirmed.
             </p>
@@ -271,9 +271,9 @@ function DashboardRow({
 }) {
   if (count === 0) {
     return (
-      <div className="flex items-center gap-2 px-1 text-[13px] text-slate-400">
+      <div className="flex items-center gap-2 px-1 text-[13px] text-faint">
         <span>{title}</span>
-        <span className="inline-flex items-center justify-center rounded-full bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-400">
+        <span className="inline-flex items-center justify-center rounded-full bg-line px-1.5 py-0.5 text-[11px] font-medium text-ink-secondary">
           0
         </span>
       </div>
@@ -282,8 +282,8 @@ function DashboardRow({
   return (
     <Card>
       <CardHeader className="flex items-center gap-2 py-2">
-        <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
-        <span className="inline-flex items-center justify-center rounded-full bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-500">
+        <h2 className="text-sm font-semibold text-ink">{title}</h2>
+        <span className="inline-flex items-center justify-center rounded-full bg-line px-1.5 py-0.5 text-[11px] font-medium text-ink-secondary">
           {count}
         </span>
       </CardHeader>
@@ -309,7 +309,7 @@ function FilingRowsTable({ rows }: { rows: FilingTableRow[] }) {
     <div className="overflow-x-auto">
       <table className="w-full border-collapse">
         <thead>
-          <tr className="border-b border-slate-100 text-left text-[11px] font-medium uppercase tracking-wide text-slate-400">
+          <tr className="border-b border-line text-left text-[11px] font-medium uppercase tracking-wide text-faint">
             <th className="px-3 py-2 font-medium">Client</th>
             <th className="px-3 py-2 font-medium">Period</th>
             <th className="px-3 py-2 font-medium">Step</th>
@@ -320,13 +320,13 @@ function FilingRowsTable({ rows }: { rows: FilingTableRow[] }) {
         </thead>
         <tbody>
           {rows.map((r) => (
-            <ClickableRow key={r.id} href={r.href} className="border-b border-slate-100 last:border-0">
-              <td className="px-3 py-2 text-[14px] font-medium text-slate-900">{r.clientName}</td>
-              <td className="px-3 py-2 text-[13px] text-slate-500">
+            <ClickableRow key={r.id} href={r.href} className="border-b border-line last:border-0">
+              <td className="px-3 py-2 text-[14px] font-medium text-ink">{r.clientName}</td>
+              <td className="px-3 py-2 text-[13px] text-faint">
                 TY{r.taxableYear} {r.period}
               </td>
-              <td className="px-3 py-2 text-[14px] text-slate-700">{r.stepTitle}</td>
-              <td className="px-3 py-2 text-[13px] text-slate-500">{formatManilaDate(r.dueDate)}</td>
+              <td className="px-3 py-2 text-[14px] text-ink-secondary">{r.stepTitle}</td>
+              <td className="px-3 py-2 text-[13px] text-faint">{formatManilaDate(r.dueDate)}</td>
               <td className="px-3 py-2">
                 {r.aging && <StatusBadge tone={AGING_BADGE_TONE[r.aging.tone]}>{r.aging.daysWaiting}d</StatusBadge>}
               </td>

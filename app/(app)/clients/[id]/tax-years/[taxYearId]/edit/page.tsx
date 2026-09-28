@@ -26,7 +26,7 @@ export default async function EditClientTaxYearPage({
 
   return (
     <div className="mx-auto max-w-xl">
-      <h1 className="mb-4 text-lg font-semibold text-slate-900">
+      <h1 className="mb-4 text-2xl font-semibold text-ink">
         Edit {taxYear.taxableYear} — {taxYear.client.registeredName}
       </h1>
       <ClientTaxYearForm action={boundAction} initialValues={initialValues} submitLabel="Save changes" />

@@ -140,20 +140,20 @@ export function CertificateForm({
     if (!matchedPayor || matchedPayor[field] || !trimmedValue) return null;
     if (dismissedFillBack[field] === trimmedValue) return null;
     return (
-      <p className="text-xs text-slate-500">
+      <p className="text-xs text-faint">
         {`Save this as ${matchedPayor.name}'s ${label} too?`}{" "}
         <button
           type="button"
           onClick={() => handleFillBack(field, trimmedValue)}
           disabled={fillBackSaving === field}
-          className="text-slate-700 underline hover:text-slate-900"
+          className="text-ink-secondary underline hover:text-ink"
         >
           {fillBackSaving === field ? "Saving…" : "Save"}
         </button>{" "}
         <button
           type="button"
           onClick={() => setDismissedFillBack((prev) => ({ ...prev, [field]: trimmedValue }))}
-          className="text-slate-400 underline"
+          className="text-faint underline"
         >
           Not now
         </button>
@@ -165,8 +165,8 @@ export function CertificateForm({
 
   return (
     <>
-    <form action={formAction} className="mt-1 flex flex-col gap-2 rounded border border-slate-200 p-2">
-      {state.error && <p className="text-xs text-red-600">{state.error}</p>}
+    <form action={formAction} className="mt-1 flex flex-col gap-2 rounded border border-line p-2">
+      {state.error && <p className="text-xs text-red">{state.error}</p>}
 
       <div className="grid grid-cols-2 gap-2">
         <div className="flex flex-col gap-0.5 col-span-2">
@@ -182,7 +182,7 @@ export function CertificateForm({
             required
           />
           {errs("payorName")?.map((e) => (
-            <p key={e} className="text-xs text-red-600">
+            <p key={e} className="text-xs text-red">
               {e}
             </p>
           ))}
@@ -197,7 +197,7 @@ export function CertificateForm({
             required
           />
           {errs("payorTin")?.map((e) => (
-            <p key={e} className="text-xs text-red-600">
+            <p key={e} className="text-xs text-red">
               {e}
             </p>
           ))}
@@ -213,7 +213,7 @@ export function CertificateForm({
             required
           />
           {errs("payorAddress")?.map((e) => (
-            <p key={e} className="text-xs text-red-600">
+            <p key={e} className="text-xs text-red">
               {e}
             </p>
           ))}
@@ -223,7 +223,7 @@ export function CertificateForm({
           <Label htmlFor="cert-atcCode">ATC code</Label>
           <AtcCodeSelect id="cert-atcCode" name="atcCode" atcCodes={atcCodes} value={atcCode} onChange={handleAtcChange} required />
           {errs("atcCode")?.map((e) => (
-            <p key={e} className="text-xs text-red-600">
+            <p key={e} className="text-xs text-red">
               {e}
             </p>
           ))}
@@ -243,7 +243,7 @@ export function CertificateForm({
           <Label htmlFor="cert-incomePayment">Income amount (₱)</Label>
           <Input id="cert-incomePayment" name="incomePayment" defaultValue={state.values?.incomePayment} required />
           {errs("incomePayment")?.map((e) => (
-            <p key={e} className="text-xs text-red-600">
+            <p key={e} className="text-xs text-red">
               {e}
             </p>
           ))}
@@ -252,7 +252,7 @@ export function CertificateForm({
           <Label htmlFor="cert-taxWithheld">Tax withheld (₱)</Label>
           <Input id="cert-taxWithheld" name="taxWithheld" defaultValue={state.values?.taxWithheld} required />
           {errs("taxWithheld")?.map((e) => (
-            <p key={e} className="text-xs text-red-600">
+            <p key={e} className="text-xs text-red">
               {e}
             </p>
           ))}
@@ -281,7 +281,7 @@ export function CertificateForm({
           <Label htmlFor="cert-file">Scan</Label>
           <Input id="cert-file" name="file" type="file" required className="h-9 text-xs" />
           {errs("file")?.map((e) => (
-            <p key={e} className="text-xs text-red-600">
+            <p key={e} className="text-xs text-red">
               {e}
             </p>
           ))}
@@ -301,7 +301,7 @@ export function CertificateForm({
         <Button type="submit" size="sm" disabled={isPending}>
           {isPending ? "Saving…" : "Save certificate"}
         </Button>
-        <button type="button" onClick={onCancel} className="text-xs text-slate-400 underline">
+        <button type="button" onClick={onCancel} className="text-xs text-faint underline">
           Cancel
         </button>
       </div>

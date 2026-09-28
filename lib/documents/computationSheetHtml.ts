@@ -1,4 +1,4 @@
-import { centsToPesos } from "@/lib/money";
+import { centsToPesos, formatBreakdownAmount } from "@/lib/money";
 import { formatManilaDate } from "@/lib/dates";
 import type { FilingComputationResult } from "@/lib/tax/types";
 
@@ -36,7 +36,7 @@ export function renderComputationSheetHtml(input: ComputationSheetHtmlInput): st
     .map(
       (line) => `      <tr>
         <td>${escapeHtml(line.label)}</td>
-        <td class="amount">${escapeHtml(centsToPesos(line.amountCents, { withSymbol: true }))}</td>
+        <td class="amount">${escapeHtml(formatBreakdownAmount(line.amountCents, line.isOverpaymentLine))}</td>
         <td class="note">${escapeHtml(line.sourceNote)}</td>
       </tr>`,
     )
@@ -54,18 +54,22 @@ export function renderComputationSheetHtml(input: ComputationSheetHtmlInput): st
 <meta charset="utf-8" />
 <title>Computation sheet — ${escapeHtml(input.clientName)} — TY${input.taxableYear} ${input.period}</title>
 <style>
-  body { font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; margin: 2rem; color: #0f172a; }
+  /* Brief #5g §6 — this is an archive document meant to outlast the
+     app: the new font stack by name only (no embedded/loaded font file,
+     no dependence on the app's stylesheet) and plain ink colours, not
+     the app's purple. */
+  body { font-family: "Plus Jakarta Sans", "Segoe UI", system-ui, sans-serif; margin: 2rem; color: #1c1a27; }
   h1 { font-size: 1.05rem; margin: 0 0 2px; }
-  .meta { color: #64748b; font-size: 0.82rem; margin: 0 0 1rem; }
+  .meta { color: #8a879a; font-size: 0.82rem; margin: 0 0 1rem; }
   table { border-collapse: collapse; width: 100%; font-size: 0.86rem; }
-  td { padding: 5px 8px; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
+  td { padding: 5px 8px; border-bottom: 1px solid #e8e5ef; vertical-align: top; }
   .amount { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .note { color: #94a3b8; font-size: 0.76rem; }
+  .note { color: #8a879a; font-size: 0.76rem; }
   .result { margin-top: 10px; font-weight: 600; }
   .banner { margin-top: 1rem; padding: 8px 12px; border-radius: 6px; font-size: 0.82rem; }
-  .banner.live { background: #fef9c3; color: #713f12; }
-  .banner.frozen { background: #dcfce7; color: #14532d; }
-  .footer { margin-top: 1.5rem; color: #94a3b8; font-size: 0.74rem; }
+  .banner.live { background: #fffbeb; color: #b45309; }
+  .banner.frozen { background: #f0fdf4; color: #15803d; }
+  .footer { margin-top: 1.5rem; color: #8a879a; font-size: 0.74rem; }
 </style>
 </head>
 <body>

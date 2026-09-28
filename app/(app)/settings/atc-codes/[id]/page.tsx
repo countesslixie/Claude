@@ -27,7 +27,7 @@ export default async function EditAtcCodePage({
 
   return (
     <div className="mx-auto max-w-2xl">
-      <h1 className="mb-4 text-lg font-semibold text-slate-900">Edit ATC code — {atcCode.code}</h1>
+      <h1 className="mb-4 text-2xl font-semibold text-ink">Edit ATC code — {atcCode.code}</h1>
       <AtcCodeForm action={boundAction} initialValues={initialValues} submitLabel="Save changes" />
     </div>
   );

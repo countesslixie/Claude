@@ -1,33 +1,99 @@
 @import "tailwindcss";
 
+/*
+ * Brief #5g — colour tokens and font, copied from the bookkeeper's other
+ * app so every screen built from here on starts in this style. Defined
+ * once here and exposed to Tailwind via @theme inline below; no screen
+ * may hard-code a hex value.
+ */
 :root {
-  --background: #f8fafc;
-  --foreground: #0f172a;
+  /* page and surfaces */
+  --background: #f8f7fb;
+  --surface: #ffffff;
 
-  /* Status colours — must stay legible at a glance (SPEC.md section 11). */
-  --status-pending-bg: #f1f5f9;
-  --status-pending-fg: #475569;
-  --status-progress-bg: #dbeafe;
-  --status-progress-fg: #1d4ed8;
-  --status-waiting-bg: #fef3c7;
-  --status-waiting-fg: #92400e;
-  --status-overdue-bg: #fee2e2;
-  --status-overdue-fg: #b91c1c;
-  --status-done-bg: #dcfce7;
-  --status-done-fg: #15803d;
+  /* text and lines */
+  --ink: #1c1a27;
+  --ink-secondary: #4a4759;
+  --faint: #8a879a;
+  --line: #e8e5ef;
+  --separator: #c9c6d3;
+
+  /* purple: where you are, what you can click, and "in progress" */
+  --purple-50: #f8f6fc;
+  --purple-100: #f1ecf9;
+  --purple-200: #e0d6f2;
+  --purple-300: #c6b5e8;
+  --purple-400: #a287da;
+  --purple-500: #8562cf;
+  --purple-600: #7046c6;
+  --purple-700: #5f3ca8;
+  --purple-800: #4e318b;
+  --purple-900: #3e276d;
+  --purple-wash: #f9f7fc;
+
+  /* result colours: text, plus pale pill backgrounds */
+  --red: #dc2626;
+  --red-tint: #fff7f7;
+  --green: #15803d;
+  --green-tint: #f0fdf4;
+  --amber: #b45309;
+  --amber-tint: #fffbeb;
+
+  /* backward-compat aliases: kept so any file this pass missed still
+     resolves to a token instead of a bare hex value. */
+  --foreground: var(--ink);
+
+  /* Status colours — must stay legible at a glance (SPEC.md section 11).
+     "In progress" is purple, not blue, by the bookkeeper's own choice
+     (brief #5g §2), matching her other app. */
+  --status-pending-bg: var(--line);
+  --status-pending-fg: var(--ink-secondary);
+  --status-progress-bg: var(--purple-100);
+  --status-progress-fg: var(--purple-700);
+  --status-waiting-bg: var(--amber-tint);
+  --status-waiting-fg: var(--amber);
+  --status-overdue-bg: var(--red-tint);
+  --status-overdue-fg: var(--red);
+  --status-done-bg: var(--green-tint);
+  --status-done-fg: var(--green);
 }
 
 @theme inline {
   --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
-    Arial, sans-serif;
+  --color-surface: var(--surface);
+  --color-foreground: var(--ink);
+  --color-ink: var(--ink);
+  --color-ink-secondary: var(--ink-secondary);
+  --color-faint: var(--faint);
+  --color-line: var(--line);
+  --color-separator: var(--separator);
+
+  --color-purple-50: var(--purple-50);
+  --color-purple-100: var(--purple-100);
+  --color-purple-200: var(--purple-200);
+  --color-purple-300: var(--purple-300);
+  --color-purple-400: var(--purple-400);
+  --color-purple-500: var(--purple-500);
+  --color-purple-600: var(--purple-600);
+  --color-purple-700: var(--purple-700);
+  --color-purple-800: var(--purple-800);
+  --color-purple-900: var(--purple-900);
+  --color-purple-wash: var(--purple-wash);
+
+  --color-red: var(--red);
+  --color-red-tint: var(--red-tint);
+  --color-green: var(--green);
+  --color-green-tint: var(--green-tint);
+  --color-amber: var(--amber);
+  --color-amber-tint: var(--amber-tint);
+
+  --font-sans: var(--font-plus-jakarta-sans), "Segoe UI", system-ui, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 body {
   background: var(--background);
-  color: var(--foreground);
+  color: var(--ink);
   font-family: var(--font-sans);
 }
 
@@ -41,23 +107,24 @@ table.data-table {
 table.data-table th {
   text-align: left;
   font-weight: 600;
-  color: #64748b;
+  color: var(--faint);
   text-transform: uppercase;
   font-size: 0.6875rem;
   letter-spacing: 0.03em;
   padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid var(--line);
   white-space: nowrap;
 }
 
 table.data-table td {
   padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid var(--line);
   vertical-align: middle;
+  color: var(--ink-secondary);
 }
 
 table.data-table tbody tr:hover {
-  background: #f8fafc;
+  background: var(--purple-wash);
 }
 
 /* Print-friendly books/worksheets (SPEC.md 9, 10): hide chrome and any

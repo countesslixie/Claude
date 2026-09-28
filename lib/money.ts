@@ -33,6 +33,18 @@ export function centsToPesos(cents: Cents, opts?: { withSymbol?: boolean }): str
   return opts?.withSymbol ? `₱${withComma}` : withComma;
 }
 
+/**
+ * Formats a computation-sheet breakdown line's amount, parenthesizing it
+ * when the line is the final Tax Payable/(Overpayment) row and the figure
+ * is an overpayment — (₱16,700.00) rather than a plain positive figure
+ * that reads identically to tax due (brief #5g §7). amountCents is always
+ * the non-negative magnitude; only the display wraps it in parentheses.
+ */
+export function formatBreakdownAmount(amountCents: Cents, isOverpaymentLine?: boolean): string {
+  const formatted = centsToPesos(amountCents, { withSymbol: true });
+  return isOverpaymentLine ? `(${formatted})` : formatted;
+}
+
 function insertThousandsSeparator(intPart: string): string {
   const negative = intPart.startsWith("-");
   const digits = negative ? intPart.slice(1) : intPart;

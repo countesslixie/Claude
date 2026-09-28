@@ -174,18 +174,18 @@ export function QuarterlySalesCard({
 
   if (!showForm) {
     return (
-      <div className="rounded-lg border border-slate-200 bg-white p-4">
+      <div className="rounded-lg border border-line bg-surface p-4">
         <div className="mb-1 flex items-baseline justify-between">
-          <h2 className="text-sm font-semibold text-slate-900">{quarter}</h2>
+          <h2 className="text-sm font-semibold text-ink">{quarter}</h2>
           <Button type="button" size="sm" variant="secondary" onClick={() => setOverrideEditing(true)}>
             Edit
           </Button>
         </div>
-        {savedLabel && <p className="mb-2 text-xs font-medium text-slate-500">{savedLabel}</p>}
-        <p className="text-sm text-slate-700">
+        {savedLabel && <p className="mb-2 text-xs font-medium text-faint">{savedLabel}</p>}
+        <p className="text-sm text-ink-secondary">
           Quarter total: <span className="font-medium">₱{formatPesos(total)}</span>
         </p>
-        <p className="mt-1 text-sm text-slate-600">
+        <p className="mt-1 text-sm text-ink-secondary">
           {noSales
             ? "No sales this quarter"
             : rows.filter((r) => r.customerName.trim() !== "").length > 0
@@ -201,19 +201,19 @@ export function QuarterlySalesCard({
 
   return (
     <>
-    <form key={formKey} action={formAction} className="rounded-lg border border-slate-200 bg-white p-4">
+    <form key={formKey} action={formAction} className="rounded-lg border border-line bg-surface p-4">
       <div className="mb-3 flex items-baseline justify-between">
-        <h2 className="text-sm font-semibold text-slate-900">{quarter}</h2>
+        <h2 className="text-sm font-semibold text-ink">{quarter}</h2>
         {isQ4 && (
-          <span className="text-xs text-slate-400">Picked up by the ANNUAL return — no quarterly return of its own</span>
+          <span className="text-xs text-faint">Picked up by the ANNUAL return — no quarterly return of its own</span>
         )}
       </div>
 
-      {savedLabel && <p className="mb-2 text-xs font-medium text-slate-500">{savedLabel}</p>}
+      {savedLabel && <p className="mb-2 text-xs font-medium text-faint">{savedLabel}</p>}
 
-      {state.error && <p className="mb-2 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{state.error}</p>}
+      {state.error && <p className="mb-2 rounded-md bg-red-tint px-3 py-2 text-sm text-red">{state.error}</p>}
 
-      <label className="mb-3 flex items-center gap-1.5 text-sm text-slate-700">
+      <label className="mb-3 flex items-center gap-1.5 text-sm text-ink-secondary">
         <Checkbox
           name="noSalesThisQuarter"
           checked={noSales}
@@ -224,7 +224,7 @@ export function QuarterlySalesCard({
 
       {!noSales && (
         <div className="mb-3 flex flex-col gap-2">
-          <div className="grid grid-cols-[1fr_160px_auto] gap-2 text-xs font-medium uppercase tracking-wide text-slate-400">
+          <div className="grid grid-cols-[1fr_160px_auto] gap-2 text-xs font-medium uppercase tracking-wide text-faint">
             <span>Payor</span>
             <span>Amount (₱)</span>
             <span></span>
@@ -257,7 +257,7 @@ export function QuarterlySalesCard({
             </div>
           ))}
           {errs("customers")?.map((e) => (
-            <p key={e} className="text-xs text-red-600">
+            <p key={e} className="text-xs text-red">
               {e}
             </p>
           ))}
@@ -269,9 +269,9 @@ export function QuarterlySalesCard({
         </div>
       )}
 
-      <p className="mb-3 text-sm text-slate-700">
+      <p className="mb-3 text-sm text-ink-secondary">
         Quarter total: <span className="font-medium">₱{formatPesos(total)}</span>
-        <span className="ml-1 text-xs text-slate-400">(sum of the rows above — not itself an input)</span>
+        <span className="ml-1 text-xs text-faint">(sum of the rows above — not itself an input)</span>
       </p>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -283,7 +283,7 @@ export function QuarterlySalesCard({
             defaultValue={v("nonOperatingIncome")}
           />
           {errs("nonOperatingIncome")?.map((e) => (
-            <p key={e} className="text-xs text-red-600">
+            <p key={e} className="text-xs text-red">
               {e}
             </p>
           ))}
@@ -302,12 +302,12 @@ export function QuarterlySalesCard({
           {isPending ? "Saving…" : "Save"}
         </Button>
         {finalized && overrideEditing && (
-          <button type="button" onClick={handleCancel} className="text-xs text-slate-400 underline">
+          <button type="button" onClick={handleCancel} className="text-xs text-faint underline">
             Cancel
           </button>
         )}
         {state.saved && !isPending && !state.finalized && (
-          <span className="text-xs text-emerald-600">Draft saved.</span>
+          <span className="text-xs text-green">Draft saved.</span>
         )}
       </div>
     </form>

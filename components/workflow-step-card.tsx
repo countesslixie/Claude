@@ -130,16 +130,16 @@ export function WorkflowStepCard({
   const blockReason = stepBlockReason(step.requiredDocSlots, step.documents, dependencyBlockedReason);
 
   return (
-    <div className="rounded-lg border border-slate-200 p-3">
+    <div className="rounded-lg border border-line p-3">
       <div className="flex items-start justify-between gap-2">
         <div>
-          <p className="text-sm font-medium text-slate-900">
+          <p className="text-sm font-medium text-ink">
             {step.sequence}. {step.title}
             {step.status === "WAITING_EXTERNAL" && step.waitingOnLabel && (
-              <span className="ml-1 text-xs font-normal text-slate-400">waiting on {step.waitingOnLabel}</span>
+              <span className="ml-1 text-xs font-normal text-faint">waiting on {step.waitingOnLabel}</span>
             )}
           </p>
-          {step.description && <p className="text-xs text-slate-500">{step.description}</p>}
+          {step.description && <p className="text-xs text-faint">{step.description}</p>}
         </div>
         <div className="flex items-center gap-1.5">
           {step.agingTone && (
@@ -150,7 +150,7 @@ export function WorkflowStepCard({
       </div>
 
       {step.status === "SKIPPED" && step.skippedReason && (
-        <p className="mt-1 text-xs text-slate-500">Skipped: {step.skippedReason}</p>
+        <p className="mt-1 text-xs text-faint">Skipped: {step.skippedReason}</p>
       )}
 
       {extra && <div className="mt-2">{extra}</div>}
@@ -161,14 +161,14 @@ export function WorkflowStepCard({
             const attached = attachedFor(slot.slotCode);
             const isOpen = openSlots.has(slot.slotCode);
             return (
-              <div key={slot.slotCode} className="rounded border border-slate-200 bg-slate-50 p-2">
+              <div key={slot.slotCode} className="rounded border border-line bg-background p-2">
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs font-medium text-slate-600">{slot.label}</p>
+                  <p className="text-xs font-medium text-ink-secondary">{slot.label}</p>
                   {!isOpen && (
                     <button
                       type="button"
                       onClick={() => toggleSlot(slot.slotCode)}
-                      className="text-xs text-slate-500 underline hover:text-slate-900"
+                      className="text-xs text-faint underline hover:text-ink"
                     >
                       {attached.length > 0 ? "Attach another" : "Attach"}
                     </button>
@@ -180,16 +180,16 @@ export function WorkflowStepCard({
                       <li key={d.id} className="text-xs">
                         <a
                           href={`/api/documents/${d.id}/download`}
-                          className="text-slate-700 underline hover:text-slate-900"
+                          className="text-ink-secondary underline hover:text-ink"
                         >
                           {d.originalFilename}
                         </a>{" "}
-                        <span className="text-slate-400">({d.documentDate})</span>
+                        <span className="text-faint">({d.documentDate})</span>
                       </li>
                     ))}
                   </ul>
                 ) : (
-                  !isOpen && <p className="mt-0.5 text-xs text-amber-700">Required to mark this step done.</p>
+                  !isOpen && <p className="mt-0.5 text-xs text-amber">Required to mark this step done.</p>
                 )}
                 {isOpen && (
                   <form
@@ -209,7 +209,7 @@ export function WorkflowStepCard({
                     <button
                       type="button"
                       onClick={() => toggleSlot(slot.slotCode)}
-                      className="text-xs text-slate-400 underline hover:text-slate-600"
+                      className="text-xs text-faint underline hover:text-ink-secondary"
                     >
                       Cancel
                     </button>
@@ -227,14 +227,14 @@ export function WorkflowStepCard({
             const attached = attachedFor(slot.slotCode);
             const isOpen = openSlots.has(slot.slotCode);
             return (
-              <div key={slot.slotCode} className="rounded border border-slate-100 p-2">
+              <div key={slot.slotCode} className="rounded border border-line p-2">
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs font-medium text-slate-500">{slot.label}</p>
+                  <p className="text-xs font-medium text-faint">{slot.label}</p>
                   {!isOpen && (
                     <button
                       type="button"
                       onClick={() => toggleSlot(slot.slotCode)}
-                      className="text-xs text-slate-500 underline hover:text-slate-900"
+                      className="text-xs text-faint underline hover:text-ink"
                     >
                       {attached.length > 0 ? "Attach another" : "Attach a file (optional)"}
                     </button>
@@ -246,11 +246,11 @@ export function WorkflowStepCard({
                       <li key={d.id} className="text-xs">
                         <a
                           href={`/api/documents/${d.id}/download`}
-                          className="text-slate-700 underline hover:text-slate-900"
+                          className="text-ink-secondary underline hover:text-ink"
                         >
                           {d.originalFilename}
                         </a>{" "}
-                        <span className="text-slate-400">({d.documentDate})</span>
+                        <span className="text-faint">({d.documentDate})</span>
                       </li>
                     ))}
                   </ul>
@@ -273,7 +273,7 @@ export function WorkflowStepCard({
                     <button
                       type="button"
                       onClick={() => toggleSlot(slot.slotCode)}
-                      className="text-xs text-slate-400 underline hover:text-slate-600"
+                      className="text-xs text-faint underline hover:text-ink-secondary"
                     >
                       Cancel
                     </button>
@@ -331,7 +331,7 @@ export function WorkflowStepCard({
         </div>
       )}
 
-      {message && <p className="mt-2 rounded bg-amber-50 px-2 py-1 text-xs text-amber-800">{message}</p>}
+      {message && <p className="mt-2 rounded bg-amber-tint px-2 py-1 text-xs text-amber">{message}</p>}
     </div>
   );
 }

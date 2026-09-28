@@ -37,38 +37,38 @@ export function AtcCodeForm({
 
   return (
     <form action={formAction} className="flex flex-col gap-4">
-      {state.error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{state.error}</p>}
+      {state.error && <p className="rounded-md bg-red-tint px-3 py-2 text-sm text-red">{state.error}</p>}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="flex flex-col gap-1">
           <Label htmlFor="code">
-            Code <span className="text-red-500">*</span>
+            Code <span className="text-red">*</span>
           </Label>
           <Input id="code" name="code" defaultValue={v("code")} required placeholder="e.g. WI010" />
           {errs("code")?.map((e) => (
-            <p key={e} className="text-xs text-red-600">
+            <p key={e} className="text-xs text-red">
               {e}
             </p>
           ))}
         </div>
         <div className="flex flex-col gap-1">
           <Label htmlFor="ratePercent">
-            Rate (%) <span className="text-red-500">*</span>
+            Rate (%) <span className="text-red">*</span>
           </Label>
           <Input id="ratePercent" name="ratePercent" defaultValue={v("ratePercent")} required placeholder="e.g. 5 or 5.00" />
           {errs("ratePercent")?.map((e) => (
-            <p key={e} className="text-xs text-red-600">
+            <p key={e} className="text-xs text-red">
               {e}
             </p>
           ))}
         </div>
         <div className="flex flex-col gap-1 sm:col-span-2">
           <Label htmlFor="description">
-            Description <span className="text-red-500">*</span>
+            Description <span className="text-red">*</span>
           </Label>
           <Textarea id="description" name="description" rows={2} defaultValue={v("description")} required />
           {errs("description")?.map((e) => (
-            <p key={e} className="text-xs text-red-600">
+            <p key={e} className="text-xs text-red">
               {e}
             </p>
           ))}
@@ -79,18 +79,18 @@ export function AtcCodeForm({
         </div>
       </div>
 
-      <label className="flex items-center gap-1.5 text-sm text-slate-700">
+      <label className="flex items-center gap-1.5 text-sm text-ink-secondary">
         <Checkbox name="verifiedAgainstIssuance" defaultChecked={checked("verifiedAgainstIssuance", false)} />
         Verified against a BIR issuance
       </label>
       {!checked("verifiedAgainstIssuance", false) && (
-        <p className="text-xs text-amber-700">
+        <p className="text-xs text-amber">
           Unverified — this code and rate have not been confirmed against the current BIR ATC list. It will
           still show as unverified wherever it&rsquo;s used (D19).
         </p>
       )}
 
-      <label className="flex items-center gap-1.5 text-sm text-slate-700">
+      <label className="flex items-center gap-1.5 text-sm text-ink-secondary">
         <Checkbox name="isActive" defaultChecked={checked("isActive", true)} />
         Active — offered on the certificate picker
       </label>

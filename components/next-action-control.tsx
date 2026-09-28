@@ -68,11 +68,11 @@ export function NextActionControl({
         >
           Mark done
         </Button>
-        <a href="#checklist" className="text-xs text-slate-500 underline hover:text-slate-900">
+        <a href="#checklist" className="text-xs text-faint underline hover:text-ink">
           Go to checklist
         </a>
       </div>
-      {message && <p className="text-xs text-amber-700">{message}</p>}
+      {message && <p className="text-xs text-amber">{message}</p>}
     </div>
   );
 }

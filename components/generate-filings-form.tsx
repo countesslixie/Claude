@@ -26,7 +26,7 @@ export function GenerateFilingsForm({ clientId, defaultYear }: { clientId: strin
   return (
     <form action={formAction} className="flex items-end gap-2">
       <div>
-        <label className="text-xs font-medium uppercase tracking-wide text-slate-400" htmlFor="taxableYear">
+        <label className="text-xs font-medium uppercase tracking-wide text-faint" htmlFor="taxableYear">
           Generate filings for year
         </label>
         <Input id="taxableYear" name="taxableYear" type="number" defaultValue={defaultYear} className="w-28" />
@@ -35,7 +35,7 @@ export function GenerateFilingsForm({ clientId, defaultYear }: { clientId: strin
         {isPending ? "Generating…" : "Generate"}
       </Button>
       {state && (
-        <p className={`text-xs ${state.ok ? "text-slate-500" : "text-red-600"}`}>
+        <p className={`text-xs ${state.ok ? "text-faint" : "text-red"}`}>
           {state.ok
             ? `Created ${state.createdCount} filing(s), skipped ${state.skippedCount} (already existed)${
                 state.outsideCount > 0 ? `, ${state.outsideCount} filed outside the app` : ""

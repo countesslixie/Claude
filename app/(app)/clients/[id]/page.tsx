@@ -28,8 +28,8 @@ const LABELS: Record<string, string> = {
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
-      <dt className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</dt>
-      <dd className="mt-0.5 text-sm text-slate-900">{value ?? "—"}</dd>
+      <dt className="text-xs font-medium uppercase tracking-wide text-faint">{label}</dt>
+      <dd className="mt-0.5 text-sm text-ink">{value ?? "—"}</dd>
     </div>
   );
 }
@@ -57,14 +57,14 @@ export default async function ClientDetailPage({
       <div className="mb-4 flex items-start justify-between">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-lg font-semibold text-slate-900">{client.registeredName}</h1>
+            <h1 className="text-2xl font-semibold text-ink">{client.registeredName}</h1>
             {client.isActive ? (
               <StatusBadge tone="done">Active</StatusBadge>
             ) : (
               <StatusBadge tone="pending">Inactive</StatusBadge>
             )}
           </div>
-          {client.tradeName && <p className="text-sm text-slate-500">{client.tradeName}</p>}
+          {client.tradeName && <p className="text-sm text-faint">{client.tradeName}</p>}
         </div>
         <div className="flex gap-2">
           <Link href="/clients">
@@ -96,7 +96,7 @@ export default async function ClientDetailPage({
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <h2 className="text-sm font-semibold text-slate-900">Registration</h2>
+            <h2 className="text-sm font-semibold text-ink">Registration</h2>
           </CardHeader>
           <CardBody>
             <dl className="grid grid-cols-2 gap-4">
@@ -119,7 +119,7 @@ export default async function ClientDetailPage({
 
         <Card>
           <CardHeader>
-            <h2 className="text-sm font-semibold text-slate-900">Books & compliance</h2>
+            <h2 className="text-sm font-semibold text-ink">Books & compliance</h2>
           </CardHeader>
           <CardBody>
             <dl className="grid grid-cols-2 gap-4">
@@ -151,7 +151,7 @@ export default async function ClientDetailPage({
 
         <Card className="lg:col-span-2">
           <CardHeader className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-slate-900">Taxable years</h2>
+            <h2 className="text-sm font-semibold text-ink">Taxable years</h2>
             <Link href={`/clients/${client.id}/tax-years/new`}>
               <Button variant="secondary" size="sm">
                 New tax year
@@ -160,7 +160,7 @@ export default async function ClientDetailPage({
           </CardHeader>
           <CardBody>
             {client.taxYears.length === 0 ? (
-              <p className="text-sm text-slate-400">
+              <p className="text-sm text-faint">
                 No taxable years recorded yet.
               </p>
             ) : (
@@ -193,7 +193,7 @@ export default async function ClientDetailPage({
                       <td>
                         <Link
                           href={`/clients/${client.id}/tax-years/${ty.id}/starting-figures`}
-                          className="text-sm text-slate-600 hover:underline"
+                          className="text-sm text-ink-secondary hover:underline"
                         >
                           Starting figures
                         </Link>
@@ -201,7 +201,7 @@ export default async function ClientDetailPage({
                       <td>
                         <Link
                           href={`/clients/${client.id}/tax-years/${ty.id}/edit`}
-                          className="text-sm text-slate-600 hover:underline"
+                          className="text-sm text-ink-secondary hover:underline"
                         >
                           Edit
                         </Link>
@@ -216,12 +216,12 @@ export default async function ClientDetailPage({
 
         <Card className="lg:col-span-2">
           <CardHeader className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-slate-900">Filings</h2>
+            <h2 className="text-sm font-semibold text-ink">Filings</h2>
             <GenerateFilingsForm clientId={client.id} defaultYear={currentTaxableYearManila()} />
           </CardHeader>
           <CardBody>
             {client.filings.length === 0 ? (
-              <p className="text-sm text-slate-400">No filings yet.</p>
+              <p className="text-sm text-faint">No filings yet.</p>
             ) : (
               <table className="data-table">
                 <thead>
@@ -246,7 +246,7 @@ export default async function ClientDetailPage({
                           <td>{f.period}</td>
                           <td>{f.formType}</td>
                           <td>—</td>
-                          <td colSpan={2} className="text-slate-400">
+                          <td colSpan={2} className="text-faint">
                             Filed outside the app
                           </td>
                         </tr>
@@ -272,7 +272,7 @@ export default async function ClientDetailPage({
                         <td>
                           <Link
                             href={`/clients/${client.id}/filings/${f.id}`}
-                            className="text-sm text-slate-600 hover:underline"
+                            className="text-sm text-ink-secondary hover:underline"
                           >
                             Open
                           </Link>
@@ -288,10 +288,10 @@ export default async function ClientDetailPage({
 
         <Card className="lg:col-span-2">
           <CardHeader>
-            <h2 className="text-sm font-semibold text-slate-900">Notes</h2>
+            <h2 className="text-sm font-semibold text-ink">Notes</h2>
           </CardHeader>
           <CardBody>
-            <p className="whitespace-pre-wrap text-sm text-slate-700">{client.notes || "—"}</p>
+            <p className="whitespace-pre-wrap text-sm text-ink-secondary">{client.notes || "—"}</p>
           </CardBody>
         </Card>
       </div>

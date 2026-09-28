@@ -35,10 +35,10 @@ export default async function PayorsPage({
     <div className="mx-auto max-w-3xl">
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-semibold text-slate-900">
+          <h1 className="text-2xl font-semibold text-ink">
             Payors — {client.registeredName}
           </h1>
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-1 text-sm text-faint">
             One shared list of names and details for this client — a company entered on a step 1 row is
             usually the same one that issues a 2307 in step 2. Picking a saved entry fills the details on
             that one row or certificate; nothing here affects income or credit amounts.
@@ -51,12 +51,12 @@ export default async function PayorsPage({
         </Link>
       </div>
 
-      <div className="mb-4 rounded-lg border border-slate-200 bg-white p-4">
-        <h2 className="mb-2 text-sm font-semibold text-slate-900">Add</h2>
+      <div className="mb-4 rounded-lg border border-line bg-surface p-4">
+        <h2 className="mb-2 text-sm font-semibold text-ink">Add</h2>
         <PayorForm action={boundCreate} atcCodes={atcCodes} submitLabel="Add" resetOnSuccess />
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+      <div className="overflow-x-auto rounded-lg border border-line bg-surface">
         <table className="data-table">
           <thead>
             <tr>
@@ -87,7 +87,7 @@ export default async function PayorsPage({
                     )}
                   </td>
                   <td>
-                    <Link href={`/clients/${id}/payors/${p.id}`} className="text-sm text-slate-600 hover:underline">
+                    <Link href={`/clients/${id}/payors/${p.id}`} className="text-sm text-ink-secondary hover:underline">
                       Edit
                     </Link>
                   </td>
@@ -96,7 +96,7 @@ export default async function PayorsPage({
             })}
             {payors.length === 0 && (
               <tr>
-                <td colSpan={6} className="py-8 text-center text-sm text-slate-400">
+                <td colSpan={6} className="py-8 text-center text-sm text-faint">
                   No saved payors yet.
                 </td>
               </tr>

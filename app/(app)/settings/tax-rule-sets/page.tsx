@@ -11,8 +11,8 @@ export default async function TaxRuleSetsPage() {
     <div>
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-semibold text-slate-900">Tax rule sets</h1>
-          <p className="text-sm text-slate-500">
+          <h1 className="text-2xl font-semibold text-ink">Tax rule sets</h1>
+          <p className="text-sm text-faint">
             Every rate, threshold, and deadline the tax engine uses — versioned by taxable year,
             never hardcoded (SPEC.md section 3).
           </p>
@@ -22,15 +22,15 @@ export default async function TaxRuleSetsPage() {
         </Link>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+      <div className="overflow-x-auto rounded-lg border border-line bg-surface">
         <table className="data-table">
           <thead>
             <tr>
               <th>Taxable year</th>
               <th>Effective</th>
               <th>Rate</th>
-              <th>VAT threshold</th>
-              <th>Deduction</th>
+              <th className="text-right">VAT threshold</th>
+              <th className="text-right">Deduction</th>
               <th>Q1 / Q2 / Q3 / Annual due</th>
               <th></th>
             </tr>
@@ -44,13 +44,13 @@ export default async function TaxRuleSetsPage() {
                   {rs.effectiveTo ? ` – ${formatManilaDate(rs.effectiveTo)}` : " – open"}
                 </td>
                 <td>{bpsToPercentLabel(rs.incomeTaxRateBps)}</td>
-                <td>{centsToPesos(rs.vatThresholdCents, { withSymbol: true })}</td>
-                <td>{centsToPesos(rs.allowableDeductionCents, { withSymbol: true })}</td>
+                <td className="text-right tabular-nums">{centsToPesos(rs.vatThresholdCents, { withSymbol: true })}</td>
+                <td className="text-right tabular-nums">{centsToPesos(rs.allowableDeductionCents, { withSymbol: true })}</td>
                 <td className="font-mono text-xs">
                   {rs.q1DueMonthDay} / {rs.q2DueMonthDay} / {rs.q3DueMonthDay} / {rs.annualDueMonthDay}
                 </td>
                 <td>
-                  <Link href={`/settings/tax-rule-sets/${rs.id}`} className="text-sm text-slate-600 hover:underline">
+                  <Link href={`/settings/tax-rule-sets/${rs.id}`} className="text-sm text-ink-secondary hover:underline">
                     Edit
                   </Link>
                 </td>
@@ -58,7 +58,7 @@ export default async function TaxRuleSetsPage() {
             ))}
             {ruleSets.length === 0 && (
               <tr>
-                <td colSpan={7} className="py-8 text-center text-sm text-slate-400">
+                <td colSpan={7} className="py-8 text-center text-sm text-faint">
                   No rule sets yet.
                 </td>
               </tr>

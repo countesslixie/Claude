@@ -34,8 +34,8 @@ export function AdviceMessageCard({
   if (!isDone) {
     return (
       <div className="flex flex-col gap-1">
-        <p className="text-xs font-medium text-slate-600">Message to client</p>
-        <p className="text-xs text-slate-400">Subject: {subject}</p>
+        <p className="text-xs font-medium text-ink-secondary">Message to client</p>
+        <p className="text-xs text-faint">Subject: {subject}</p>
         <CopyTextarea key={body} defaultValue={body} rows={8} />
       </div>
     );
@@ -43,20 +43,20 @@ export function AdviceMessageCard({
 
   return (
     <div className="flex flex-col gap-1">
-      <p className="text-xs text-slate-600">
+      <p className="text-xs text-ink-secondary">
         Advised {savedAtLabel} · {isOverpayment ? "Overpayment" : "Amount payable"} {amountLabel}
         {" — "}
         <button
           type="button"
           onClick={() => setShowMessage((v) => !v)}
-          className="text-slate-500 underline hover:text-slate-900"
+          className="text-faint underline hover:text-ink"
         >
           {showMessage ? "Hide message" : "Show message"}
         </button>
       </p>
       {showMessage && (
         <div className="flex flex-col gap-1">
-          <p className="text-xs text-slate-400">Subject: {subject}</p>
+          <p className="text-xs text-faint">Subject: {subject}</p>
           <CopyTextarea defaultValue={body} rows={8} readOnly />
         </div>
       )}

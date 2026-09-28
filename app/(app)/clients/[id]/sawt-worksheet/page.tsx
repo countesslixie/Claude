@@ -45,8 +45,8 @@ export default async function SawtWorksheetPage({
     <div className="mx-auto max-w-5xl">
       <div className="no-print mb-4 flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-semibold text-slate-900">SAWT keying worksheet — {client.registeredName}</h1>
-          <p className="text-sm text-slate-500">
+          <h1 className="text-2xl font-semibold text-ink">SAWT keying worksheet — {client.registeredName}</h1>
+          <p className="text-sm text-faint">
             Column order best-effort matches the Alphalist Data Entry Module — confirm against the live module
             before relying on it for fast keying (not verified against the current BIR screen).
           </p>
@@ -65,15 +65,15 @@ export default async function SawtWorksheetPage({
       </div>
 
       <form className="no-print mb-4 flex items-center gap-2" method="get">
-        <label className="text-sm text-slate-600">Year</label>
+        <label className="text-sm text-ink-secondary">Year</label>
         <input
           type="number"
           name="year"
           defaultValue={taxableYear}
-          className="h-8 w-24 rounded-md border border-slate-300 px-2 text-sm"
+          className="h-8 w-24 rounded-md border border-line px-2 text-sm"
         />
-        <label className="text-sm text-slate-600">Period</label>
-        <select name="period" defaultValue={period} className="h-8 rounded-md border border-slate-300 px-2 text-sm">
+        <label className="text-sm text-ink-secondary">Period</label>
+        <select name="period" defaultValue={period} className="h-8 rounded-md border border-line px-2 text-sm">
           {ALL_PERIODS.map((p) => (
             <option key={p} value={p}>
               {p}
@@ -85,20 +85,20 @@ export default async function SawtWorksheetPage({
         </Button>
       </form>
 
-      <div className="rounded-lg border border-slate-200 bg-white p-6">
-        <div className="mb-4 border-b border-slate-200 pb-3 text-center">
-          <p className="text-base font-semibold text-slate-900">{worksheet.clientName}</p>
-          <p className="text-sm text-slate-600">TIN: {worksheet.clientTin}</p>
-          <p className="mt-1 text-sm font-medium text-slate-800">
+      <div className="rounded-lg border border-line bg-surface p-6">
+        <div className="mb-4 border-b border-line pb-3 text-center">
+          <p className="text-base font-semibold text-ink">{worksheet.clientName}</p>
+          <p className="text-sm text-ink-secondary">TIN: {worksheet.clientTin}</p>
+          <p className="mt-1 text-sm font-medium text-ink">
             SAWT Keying Worksheet — TY{worksheet.taxableYear} {worksheet.period}
           </p>
-          <p className="mt-1 text-xs text-slate-500">
+          <p className="mt-1 text-xs text-faint">
             {worksheet.rowCount} row(s) — check against the module&apos;s own row count and totals after entry.
           </p>
         </div>
 
         {worksheet.rows.length === 0 ? (
-          <p className="py-8 text-center text-sm text-slate-400">
+          <p className="py-8 text-center text-sm text-faint">
             Nothing to key — every claimable certificate through this period is already batched.
           </p>
         ) : (
@@ -111,8 +111,8 @@ export default async function SawtWorksheetPage({
                 <th>Payor Address</th>
                 <th>ATC</th>
                 <th>Nature of Income Payment</th>
-                <th>Amount of Income Payment</th>
-                <th>Amount of Tax Withheld</th>
+                <th className="text-right">Amount of Income Payment</th>
+                <th className="text-right">Amount of Tax Withheld</th>
               </tr>
             </thead>
             <tbody>
@@ -124,14 +124,14 @@ export default async function SawtWorksheetPage({
                   <td>{row.payorAddress || "—"}</td>
                   <td className="font-mono text-xs">{row.atcCode}</td>
                   <td>{row.atcDescription || "—"}</td>
-                  <td>{centsToPesos(row.incomePaymentCents, { withSymbol: true })}</td>
-                  <td>{centsToPesos(row.taxWithheldCents, { withSymbol: true })}</td>
+                  <td className="text-right tabular-nums">{centsToPesos(row.incomePaymentCents, { withSymbol: true })}</td>
+                  <td className="text-right tabular-nums">{centsToPesos(row.taxWithheldCents, { withSymbol: true })}</td>
                 </tr>
               ))}
               <tr className="font-semibold">
                 <td colSpan={6}>Total ({worksheet.rowCount} rows)</td>
-                <td>{centsToPesos(worksheet.totals.incomePaymentCents, { withSymbol: true })}</td>
-                <td>{centsToPesos(worksheet.totals.taxWithheldCents, { withSymbol: true })}</td>
+                <td className="text-right tabular-nums">{centsToPesos(worksheet.totals.incomePaymentCents, { withSymbol: true })}</td>
+                <td className="text-right tabular-nums">{centsToPesos(worksheet.totals.taxWithheldCents, { withSymbol: true })}</td>
               </tr>
             </tbody>
           </table>
@@ -139,7 +139,7 @@ export default async function SawtWorksheetPage({
       </div>
 
       <div className="no-print mt-4 flex gap-4">
-        <Link href={`/clients/${id}/form-2307?year=${taxableYear}&period=${period}`} className="text-sm text-slate-600 hover:underline">
+        <Link href={`/clients/${id}/form-2307?year=${taxableYear}&period=${period}`} className="text-sm text-ink-secondary hover:underline">
           ← Back to Form 2307 register
         </Link>
       </div>

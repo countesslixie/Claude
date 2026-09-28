@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { centsToPesos } from "@/lib/money";
+import { Checkbox } from "@/components/ui/checkbox";
+import { centsToPesos, formatBreakdownAmount } from "@/lib/money";
 import type { BreakdownLine } from "@/lib/tax/types";
 
 const SHOW_EXPLANATIONS_KEY = "computationSheet.showExplanations";
@@ -70,23 +71,23 @@ export function ComputationSheetPanel({
       : `Tax payable ${centsToPesos(taxPayableCents, { withSymbol: true })}`;
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white">
+    <div className="rounded-lg border border-line bg-surface">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         className="flex w-full items-center justify-between px-4 py-2.5 text-left"
       >
-        <span className="text-sm font-semibold text-slate-900">
+        <span className="text-sm font-semibold text-ink">
           Computation sheet {isFrozen ? "(frozen — as filed)" : "(live preview — not yet filed)"}
         </span>
-        <span className="text-sm text-slate-600">
-          {summaryLabel} <span className="ml-2 text-xs text-slate-400">{open ? "Hide" : "Show"}</span>
+        <span className="text-sm text-ink-secondary">
+          {summaryLabel} <span className="ml-2 text-xs text-faint">{open ? "Hide" : "Show"}</span>
         </span>
       </button>
       {open && (
-        <div className="border-t border-slate-100 px-4 py-3">
+        <div className="border-t border-line px-4 py-3">
           {!hasSalesRecorded && (
-            <p className="mb-2 rounded bg-amber-50 px-2 py-1 text-xs text-amber-800">
+            <p className="mb-2 rounded bg-amber-tint px-2 py-1 text-xs text-amber">
               No sales recorded for {period} {taxableYear} — enter the client&apos;s declared figure to compute.{" "}
               <Link href={incomeHref} className="underline">
                 Record quarterly sales
@@ -94,24 +95,24 @@ export function ComputationSheetPanel({
               .
             </p>
           )}
-          <label className="mb-2 flex items-center gap-1.5 text-xs text-slate-500">
-            <input type="checkbox" checked={showExplanations} onChange={toggleExplanations} />
+          <label className="mb-2 flex items-center gap-1.5 text-xs text-faint">
+            <Checkbox checked={showExplanations} onChange={toggleExplanations} />
             Show explanations
           </label>
           <table className="w-full border-collapse text-sm">
             <tbody>
               {breakdown.map((line) => (
-                <tr key={line.label} className="border-b border-slate-100 last:border-0">
+                <tr key={line.label} className="border-b border-line last:border-0">
                   <td className="py-1 pr-2">{line.label}</td>
-                  <td className="py-1 pr-2 text-right font-mono">
-                    {centsToPesos(line.amountCents, { withSymbol: true })}
+                  <td className="py-1 pr-2 text-right tabular-nums">
+                    {formatBreakdownAmount(line.amountCents, line.isOverpaymentLine)}
                   </td>
-                  {showExplanations && <td className="py-1 text-xs text-slate-400">{line.sourceNote}</td>}
+                  {showExplanations && <td className="py-1 text-xs text-faint">{line.sourceNote}</td>}
                 </tr>
               ))}
             </tbody>
           </table>
-          <p className="mt-2 text-xs text-slate-400">
+          <p className="mt-2 text-xs text-faint">
             Form {formType}. This is a preparation aid; the filed return and BIR&apos;s own assessment govern.
           </p>
         </div>

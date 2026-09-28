@@ -89,15 +89,15 @@ export function PayorDetailsDialog({
     <dialog
       ref={dialogRef}
       onClose={onClose}
-      className="fixed inset-0 m-auto w-full max-w-sm rounded-lg border border-slate-200 p-0 backdrop:bg-slate-900/30"
+      className="fixed inset-0 m-auto w-full max-w-sm rounded-2xl border border-line bg-surface p-0 backdrop:bg-ink/30"
     >
       <div className="p-4">
-        <h2 className="text-sm font-semibold text-slate-900">Save to payors</h2>
+        <h2 className="text-sm font-semibold text-ink">Save to payors</h2>
         <div className="mt-3 flex flex-col gap-3">
-          {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+          {error && <p className="rounded-md bg-red-tint px-3 py-2 text-sm text-red">{error}</p>}
           <div className="flex flex-col gap-1">
             <Label htmlFor="payor-dialog-name">
-              Name <span className="text-red-500">*</span>
+              Name <span className="text-red">*</span>
             </Label>
             <Input
               id="payor-dialog-name"
@@ -130,7 +130,7 @@ export function PayorDetailsDialog({
           <Button type="button" size="sm" onClick={handleSave} disabled={saving || !name.trim()}>
             {saving ? "Saving…" : "Save"}
           </Button>
-          <button type="button" onClick={onClose} className="text-xs text-slate-400 underline">
+          <button type="button" onClick={onClose} className="text-xs text-faint underline">
             Cancel
           </button>
         </div>

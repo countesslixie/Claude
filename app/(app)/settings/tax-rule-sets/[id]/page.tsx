@@ -37,7 +37,7 @@ export default async function EditTaxRuleSetPage({
 
   return (
     <div className="mx-auto max-w-2xl">
-      <h1 className="mb-4 text-lg font-semibold text-slate-900">
+      <h1 className="mb-4 text-2xl font-semibold text-ink">
         Edit tax rule set — {ruleSet.taxableYear}
       </h1>
       <TaxRuleSetForm action={boundAction} initialValues={initialValues} submitLabel="Save changes" />

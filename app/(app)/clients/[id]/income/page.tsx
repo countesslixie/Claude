@@ -104,7 +104,7 @@ export default async function IncomePage({
       return (
         <tr key={quarter}>
           <td>{quarter}</td>
-          <td colSpan={3} className="text-slate-400">
+          <td colSpan={3} className="text-faint">
             Filed outside the app
           </td>
         </tr>
@@ -123,9 +123,9 @@ export default async function IncomePage({
       <tr key={quarter}>
         <td>{quarter}</td>
         <td>{customersLabel}</td>
-        <td>{row ? centsToPesos(row.grossSalesCents, { withSymbol: true }) : "—"}</td>
+        <td className="text-right tabular-nums">{row ? centsToPesos(row.grossSalesCents, { withSymbol: true }) : "—"}</td>
         <td>
-          {locked && <span className="text-xs text-slate-400">filed</span>}
+          {locked && <span className="text-xs text-faint">filed</span>}
           {filing && (
             <Link href={`/clients/${id}/filings/${filing.id}`} className="ml-2 text-xs underline">
               View filing
@@ -142,8 +142,8 @@ export default async function IncomePage({
     <div className="mx-auto max-w-3xl">
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-semibold text-slate-900">Income — {client.registeredName}</h1>
-          <p className="text-sm text-slate-500">
+          <h1 className="text-2xl font-semibold text-ink">Income — {client.registeredName}</h1>
+          <p className="text-sm text-faint">
             Declared gross sales for TY{taxableYear}: {centsToPesos(yearTotalGrossCents, { withSymbol: true })}
             {yearTotalNonOperatingCents > 0 &&
               ` + ${centsToPesos(yearTotalNonOperatingCents, { withSymbol: true })} non-operating`}
@@ -153,12 +153,12 @@ export default async function IncomePage({
         <div className="flex items-center gap-2">
           {!openFiling && (
             <form method="get" className="flex items-center gap-2">
-              <label className="text-sm text-slate-600">Year</label>
+              <label className="text-sm text-ink-secondary">Year</label>
               <input
                 type="number"
                 name="year"
                 defaultValue={taxableYear}
-                className="h-8 w-24 rounded-md border border-slate-300 px-2 text-sm"
+                className="h-8 w-24 rounded-md border border-line px-2 text-sm"
               />
               <Button type="submit" variant="secondary" size="sm">
                 Go
@@ -181,12 +181,12 @@ export default async function IncomePage({
           const row = byQuarter.get(editableQuarter);
           if (locked) {
             return (
-              <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
-                <p className="text-sm font-medium text-slate-900">{editableQuarter} — read-only</p>
-                <p className="mt-1 text-sm text-slate-600">
+              <div className="mb-4 rounded-lg border border-line bg-background p-4">
+                <p className="text-sm font-medium text-ink">{editableQuarter} — read-only</p>
+                <p className="mt-1 text-sm text-ink-secondary">
                   This quarter&apos;s return has already been filed, so it can no longer be edited here.
                 </p>
-                <p className="mt-2 text-sm text-slate-700">
+                <p className="mt-2 text-sm text-ink-secondary">
                   Total: {row ? centsToPesos(row.grossSalesCents, { withSymbol: true }) : "—"}
                 </p>
                 {filing && (
@@ -228,12 +228,12 @@ export default async function IncomePage({
             const { locked, finalized, filing } = lockInfoFor(quarter);
             if (outsideQuarters.has(quarter)) {
               return (
-                <div key={quarter} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <div key={quarter} className="rounded-lg border border-line bg-background p-4">
                   <div className="mb-1 flex items-baseline justify-between">
-                    <h2 className="text-sm font-semibold text-slate-900">{quarter}</h2>
-                    <span className="text-xs text-slate-400">filed outside the app</span>
+                    <h2 className="text-sm font-semibold text-ink">{quarter}</h2>
+                    <span className="text-xs text-faint">filed outside the app</span>
                   </div>
-                  <p className="text-sm text-slate-500">
+                  <p className="text-sm text-faint">
                     Covered by this client&apos;s starting figures — see the client&apos;s Taxable years row.
                   </p>
                 </div>
@@ -241,12 +241,12 @@ export default async function IncomePage({
             }
             if (locked) {
               return (
-                <div key={quarter} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <div key={quarter} className="rounded-lg border border-line bg-background p-4">
                   <div className="mb-1 flex items-baseline justify-between">
-                    <h2 className="text-sm font-semibold text-slate-900">{quarter}</h2>
-                    <span className="text-xs text-slate-400">read-only — filed</span>
+                    <h2 className="text-sm font-semibold text-ink">{quarter}</h2>
+                    <span className="text-xs text-faint">read-only — filed</span>
                   </div>
-                  <p className="text-sm text-slate-700">
+                  <p className="text-sm text-ink-secondary">
                     Total: {row ? centsToPesos(row.grossSalesCents, { withSymbol: true }) : "—"}
                   </p>
                   {filing && (
@@ -283,8 +283,8 @@ export default async function IncomePage({
       )}
 
       {editableQuarter && (
-        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-          <p className="border-b border-slate-100 px-3 py-2 text-xs font-medium uppercase tracking-wide text-slate-400">
+        <div className="overflow-x-auto rounded-lg border border-line bg-surface">
+          <p className="border-b border-line px-3 py-2 text-xs font-medium uppercase tracking-wide text-faint">
             Other quarters this year — read-only
           </p>
           <table className="data-table">
@@ -292,7 +292,7 @@ export default async function IncomePage({
               <tr>
                 <th>Quarter</th>
                 <th>Payors</th>
-                <th>Total</th>
+                <th className="text-right">Total</th>
                 <th></th>
               </tr>
             </thead>

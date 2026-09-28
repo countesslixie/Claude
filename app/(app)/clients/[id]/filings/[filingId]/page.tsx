@@ -373,7 +373,7 @@ export default async function FilingDetailPage({
   const prepareReturnExtra = (
     <div className="flex flex-col gap-2">
       {(sheet.formType === "F1701Q" || sheet.formType === "F1701A") && (
-        <p className="text-xs text-slate-600">
+        <p className="text-xs text-ink-secondary">
           Prior year&apos;s excess credit (item 55):{" "}
           <span className="font-medium">{centsToPesos(clientTaxYear?.priorYearExcessCreditCents ?? 0, { withSymbol: true })}</span>
         </p>
@@ -419,8 +419,8 @@ export default async function FilingDetailPage({
         </Button>
       </a>
       <div>
-        <p className="mb-1 text-xs font-medium text-slate-600">Draft email to client</p>
-        <p className="mb-1 text-xs text-slate-400">Subject: {clientEmail.subject}</p>
+        <p className="mb-1 text-xs font-medium text-ink-secondary">Draft email to client</p>
+        <p className="mb-1 text-xs text-faint">Subject: {clientEmail.subject}</p>
         <CopyTextarea defaultValue={clientEmail.body} />
       </div>
     </div>
@@ -437,19 +437,19 @@ export default async function FilingDetailPage({
       <div className="mb-2 flex items-start justify-between">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-lg font-semibold text-slate-900">
+            <h1 className="text-2xl font-semibold text-ink">
               {filing.client.registeredName} — TY{filing.taxableYear} {filing.period}
             </h1>
             <StatusBadge tone={STATUS_TONE[filing.status] ?? "pending"}>
               {filingStatusLabel(filing.status, skippedCount)}
             </StatusBadge>
           </div>
-          <details className="mt-0.5 text-sm text-slate-500">
+          <details className="mt-0.5 text-sm text-faint">
             <summary className="inline cursor-pointer list-none marker:hidden">
               {filing.formType} — due {formatManilaDate(filing.adjustedDueDate)}
-              <span className="ml-1 text-xs text-slate-400">(details)</span>
+              <span className="ml-1 text-xs text-faint">(details)</span>
             </summary>
-            <div className="mt-1 text-xs text-slate-400">
+            <div className="mt-1 text-xs text-faint">
               {filing.statutoryDueDate.getTime() !== filing.adjustedDueDate.getTime() && (
                 <p>
                   Statutory due date {formatManilaDate(filing.statutoryDueDate)}, shifted for weekend/holiday.
@@ -473,11 +473,11 @@ export default async function FilingDetailPage({
       </div>
 
       {/* §4.2 — the page's primary job. If the bookkeeper reads only one thing here, this is it. */}
-      <Card className="mb-3 border-slate-300 bg-slate-50">
+      <Card className="mb-3 border-line bg-background">
         <CardBody className="py-3">
           {nextStep ? (
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm font-medium text-slate-900">
+              <p className="text-sm font-medium text-ink">
                 Next: Step {nextStep.sequence} of {allSteps.length} — {nextStep.title}
               </p>
               <NextActionControl
@@ -490,7 +490,7 @@ export default async function FilingDetailPage({
               />
             </div>
           ) : (
-            <p className="text-sm font-medium text-emerald-700">
+            <p className="text-sm font-medium text-green">
               All 16 steps resolved — nothing left to do on this filing.
             </p>
           )}
@@ -498,30 +498,30 @@ export default async function FilingDetailPage({
       </Card>
 
       {/* §4.2 — compact summary strip: one row, no explanatory prose. */}
-      <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">
-        <span className="font-medium text-slate-900">{netLabel}</span>
-        <span className="text-slate-300">·</span>
-        <span className="text-slate-600">
+      <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-line bg-surface px-3 py-2 text-sm">
+        <span className="font-medium text-ink">{netLabel}</span>
+        <span className="text-faint">·</span>
+        <span className="text-ink-secondary">
           {daysToAdjustedDue >= 0
             ? `${daysToAdjustedDue}d to adjusted due date`
             : `${Math.abs(daysToAdjustedDue)}d past adjusted due date`}
         </span>
-        <span className="text-slate-300">·</span>
+        <span className="text-faint">·</span>
         <StatusBadge tone={STATUS_TONE[filing.status] ?? "pending"}>
           {filingStatusLabel(filing.status, skippedCount)}
         </StatusBadge>
       </div>
 
       {completenessGaps.length > 0 && (
-        <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+        <div className="mb-3 rounded-lg border border-amber bg-amber-tint px-3 py-2">
           <div className="flex items-start justify-between gap-2">
             <div>
-              <p className="text-sm font-medium text-amber-900">
+              <p className="text-sm font-medium text-amber">
                 {completenessGaps.length} document{completenessGaps.length === 1 ? "" : "s"} not yet attached
               </p>
               <ul className="mt-1 flex flex-col gap-0.5">
                 {completenessGaps.map((g, i) => (
-                  <li key={i} className="text-xs text-amber-800">
+                  <li key={i} className="text-xs text-amber">
                     {g.stepTitle}: {g.slotLabel}
                   </li>
                 ))}
@@ -537,28 +537,28 @@ export default async function FilingDetailPage({
       )}
 
       {filing.amendmentAlerts.length > 0 && (
-        <Card className="mb-3 border-amber-300">
+        <Card className="mb-3 border-amber">
           <CardHeader>
-            <h2 className="text-sm font-semibold text-amber-900">
+            <h2 className="text-sm font-semibold text-amber">
               Amendment alerts ({filing.amendmentAlerts.length})
             </h2>
           </CardHeader>
           <CardBody>
-            <p className="mb-3 text-xs text-slate-500">
+            <p className="mb-3 text-xs text-faint">
               Declared sales changed after this filing was frozen. The computation sheet below still shows
               exactly what was filed — it was never rewritten. You decide whether to amend.
             </p>
             <div className="flex flex-col gap-3">
               {filing.amendmentAlerts.map((alert) => (
-                <div key={alert.id} className="rounded-md border border-amber-200 bg-amber-50 p-3">
-                  <p className="text-sm text-amber-900">{alert.reason}</p>
-                  <p className="mt-1 text-sm font-medium text-amber-900">
+                <div key={alert.id} className="rounded-md border border-amber bg-amber-tint p-3">
+                  <p className="text-sm text-amber">{alert.reason}</p>
+                  <p className="mt-1 text-sm font-medium text-amber">
                     Delta: {alert.deltaCents >= 0 ? "+" : ""}
                     {centsToPesos(alert.deltaCents, { withSymbol: true })}
                   </p>
-                  <p className="text-xs text-slate-500">Raised {formatManilaDate(alert.createdAt)}</p>
+                  <p className="text-xs text-faint">Raised {formatManilaDate(alert.createdAt)}</p>
                   {alert.acknowledgedAt ? (
-                    <p className="mt-1 text-xs text-slate-500">
+                    <p className="mt-1 text-xs text-faint">
                       Acknowledged {formatManilaDate(alert.acknowledgedAt)}
                       {alert.acknowledgedNote ? ` — ${alert.acknowledgedNote}` : ""}
                     </p>
@@ -582,11 +582,11 @@ export default async function FilingDetailPage({
           exposes every per-step control that existed before grouping. */}
       <Card id="checklist" className="mb-3">
         <CardHeader className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-slate-900">Workflow ({visibleSteps.length}/{allSteps.length} steps shown)</h2>
+          <h2 className="text-sm font-semibold text-ink">Workflow ({visibleSteps.length}/{allSteps.length} steps shown)</h2>
           <div className="flex items-center gap-3">
             <a
               href={`/api/filings/${filing.id}/package`}
-              className="text-xs text-slate-600 underline hover:text-slate-900"
+              className="text-xs text-ink-secondary underline hover:text-ink"
             >
               Download period package
             </a>
@@ -597,7 +597,7 @@ export default async function FilingDetailPage({
                     ? `/clients/${id}/filings/${filingId}`
                     : `/clients/${id}/filings/${filingId}?showSkipped=1`
                 }
-                className="text-xs text-slate-600 underline hover:text-slate-900"
+                className="text-xs text-ink-secondary underline hover:text-ink"
               >
                 {showSkipped ? "Hide skipped/NA" : `Show ${hiddenCount} skipped/NA`}
               </Link>

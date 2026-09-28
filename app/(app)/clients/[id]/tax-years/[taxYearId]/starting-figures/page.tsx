@@ -44,7 +44,7 @@ export default async function StartingFiguresPage({
   return (
     <div className="mx-auto max-w-2xl">
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-lg font-semibold text-slate-900">
+        <h1 className="text-2xl font-semibold text-ink">
           Starting figures — {taxYear.client.registeredName}, TY{taxYear.taxableYear}
         </h1>
         <Link href={`/clients/${id}`}>
@@ -53,7 +53,7 @@ export default async function StartingFiguresPage({
           </Button>
         </Link>
       </div>
-      <p className="mb-4 text-sm text-slate-500">
+      <p className="mb-4 text-sm text-faint">
         For a client joining mid-year: the figures from her latest return filed outside the app, entered once. The
         app carries them into the next return and into the Annual — no earlier-quarter sales, certificates or scans
         are entered here.
