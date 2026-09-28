@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { CertificateForm } from "@/components/certificate-form";
 import { deleteCertificate, type CertificateFormState } from "@/lib/actions/form2307";
-import { skipStep } from "@/lib/actions/workflowSteps";
+import { skipStep, unskipStep } from "@/lib/actions/workflowSteps";
 import { uploadDocument } from "@/lib/actions/documents";
 import { centsToPesos, bpsToPercentLabel } from "@/lib/money";
 import { formatManilaDate, manilaDateInputToJsDate } from "@/lib/dates";
@@ -185,7 +185,14 @@ export function Receive2307StepCard({
         </StatusBadge>
       </div>
 
-      {status === "SKIPPED" && skippedReason && <p className="mt-1 text-xs text-faint">Skipped: {skippedReason}</p>}
+      {status === "SKIPPED" && (
+        <div className="mt-1 flex flex-wrap items-center gap-2">
+          {skippedReason && <p className="text-xs text-faint">Skipped: {skippedReason}</p>}
+          <Button size="sm" variant="secondary" disabled={isPending} onClick={() => run(() => unskipStep(stepId))}>
+            Undo skip
+          </Button>
+        </div>
+      )}
 
       {status !== "SKIPPED" && !expanded && (
         <p className="mt-1 text-xs text-ink-secondary">

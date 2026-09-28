@@ -1,66 +1,52 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { StatusBadge } from "@/components/status-badge";
-import { Button } from "@/components/ui/button";
-import { markGroupDone } from "@/lib/actions/workflowSteps";
 
 /**
  * Brief #4a — a collapsed group shows its name, progress, and what's
  * outstanding; expanding it exposes every per-step control that already
- * existed (attach, skip with reason, mark waiting) unchanged, inside
- * `children`. The one new control here is "Mark done", which marks every
- * unresolved step in the group at once (lib/actions/workflowSteps.ts's
- * markGroupDone) — this is the point of the change: a clean quarter is
- * five clicks, not sixteen.
+ * existed (attach, skip with reason, mark waiting, mark done) unchanged,
+ * inside `children`.
  *
- * Brief #4e — `blockReason` no longer renders as standing text under the
- * header (the bookkeeper found the same sentence appearing here, under
- * a per-step button, and as a "Missing required documents" line all at
- * once, too noisy). It still explains why via a tooltip (D41).
- * `outstandingLabel` is unaffected — the short amber summary beside the
- * group name stays.
+ * Brief #5i §3 — there is no group-level "Mark done" any more, and never
+ * will be again: a group is finished only when its own steps are, and it
+ * is never marked finished from the header (her decision, reversing D32's
+ * one click per group and brief #5e's clickable middle state). The header
+ * now shows status only — a non-clickable grey "Pending" label (its
+ * tooltip names what's left, e.g. "Step 3 and step 4 not done.") while
+ * anything in the group is unresolved, or a green "Done" pill once every
+ * step is Done or Skipped. `lib/actions/workflowSteps.ts`'s markGroupDone
+ * is gone entirely, not just this button.
  *
- * Brief #5e §5 — a disabled "Mark done" read like a button she could
- * press. The control now has three states: a non-clickable grey
- * "Pending" label (with the block reason as its hover tooltip) while
- * blocked, the ordinary clickable "Mark done" button once it can be
- * finished, and the green "Done" pill once every step is resolved.
+ * Brief #5i §4 — the count beside the name is Done + Skipped together
+ * (a skip is a decision she made, not a step still outstanding), with a
+ * "N skipped" suffix whenever any step in the group is skipped, so a skip
+ * never reads as if it silently vanished from the count.
  */
 export function WorkflowGroupCard({
-  filingId,
-  groupCode,
   name,
   doneCount,
   totalCount,
+  skippedCount,
   isComplete,
-  blockReason,
+  unresolvedSummary,
   outstandingLabel,
   defaultOpen,
   children,
 }: {
-  filingId: string;
-  groupCode: string;
   name: string;
   doneCount: number;
   totalCount: number;
+  skippedCount: number;
   isComplete: boolean;
-  blockReason: string | null;
+  /** Brief #5i §3 — the Pending label's tooltip, e.g. "Step 3 and step 4 not done." */
+  unresolvedSummary: string | null;
   outstandingLabel: string | null;
   defaultOpen: boolean;
   children: React.ReactNode;
 }) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
-  const [isPending, startTransition] = useTransition();
-  const [message, setMessage] = useState<string | null>(null);
-
-  function handleMarkDone() {
-    setMessage(null);
-    startTransition(async () => {
-      const result = await markGroupDone(filingId, groupCode);
-      if (!result.ok) setMessage(result.error ?? "Could not complete this group.");
-    });
-  }
 
   return (
     <div className="rounded-lg border border-line">
@@ -73,6 +59,7 @@ export function WorkflowGroupCard({
           <span className="text-sm font-medium text-ink">{name}</span>
           <span className="text-xs text-faint">
             {doneCount} of {totalCount}
+            {skippedCount > 0 && ` · ${skippedCount} skipped`}
           </span>
           {isComplete ? (
             <StatusBadge tone="done">Done</StatusBadge>
@@ -81,19 +68,12 @@ export function WorkflowGroupCard({
           )}
           <span className="ml-auto text-xs text-faint underline">{isOpen ? "Collapse" : "Expand"}</span>
         </button>
-        {!isComplete &&
-          (blockReason ? (
-            <span title={blockReason}>
-              <StatusBadge tone="pending">Pending</StatusBadge>
-            </span>
-          ) : (
-            <Button size="sm" disabled={isPending} onClick={handleMarkDone}>
-              Mark done
-            </Button>
-          ))}
+        {!isComplete && (
+          <span title={unresolvedSummary ?? undefined}>
+            <StatusBadge tone="pending">Pending</StatusBadge>
+          </span>
+        )}
       </div>
-
-      {message && <p className="px-3 pb-2 text-xs text-amber">{message}</p>}
 
       {isOpen && <div className="flex flex-col gap-2 border-t border-line p-3">{children}</div>}
     </div>

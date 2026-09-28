@@ -9,8 +9,7 @@ import { isElectionBlocked } from "@/lib/workflow/election";
 import { ensureComputationSheetSaved } from "@/lib/documents/computationSheet";
 import { missingRequiredSlots, checkSendClientPackageReadiness } from "@/lib/workflow/docSlots";
 import { parseDocSlots } from "@/lib/workflow/types";
-import { WORKFLOW_GROUPS, prepareGroupBlockReason, adviseClientBlockReason } from "@/lib/workflow/groups";
-import { isResolved } from "@/lib/workflow/status";
+import { prepareGroupBlockReason, adviseClientBlockReason } from "@/lib/workflow/groups";
 import { buildLiveAdviceMessageForFiling } from "@/lib/workflow/adviceMessage";
 
 export type StepActionResult = { ok: boolean; error?: string };
@@ -236,49 +235,91 @@ export async function reopenPreparedFiling(filingId: string): Promise<void> {
 }
 
 /**
- * Brief #4a — one "Mark done" per group, marking every unresolved step in
- * that group at once (a clean quarter is five clicks, not sixteen). This
- * calls the exact same markStepDone() as the per-step control above, in
- * ascending sequence order, for every step in the group not already
- * DONE/NA/SKIPPED — so every existing check (the election hard-blocker,
- * the step 13 -> 14 dependency, SEND_CLIENT_PACKAGE's package-readiness
- * check, and the required-doc-slot gate) still applies exactly as it did
- * before grouping, with no logic duplicated here. Ascending order means a
- * group holding both ends of the 13 -> 14 dependency (SAWT) always
- * resolves 13 before attempting 14.
- *
- * Stops at the first step that can't be marked done and returns its
- * error — the group's Done button is disabled ahead of time whenever a
- * required document is missing (see lib/workflow/groups.ts's
- * summarizeGroup), so reaching an error here in practice means one of the
- * other checks (election, dependency, package readiness) applies, the
- * same ones that were never surfaced as a pre-click disabled reason at
- * the single-step level either.
+ * Brief #5i §3 — there is no group-level "Mark done" any more. A group is
+ * finished only when its own steps are, and it's never marked finished
+ * from the group header (her decision, reversing D32's one-click-per-
+ * group and D53's clickable middle state). This function is removed
+ * outright, not just its button, so nothing can bypass the per-step rules
+ * through it: `prepareGroupBlockReason` still gates step 3 inside
+ * `markStepDone` above, but nothing calls it as a group-level gate any
+ * more. Every step in every group still has its own way to finish — the
+ * per-step "Mark done" (or self-completion, for steps 1/2) below — so a
+ * group resolves the moment its last step does, with no click of its own.
  */
-export async function markGroupDone(filingId: string, groupCode: string): Promise<StepActionResult> {
-  const group = WORKFLOW_GROUPS.find((g) => g.code === groupCode);
-  if (!group) return { ok: false, error: "Unknown group." };
 
-  const steps = await prisma.workflowStep.findMany({
-    where: { filingId, stepCode: { in: group.stepCodes } },
-    orderBy: { sequence: "asc" },
+/**
+ * Brief #5i §1/§2 — restores a Skipped step 2 (RECEIVE_2307) to whatever
+ * its own derived rule says it should be, never forcing a fixed status.
+ * Shared by the manual "Undo skip" action (unskipStep below) and the
+ * automatic reopening a sales edit triggers (lib/actions/quarterlySales.ts)
+ * — a different income figure may mean a certificate she didn't expect,
+ * her decision. No-ops if the step isn't currently Skipped. The caller is
+ * responsible for the step-5-filed lock where that applies: unskipStep
+ * checks it explicitly; the automatic path doesn't need to, since a filed
+ * filing never reaches this function's callers in the first place (D50's
+ * own guards on the figures-changing saves already stop there).
+ */
+export async function reopenSkippedReceive2307(filingId: string, actorId: string, note: string): Promise<void> {
+  const step = await prisma.workflowStep.findFirst({ where: { filingId, stepCode: "RECEIVE_2307" } });
+  if (!step || step.status !== "SKIPPED") return;
+
+  const updated = await prisma.workflowStep.update({
+    where: { id: step.id },
+    data: { status: "WAITING_EXTERNAL", waitingSince: new Date(), skippedReason: null, actorId },
   });
+  await logActivity({ entityType: "WorkflowStep", entityId: step.id, action: "UPDATE", before: step, after: updated, actorId, note });
+  // Settles the step into WAITING_EXTERNAL or DONE based on the real
+  // certificate state — never assumed here, always derived.
+  await recomputeReceive2307Status(filingId);
+}
 
-  // Brief #4b — Prepare's own Mark done only ever has steps 3-4 left
-  // (steps 1-2 self-complete), and is blocked server-side by the same
-  // rule the button is disabled by client-side (lib/workflow/groups.ts's
-  // prepareGroupBlockReason): a return can't be prepared without the
-  // sales figure or the certificates.
-  if (group.code === "PREPARE") {
-    const reason = prepareGroupBlockReason(steps);
-    if (reason) return { ok: false, error: reason };
+/**
+ * Brief #5i §1 — "Undo skip" on a skipped step. First checked: no unskip
+ * action existed anywhere in the codebase before this brief (confirmed by
+ * grep). Refused once the filing's own step 5 (FILE_RETURN) is Done — the
+ * same lock step 2's certificate list already has (D34/D11) — so a
+ * decision made before filing can't be silently reopened after. The skip
+ * reason is never silently discarded: it's captured in the ActivityLog
+ * "before" snapshot this writes, even though the live row's own
+ * `skippedReason` is cleared once the step is no longer Skipped.
+ */
+export async function unskipStep(stepId: string): Promise<StepActionResult> {
+  const step = await prisma.workflowStep.findUnique({
+    where: { id: stepId },
+    include: { filing: { include: { workflowSteps: true } } },
+  });
+  if (!step) return { ok: false, error: "Step not found." };
+  if (step.status !== "SKIPPED") return { ok: false, error: "This step isn't skipped." };
+
+  const fileReturnStep = step.filing.workflowSteps.find((s) => s.stepCode === "FILE_RETURN");
+  if (fileReturnStep?.status === "DONE") {
+    return { ok: false, error: "This filing has already been filed — a skipped step can no longer be undone." };
   }
 
-  for (const step of steps) {
-    if (isResolved(step.status)) continue;
-    const result = await markStepDone(step.id);
-    if (!result.ok) return result;
+  const actorId = await getActorId();
+
+  if (step.stepCode === "RECEIVE_2307") {
+    await reopenSkippedReceive2307(step.filingId, actorId, "Step 2 un-skipped by the bookkeeper.");
+    // D50 — undoing step 2's skip is a figures change, exactly like
+    // adding or removing a certificate: it reopens steps 3/4 while the
+    // filing is unfiled (a no-op here otherwise, since FILE_RETURN isn't
+    // Done — already checked above).
+    await reopenPreparedFiling(step.filingId);
+  } else {
+    // Every other skippable step (5-16, excluding step 3 which can't be
+    // skipped at all) has no derived rule of its own — PENDING is its
+    // ordinary starting point, the same state it was in before it was
+    // ever skipped.
+    const updated = await prisma.workflowStep.update({
+      where: { id: stepId },
+      data: { status: "PENDING", skippedReason: null, actorId },
+    });
+    await logActivity({ entityType: "WorkflowStep", entityId: stepId, action: "UPDATE", before: step, after: updated, actorId });
   }
+
+  await recomputeFilingStatus(step.filingId, actorId);
+  revalidatePath(`/clients/${step.filing.clientId}/filings/${step.filingId}`);
+  revalidatePath("/filings");
 
   return { ok: true };
 }

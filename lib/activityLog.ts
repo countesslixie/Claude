@@ -12,6 +12,8 @@ export async function logActivity(params: {
   before?: unknown;
   after?: unknown;
   actorId: string;
+  /** Brief #5i §2 — a short human-readable note, e.g. "Step 2 reopened: sales changed." */
+  note?: string;
 }) {
   await prisma.activityLog.create({
     data: {
@@ -20,6 +22,7 @@ export async function logActivity(params: {
       action: params.action,
       beforeJson: params.before === undefined ? undefined : JSON.stringify(params.before),
       afterJson: params.after === undefined ? undefined : JSON.stringify(params.after),
+      note: params.note,
       actorId: params.actorId,
     },
   });

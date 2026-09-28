@@ -235,6 +235,74 @@ describe("summarizeGroup", () => {
     expect(summary.blockReason).toBeNull();
     expect(summary.outstandingLabel).toBeNull();
   });
+
+  describe("brief #5i §4 -- doneCount counts Done + Skipped together, with a skippedCount alongside it", () => {
+    it("a skipped step counts toward doneCount, and skippedCount reports how many of those were skipped", () => {
+      const steps: GroupStepInput[] = prepare.stepCodes.map((stepCode) => ({
+        stepCode,
+        status: stepCode === "RECORD_SALES" ? "DONE" : stepCode === "RECEIVE_2307" ? "SKIPPED" : "DONE",
+      }));
+      const summary = summarizeGroup(prepare, steps);
+      expect(summary.doneCount).toBe(4);
+      expect(summary.totalCount).toBe(4);
+      expect(summary.skippedCount).toBe(1);
+      expect(summary.isComplete).toBe(true);
+    });
+
+    it("an unfinished group with one skip reports the partial count and the skip count separately", () => {
+      const steps: GroupStepInput[] = prepare.stepCodes.map((stepCode) => ({
+        stepCode,
+        status: stepCode === "RECORD_SALES" ? "DONE" : stepCode === "RECEIVE_2307" ? "SKIPPED" : "PENDING",
+      }));
+      const summary = summarizeGroup(prepare, steps);
+      expect(summary.doneCount).toBe(2);
+      expect(summary.totalCount).toBe(4);
+      expect(summary.skippedCount).toBe(1);
+      expect(summary.isComplete).toBe(false);
+    });
+
+    it("no skips -- skippedCount is zero and doneCount behaves exactly as before", () => {
+      const steps: GroupStepInput[] = prepare.stepCodes.map((stepCode) => ({ stepCode, status: "DONE" }));
+      const summary = summarizeGroup(prepare, steps);
+      expect(summary.doneCount).toBe(4);
+      expect(summary.skippedCount).toBe(0);
+      expect(summary.isComplete).toBe(true);
+    });
+
+    it("NA steps are excluded from both doneCount and skippedCount, same as totalCount", () => {
+      const steps: GroupStepInput[] = sawt.stepCodes.map((stepCode) => ({ stepCode, status: "NA" }));
+      const summary = summarizeGroup(sawt, steps);
+      expect(summary.doneCount).toBe(0);
+      expect(summary.skippedCount).toBe(0);
+      expect(summary.totalCount).toBe(0);
+    });
+  });
+
+  describe("brief #5i §3 -- unresolvedSummary names the specific unresolved steps by number", () => {
+    it("names both step 3 and step 4 by number when both are unresolved", () => {
+      const steps: GroupStepInput[] = prepare.stepCodes.map((stepCode) => ({
+        stepCode,
+        status: stepCode === "RECORD_SALES" || stepCode === "RECEIVE_2307" ? "DONE" : "PENDING",
+      }));
+      const summary = summarizeGroup(prepare, steps);
+      expect(summary.unresolvedSummary).toBe("Step 3 and step 4 not done.");
+    });
+
+    it("names only the one remaining unresolved step", () => {
+      const steps: GroupStepInput[] = prepare.stepCodes.map((stepCode) => ({
+        stepCode,
+        status: stepCode === "ADVISE_CLIENT" ? "PENDING" : stepCode === "RECEIVE_2307" ? "SKIPPED" : "DONE",
+      }));
+      const summary = summarizeGroup(prepare, steps);
+      expect(summary.unresolvedSummary).toBe("Step 4 not done.");
+    });
+
+    it("is null once the group is complete", () => {
+      const steps: GroupStepInput[] = prepare.stepCodes.map((stepCode) => ({ stepCode, status: "DONE" }));
+      const summary = summarizeGroup(prepare, steps);
+      expect(summary.unresolvedSummary).toBeNull();
+    });
+  });
 });
 
 describe("prepareGroupBlockReason (brief #4b)", () => {

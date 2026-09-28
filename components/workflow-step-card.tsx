@@ -9,10 +9,13 @@ import {
   markStepInProgress,
   markStepWaitingExternal,
   skipStep,
+  unskipStep,
   logFollowUp,
 } from "@/lib/actions/workflowSteps";
 import { uploadDocument } from "@/lib/actions/documents";
 import { stepBlockReason } from "@/lib/workflow/docSlots";
+import { stepStatusLabel } from "@/lib/workflow/status";
+import type { WorkflowStepStatus } from "@/lib/workflow/types";
 
 const STEP_STATUS_TONE: Record<string, StatusTone> = {
   PENDING: "pending",
@@ -145,12 +148,19 @@ export function WorkflowStepCard({
           {step.agingTone && (
             <StatusBadge tone={AGING_TONE[step.agingTone]}>{step.agingDaysWaiting}d</StatusBadge>
           )}
-          <StatusBadge tone={STEP_STATUS_TONE[step.status] ?? "pending"}>{step.status}</StatusBadge>
+          <StatusBadge tone={STEP_STATUS_TONE[step.status] ?? "pending"}>
+            {stepStatusLabel(step.status as WorkflowStepStatus)}
+          </StatusBadge>
         </div>
       </div>
 
-      {step.status === "SKIPPED" && step.skippedReason && (
-        <p className="mt-1 text-xs text-faint">Skipped: {step.skippedReason}</p>
+      {step.status === "SKIPPED" && (
+        <div className="mt-1 flex flex-wrap items-center gap-2">
+          {step.skippedReason && <p className="text-xs text-faint">Skipped: {step.skippedReason}</p>}
+          <Button size="sm" variant="secondary" disabled={isPending} onClick={() => run(() => unskipStep(step.id))}>
+            Undo skip
+          </Button>
+        </div>
       )}
 
       {extra && <div className="mt-2">{extra}</div>}

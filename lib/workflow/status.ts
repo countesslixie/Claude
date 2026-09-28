@@ -61,17 +61,67 @@ export function countSkippedSteps(steps: { status: WorkflowStepStatus }[]): numb
 }
 
 /**
- * The label to render for a filing's status. Every status renders as its
- * bare enum value except COMPLETE with one or more skipped steps, which
- * renders as "Complete (N steps skipped)" so a skip stays visible at the
- * point COMPLETE is shown, rather than looking identical to a filing with
- * no skips at all (SPEC.md 7.2).
+ * Brief #5i §5 — every FilingStatus value maps to a plain, sentence-case
+ * label. This is a `Record<FilingStatus, string>`, so TypeScript itself
+ * refuses to compile if a new FilingStatus value is ever added without a
+ * label here — the same guarantee the runtime test in
+ * tests/workflow/status.test.ts checks against `ALL_FILING_STATUSES`
+ * below. `NA` is in the type but never actually produced by
+ * deriveFilingStatus above (confirmed by grep, 2026-09-28) — given a
+ * label anyway, since the type allows it.
+ */
+const FILING_STATUS_LABELS: Record<FilingStatus, string> = {
+  NOT_STARTED: "Not started",
+  IN_PROGRESS: "In progress",
+  WAITING_CLIENT: "Waiting on client",
+  WAITING_BIR: "Waiting on BIR",
+  BLOCKED: "Blocked",
+  COMPLETE: "Complete",
+  NA: "Not applicable",
+};
+
+/** Every FilingStatus value, for tests to check no value is missing a label. */
+export const ALL_FILING_STATUSES: FilingStatus[] = Object.keys(FILING_STATUS_LABELS) as FilingStatus[];
+
+/**
+ * The label to render for a filing's status, everywhere one shows (the
+ * summary strip, the board, the client page, the dashboard). COMPLETE
+ * with one or more skipped steps renders as "Complete (N steps skipped)"
+ * so a skip stays visible at the point COMPLETE is shown, rather than
+ * looking identical to a filing with no skips at all (SPEC.md 7.2). Every
+ * other status renders its plain label (see FILING_STATUS_LABELS above) —
+ * brief #5i §5, replacing the bare enum value (`IN_PROGRESS`, `BLOCKED`, …)
+ * this used to fall through to.
  */
 export function filingStatusLabel(status: FilingStatus, skippedCount: number): string {
   if (status === "COMPLETE" && skippedCount > 0) {
     return `Complete (${skippedCount} step${skippedCount === 1 ? "" : "s"} skipped)`;
   }
-  return status;
+  return FILING_STATUS_LABELS[status];
+}
+
+/**
+ * Brief #5i §5 — the step-status equivalent of filingStatusLabel above,
+ * used everywhere a step's own status pill renders (the generic workflow
+ * step card, step 2's bespoke card). Sentence case, never the raw enum
+ * value ("PENDING" in capitals beside a "Done" pill was the bug this
+ * fixes). Also a `Record<WorkflowStepStatus, string>` for the same
+ * compile-time exhaustiveness guarantee as the filing-status map.
+ */
+const STEP_STATUS_LABELS: Record<WorkflowStepStatus, string> = {
+  PENDING: "Pending",
+  IN_PROGRESS: "In progress",
+  WAITING_EXTERNAL: "Waiting",
+  DONE: "Done",
+  SKIPPED: "Skipped",
+  NA: "Not applicable",
+};
+
+/** Every WorkflowStepStatus value, for tests to check no value is missing a label. */
+export const ALL_STEP_STATUSES: WorkflowStepStatus[] = Object.keys(STEP_STATUS_LABELS) as WorkflowStepStatus[];
+
+export function stepStatusLabel(status: WorkflowStepStatus): string {
+  return STEP_STATUS_LABELS[status];
 }
 
 /**

@@ -145,7 +145,7 @@ export default async function FilingsBoardPage({
                 <option value="">All statuses</option>
                 {Object.keys(FILING_STATUS_TONE).map((s) => (
                   <option key={s} value={s}>
-                    {s}
+                    {filingStatusLabel(s as FilingStatus, 0)}
                   </option>
                 ))}
               </Select>

@@ -3,11 +3,23 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
-import { StatusBadge } from "@/components/status-badge";
+import { StatusBadge, type StatusTone } from "@/components/status-badge";
 import { GenerateFilingsForm } from "@/components/generate-filings-form";
 import { formatManilaDate, currentTaxableYearManila } from "@/lib/dates";
 import { bpsToPercentLabel } from "@/lib/money";
 import { countSkippedSteps, filingStatusLabel } from "@/lib/workflow/status";
+
+// Brief #5i §5 — matches app/(app)/filings/page.tsx's own FILING_STATUS_TONE
+// exactly, so a filing's pill reads the same colour wherever it shows.
+const FILING_STATUS_TONE: Record<string, StatusTone> = {
+  NOT_STARTED: "pending",
+  IN_PROGRESS: "progress",
+  WAITING_CLIENT: "waiting",
+  WAITING_BIR: "waiting",
+  BLOCKED: "overdue",
+  COMPLETE: "done",
+  NA: "pending",
+};
 
 const LABELS: Record<string, string> = {
   PURELY_SELF_EMPLOYED: "Purely self-employed",
@@ -259,15 +271,9 @@ export default async function ClientDetailPage({
                         <td>{f.formType}</td>
                         <td>{formatManilaDate(f.adjustedDueDate)}</td>
                         <td>
-                          {f.status === "COMPLETE" ? (
-                            <StatusBadge tone="done">{filingStatusLabel(f.status, countSkippedSteps(f.workflowSteps))}</StatusBadge>
-                          ) : f.status === "BLOCKED" ? (
-                            <StatusBadge tone="overdue">{f.status}</StatusBadge>
-                          ) : f.status === "WAITING_BIR" || f.status === "WAITING_CLIENT" ? (
-                            <StatusBadge tone="waiting">{f.status}</StatusBadge>
-                          ) : (
-                            <StatusBadge tone="pending">{f.status}</StatusBadge>
-                          )}
+                          <StatusBadge tone={FILING_STATUS_TONE[f.status] ?? "pending"}>
+                            {filingStatusLabel(f.status, countSkippedSteps(f.workflowSteps))}
+                          </StatusBadge>
                         </td>
                         <td>
                           <Link

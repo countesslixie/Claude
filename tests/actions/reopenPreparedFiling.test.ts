@@ -264,6 +264,16 @@ describe("reopening steps 3/4 after a change to the computation's figures", () =
     expect(afterReopen.adviceMessageBody).toBeNull();
     expect(afterReopen.adviceMessageSavedAt).toBeNull();
 
+    // Brief #5i §2 -- the same figures change also un-skips step 2 (setup
+    // had skipped it), which re-blocks step 3's gate until step 2 is
+    // resolved again. That re-blocking is intended, not a bug, so step 2
+    // must be resolved again here before step 3 can be re-prepared.
+    const reopenedStep2 = await prisma.workflowStep.findFirstOrThrow({
+      where: { filingId: filing.id, stepCode: "RECEIVE_2307" },
+    });
+    expect(reopenedStep2.status).not.toBe("SKIPPED");
+    await skipStep(reopenedStep2.id, "Still no 2307s expected this quarter.");
+
     // Re-preparing and re-marking step 4 done rebuilds it fresh, from the
     // NEW figures -- not the old saved text.
     await markStepDone(step3.id);

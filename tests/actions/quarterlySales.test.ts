@@ -2,7 +2,7 @@ import { describe, it, expect, afterAll, vi } from "vitest";
 import { prisma } from "@/lib/prisma";
 import { saveQuarterlySales } from "@/lib/actions/quarterlySales";
 import { generateFilingsForClientYear } from "@/lib/workflow/filingGeneration";
-import { markStepDone } from "@/lib/actions/workflowSteps";
+import { markStepDone, skipStep } from "@/lib/actions/workflowSteps";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
@@ -207,6 +207,99 @@ describe("saveQuarterlySales", () => {
       where: { clientId_taxableYear_quarter: { clientId: client.id, taxableYear: 2026, quarter: "Q2" } },
     });
     expect(row).toBeNull(); // nothing was written
+  });
+
+  describe("brief #5i §2: a figures-changing income save un-skips a Skipped step 2", () => {
+    async function makeClientWithQ2SkippedStep2(codePrefix: string) {
+      const { client, filing } = await makeClientWithQ2Filing(codePrefix);
+      await saveQuarterlySales(
+        client.id,
+        2026,
+        "Q2",
+        {},
+        formDataOf({ intent: "final" }, [{ customerName: "Client A", amount: "1000" }]),
+      );
+      const step2 = await prisma.workflowStep.findFirstOrThrow({
+        where: { filingId: filing.id, stepCode: "RECEIVE_2307" },
+      });
+      await skipStep(step2.id, "No 2307s expected this quarter.");
+      return { client, filing, step2 };
+    }
+
+    it("a figures-changing final save un-skips step 2 and keeps the reason in history", async () => {
+      const { client, filing, step2 } = await makeClientWithQ2SkippedStep2("qs-unskip-final-changed");
+
+      await saveQuarterlySales(
+        client.id,
+        2026,
+        "Q2",
+        {},
+        formDataOf({ intent: "final" }, [{ customerName: "Client A", amount: "2000" }]),
+      );
+
+      const updated = await prisma.workflowStep.findUniqueOrThrow({ where: { id: step2.id } });
+      expect(updated.status).not.toBe("SKIPPED");
+
+      const logEntry = await prisma.activityLog.findFirst({
+        where: { entityType: "WorkflowStep", entityId: step2.id },
+        orderBy: { at: "desc" },
+      });
+      const before = JSON.parse(logEntry?.beforeJson as string);
+      expect(before).toMatchObject({ skippedReason: "No 2307s expected this quarter." });
+    });
+
+    it("a draft save of a previously-final step 1 also un-skips step 2", async () => {
+      const { client, filing, step2 } = await makeClientWithQ2SkippedStep2("qs-unskip-draft-of-final");
+
+      await saveQuarterlySales(
+        client.id,
+        2026,
+        "Q2",
+        {},
+        formDataOf({ intent: "draft" }, [{ customerName: "Client A", amount: "1000" }]),
+      );
+
+      const updated = await prisma.workflowStep.findUniqueOrThrow({ where: { id: step2.id } });
+      expect(updated.status).not.toBe("SKIPPED");
+      void filing;
+    });
+
+    it("a final save with no change to the figures does NOT un-skip step 2", async () => {
+      const { client, step2 } = await makeClientWithQ2SkippedStep2("qs-unskip-no-change");
+
+      // Same customer name and amount as setup -- no figures change.
+      await saveQuarterlySales(
+        client.id,
+        2026,
+        "Q2",
+        {},
+        formDataOf({ intent: "final" }, [{ customerName: "Client A", amount: "1000" }]),
+      );
+
+      const updated = await prisma.workflowStep.findUniqueOrThrow({ where: { id: step2.id } });
+      expect(updated.status).toBe("SKIPPED");
+    });
+
+    it("a filed filing (step 5 Done) is untouched -- the save itself is refused before any un-skip logic runs", async () => {
+      const { client, filing, step2 } = await makeClientWithQ2SkippedStep2("qs-unskip-filed");
+
+      await prisma.workflowStep.updateMany({
+        where: { filingId: filing.id, stepCode: "FILE_RETURN" },
+        data: { status: "DONE" },
+      });
+
+      const result = await saveQuarterlySales(
+        client.id,
+        2026,
+        "Q2",
+        {},
+        formDataOf({ intent: "final" }, [{ customerName: "Client A", amount: "9999" }]),
+      );
+      expect(result.error).toMatch(/locked/i);
+
+      const unchanged = await prisma.workflowStep.findUniqueOrThrow({ where: { id: step2.id } });
+      expect(unchanged.status).toBe("SKIPPED");
+    });
   });
 
   it("brief #5f §8: sales can't be entered for a quarter filed outside the app", async () => {

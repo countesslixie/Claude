@@ -174,8 +174,13 @@ export default async function FilingDetailPage({
     };
   });
   const skippedCount = countSkippedSteps(filing.workflowSteps);
-  const hiddenCount = allSteps.filter((s) => s.status === "NA" || s.status === "SKIPPED").length;
-  const visibleSteps = showSkipped ? allSteps : allSteps.filter((s) => s.status !== "NA" && s.status !== "SKIPPED");
+  // Brief #5i §1 — a Skipped step is a decision she made, not a step that
+  // doesn't apply, so it's never hidden like an NA one: it renders in its
+  // group, in step order, always. Only NA steps are optionally hidden now
+  // (the `showSkipped` query param/toggle is kept, doing narrower work —
+  // see the "Show N not applicable" link below).
+  const naCount = allSteps.filter((s) => s.status === "NA").length;
+  const visibleSteps = showSkipped ? allSteps : allSteps.filter((s) => s.status !== "NA");
 
   // Brief #4a — the sixteen steps wrapped in five groups (lib/workflow/groups.ts).
   // Nothing about what a step does or requires changes here; this only
@@ -590,7 +595,7 @@ export default async function FilingDetailPage({
             >
               Download period package
             </a>
-            {hiddenCount > 0 && (
+            {naCount > 0 && (
               <Link
                 href={
                   showSkipped
@@ -599,7 +604,7 @@ export default async function FilingDetailPage({
                 }
                 className="text-xs text-ink-secondary underline hover:text-ink"
               >
-                {showSkipped ? "Hide skipped/NA" : `Show ${hiddenCount} skipped/NA`}
+                {showSkipped ? "Hide not applicable" : `Show ${naCount} not applicable`}
               </Link>
             )}
           </div>
@@ -609,13 +614,12 @@ export default async function FilingDetailPage({
             {groupSections.map(({ def, summary, steps }) => (
               <WorkflowGroupCard
                 key={def.code}
-                filingId={filing.id}
-                groupCode={def.code}
                 name={def.name}
                 doneCount={summary.doneCount}
                 totalCount={summary.totalCount}
+                skippedCount={summary.skippedCount}
                 isComplete={summary.isComplete}
-                blockReason={summary.blockReason}
+                unresolvedSummary={summary.unresolvedSummary}
                 outstandingLabel={summary.outstandingLabel}
                 defaultOpen={def.code === activeGroupCode}
               >

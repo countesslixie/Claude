@@ -40,6 +40,58 @@ export function groupForStepCode(stepCode: string): WorkflowGroupDef | undefined
 }
 
 /**
+ * Brief #5i §3 — the fixed step-code -> global step number (1-16) lookup,
+ * for naming exactly which steps are still unresolved in a group's
+ * Pending tooltip (e.g. "Step 3 and step 4 not done."), without needing
+ * every caller to thread a WorkflowStep's own `sequence` field through
+ * GroupStepInput. Mirrors SPEC.md §7.1's step table exactly — this never
+ * varies at runtime, so a static map is simpler than a parameter every
+ * test and caller would otherwise have to supply.
+ */
+const STEP_NUMBER: Record<string, number> = {
+  RECORD_SALES: 1,
+  RECEIVE_2307: 2,
+  PREPARE_RETURN: 3,
+  ADVISE_CLIENT: 4,
+  FILE_RETURN: 5,
+  SAVE_SUBMISSION_SS: 6,
+  SAVE_FORM_COPY: 7,
+  MAKE_PAYMENT: 8,
+  SAVE_PROOF_PAYMENT: 9,
+  RECEIVE_TRRC: 10,
+  ALPHALIST_ENTRY: 11,
+  EMAIL_DAT: 12,
+  SAWT_ACK: 13,
+  SAWT_VALIDATION: 14,
+  EAFS_SUBMIT: 15,
+  SEND_CLIENT_PACKAGE: 16,
+};
+
+function joinWithAnd(items: string[]): string {
+  if (items.length === 0) return "";
+  if (items.length === 1) return items[0];
+  if (items.length === 2) return `${items[0]} and ${items[1]}`;
+  return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+}
+
+/**
+ * "Step 3 and step 4 not done." — the Pending label's tooltip (brief #5i
+ * §3), replacing the group-level "Mark done" button entirely. Unlike
+ * `blockReason` below (which explains WHY a group can't finish — a
+ * missing document, or Prepare's steps-1/2 gate — and stays exactly as it
+ * was, still consulted server-side), this just names WHICH steps aren't
+ * resolved yet, the same plain way for every group. Null once the group
+ * is complete.
+ */
+function unresolvedStepsSummary(groupSteps: { stepCode: string; status: WorkflowStepStatus }[]): string | null {
+  const unresolved = groupSteps.filter((s) => !isResolved(s.status));
+  if (unresolved.length === 0) return null;
+  const numbers = [...new Set(unresolved.map((s) => STEP_NUMBER[s.stepCode]))].sort((a, b) => a - b);
+  const joined = joinWithAnd(numbers.map((n) => `step ${n}`));
+  return `${joined.charAt(0).toUpperCase()}${joined.slice(1)} not done.`;
+}
+
+/**
  * Brief #4b — steps 1 and 2 now complete themselves (RECORD_SALES on a
  * final Save of the quarter's sales; RECEIVE_2307 once "all certificates
  * received" is ticked and every certificate row has its scan). Prepare's
@@ -105,14 +157,18 @@ export interface GroupStepInput {
 export interface GroupSummary {
   code: GroupCode;
   name: string;
-  /** Excludes NA steps from both, matching computeProgressPercent's convention in lib/workflow/status.ts. */
+  /** Brief #5i §4 — Done + Skipped together, over applicable (non-NA) steps: a skip is a decision she made, not a step still outstanding. */
   doneCount: number;
   totalCount: number;
+  /** Brief #5i §4 — how many of doneCount are specifically Skipped, so the card can show "1 skipped" after the count. 0 when there are none. */
+  skippedCount: number;
   isComplete: boolean;
-  /** §4 — the group's Done control is disabled while this is non-null; names what's missing in plain words. Reflects the required-doc-slot rule (D27) for every group except Prepare, which is gated by prepareGroupBlockReason (brief #4b) instead. Never the election check, the step 13->14 dependency, or SEND_CLIENT_PACKAGE's package-readiness check, all of which are unaffected and still surface as they did before this pass. */
+  /** No longer surfaced by the group card (brief #5i §3 removed the group-level "Mark done" it justified) but still computed and still tested — the same rule prepareGroupBlockReason enforces server-side inside markStepDone for step 3. Reflects the required-doc-slot rule (D27) for every group except Prepare. Never the election check, the step 13->14 dependency, or SEND_CLIENT_PACKAGE's package-readiness check, all of which are unaffected and still surface as they did before this pass. */
   blockReason: string | null;
   /** §3 — what a collapsed group shows as outstanding, e.g. "waiting on proof of payment" or "waiting on BIR, 12d". null once the group is complete or nothing is outstanding yet. */
   outstandingLabel: string | null;
+  /** Brief #5i §3 — the Pending label's tooltip, e.g. "Step 3 and step 4 not done." Null once the group is complete. */
+  unresolvedSummary: string | null;
 }
 
 /**
@@ -123,9 +179,13 @@ export interface GroupSummary {
 export function summarizeGroup(group: WorkflowGroupDef, steps: GroupStepInput[]): GroupSummary {
   const groupSteps = steps.filter((s) => group.stepCodes.includes(s.stepCode));
   const applicable = groupSteps.filter((s) => s.status !== "NA");
-  const doneCount = applicable.filter((s) => s.status === "DONE").length;
+  // Brief #5i §4 — a Skipped step is a decision she made, not a step
+  // still outstanding, so it counts toward the numerator alongside Done.
+  const doneCount = applicable.filter((s) => s.status === "DONE" || s.status === "SKIPPED").length;
+  const skippedCount = applicable.filter((s) => s.status === "SKIPPED").length;
   const totalCount = applicable.length;
   const isComplete = groupSteps.length > 0 && groupSteps.every((s) => isResolved(s.status));
+  const unresolvedSummary = isComplete ? null : unresolvedStepsSummary(groupSteps);
 
   const missingLabels: string[] = [];
   for (const s of groupSteps) {
@@ -175,5 +235,5 @@ export function summarizeGroup(group: WorkflowGroupDef, steps: GroupStepInput[])
     }
   }
 
-  return { code: group.code, name: group.name, doneCount, totalCount, isComplete, blockReason, outstandingLabel };
+  return { code: group.code, name: group.name, doneCount, totalCount, skippedCount, isComplete, blockReason, outstandingLabel, unresolvedSummary };
 }

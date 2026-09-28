@@ -820,6 +820,10 @@ model ActivityLog {
   action     ActivityAction
   beforeJson Json?
   afterJson  Json?
+  // Brief #5i §2 — a short human-readable note for a log entry whose
+  // before/after diff alone wouldn't say WHY, e.g. "Step 2 reopened: sales
+  // changed." Optional; most entries still rely on the diff alone.
+  note       String?
   actorId    String?
   at         DateTime       @default(now())
 
