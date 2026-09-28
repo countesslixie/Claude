@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 *Instructions for Claude Code working on this repository.*
-*Last reconciled: 2026-09-28 — brief #5h, covering briefs #5d (the form-line computation), #5e (step 4 gating), #5f (per-return credits, starting figures) and #5g (the new look), on top of brief #5c, brief #5b, brief #5a, and the documentation pass (brief #4f) through briefs #4c-#4e.*
+*Last reconciled: 2026-09-28 — brief #5j, covering brief #5i (skipped steps stay visible and undoable, no group-level "Mark done," the group counter, plain status labels — closing out the Prepare group), on top of brief #5h (briefs #5d-#5g), brief #5c, brief #5b, brief #5a, and the documentation pass (brief #4f) through briefs #4c-#4e.*
 
 ---
 
@@ -58,7 +58,10 @@ Next.js 15 App Router · TypeScript strict · Prisma + SQLite (`data/app.db`) ·
                                prepareGroupBlockReason, brief #4b;
                                adviseClientBlockReason, D51, brief #5e),
                                clientTaxAdviceMessage.ts (step 4's message,
-                               D51), adviceMessage.ts (live/saved assembly)
+                               D51), adviceMessage.ts (live/saved assembly),
+                               status.ts (filingStatusLabel/stepStatusLabel,
+                               D63, brief #5i — every status pill's one
+                               source of a plain label)
 /lib/documents/                storage, naming, hashing, computationSheet.ts
                                (ensureComputationSheetSaved), computationSheetHtml.ts
                                (plain ink colours + the local font stack, D58)
@@ -72,8 +75,10 @@ Next.js 15 App Router · TypeScript strict · Prisma + SQLite (`data/app.db`) ·
                                (createPayorInline, brief #5a; fillPayorDetail, brief #5b),
                                startingFigures.ts (saveStartingFigures, D56, brief #5f),
                                workflowSteps.ts (reopenPreparedFiling, D50, briefs
-                               #5d-#5f), filings.ts (updateFilingOtherCredits, D55,
-                               brief #5f)
+                               #5d-#5f; unskipStep/reopenSkippedReceive2307, D60/D61,
+                               brief #5i — markGroupDone is gone, deleted by the
+                               same brief, D62), filings.ts (updateFilingOtherCredits,
+                               D55, brief #5f)
 /lib/dates.ts                  manilaCalendarDay(), formatManilaDate()
 /lib/money.ts                  centsToPesos(), formatBreakdownAmount() (D59, brief #5g)
 /components/                   next-action-control.tsx, computation-sheet-panel.tsx,
@@ -160,11 +165,13 @@ A missing quarter is zero, not an error — but a filing whose OWN quarter has n
 
 **The filing page combines two fixes for the same complaint** ("output shown ahead of the work it belongs to"): a next-action line and compact summary strip at the top (`components/next-action-control.tsx`) answer "what do I do now" without scrolling, and anything belonging to a step lives inside that step's own card rather than as a page-level panel at the bottom. Keep both — they answer different complaints from different test drives, not the same one twice. (The certificate cutoff and client confirmation panels these two fixes originally described are both gone — see D34 and D37 — but the two fixes and the reasoning for keeping them separate still stand.)
 
-**A disabled control explains itself on hover, not with standing text (brief #4e).** A blocked "Mark done" — per step or per group — carries its reason as a `title` tooltip only. Do not reintroduce a standing red or amber paragraph under a group header, under a per-step button, or under the next-action banner — that was the exact noise brief #4e removed, after it turned out to be rendering in three places at once for the same rule. The short amber "waiting on …" summary beside a group's name is the one piece of standing status text that stays. **One narrow exception (D47, brief #5a):** while step 2's "All certificates received" checkbox is ticked, Add and Remove are hidden (server-side too, not just in the UI) with one short line saying to untick first — it explains a state she just set herself, not a block on her, so it isn't the pattern D41 removed.
+**A disabled control explains itself on hover, not with standing text (brief #4e).** A blocked per-step "Mark done" carries its reason as a `title` tooltip only; a group's own tooltip (on its Pending label, since brief #5i — D62) works the same way. Do not reintroduce a standing red or amber paragraph under a group header, under a per-step button, or under the next-action banner — that was the exact noise brief #4e removed, after it turned out to be rendering in three places at once for the same rule. The short amber "waiting on …" summary beside a group's name is the one piece of standing status text that stays. **One narrow exception (D47, brief #5a):** while step 2's "All certificates received" checkbox is ticked, Add and Remove are hidden (server-side too, not just in the UI) with one short line saying to untick first — it explains a state she just set herself, not a block on her, so it isn't the pattern D41 removed.
 
 ## The five groups (D32) — read this before touching the checklist or the board
 
-The sixteen steps are wrapped in five groups: **Prepare** (1–4), **File** (5, 6, 7, 10), **Pay** (8, 9), **SAWT** (11–14), **Close** (15, 16) — `lib/workflow/groups.ts`. One "Mark done" per group marks every unresolved step in it at once. This is grouping only: it changes nothing about what any step requires, blocks, or does. **The blocking rule above is unaffected** — it just gets reported once per group instead of once per step's button.
+The sixteen steps are wrapped in five groups: **Prepare** (1–4), **File** (5, 6, 7, 10), **Pay** (8, 9), **SAWT** (11–14), **Close** (15, 16) — `lib/workflow/groups.ts`. This is grouping only: it changes nothing about what any step requires, blocks, or does. **The blocking rule above is unaffected** — it just gets reported once per group instead of once per step's button.
+
+**No group has a "Mark done" (D62, brief #5i, her decision) — do not add one back.** A group finishes only when its own steps do, one at a time on their own controls; there is no group-level click that resolves several steps at once, and `markGroupDone` no longer exists in the codebase. The group header reports status only: a non-clickable grey **Pending** label, its `title` tooltip naming the steps still open (e.g. "Step 2, step 3 and step 4 not done."), or a green **Done** pill once every step in it is Done or Skipped. *Why:* the old one-click button let her mark steps 3 and 4 done at once without actually doing either.
 
 **Group 2 (File) is deliberately not contiguous, and that is correct — do not "fix" it.** The TRRC (step 10) sits with File, not with Pay (group 3, steps 8–9) between them, because the TRRC is eBIRForms' confirmation that the return was *received* — it confirms the filing, not the payment (`WorkflowStep.category` for step 10 has always been `FILING`). **Step numbers record when things happen; groups record what they belong to.** Do not renumber the TRRC to make the groups contiguous — that would place it ahead of payment in the list and imply she waits for BIR's confirmation before paying, which she does not.
 
@@ -172,15 +179,19 @@ The sixteen steps are wrapped in five groups: **Prepare** (1–4), **File** (5, 
 
 **Group membership is its own fixed lookup table, not `category` repurposed.** `category` matches groups 2/3/4 (`FILING`/`PAYMENT`/`SAWT`) exactly, but steps 4 and 16 are both `category: CLIENT_COMM` while belonging to different groups (Prepare and Close respectively) — reusing `category` outright would have merged them.
 
-**Built in brief #4b (2026-09-21):** steps 1 and 2 are now self-completing, with step 2's scan requirement blocking (D33/D35) — see "The income model" and "The blocking rule" above. Prepare's own group-level "Mark done" is now disabled until both are resolved (`prepareGroupBlockReason` in `lib/workflow/groups.ts`), the first real block Prepare has ever had. **Prepare's own collapsed-summary label was fixed in brief #4e** to name the specific thing outstanding ("waiting on quarterly sales" / "waiting on Form 2307" / both) instead of a generic "waiting on Client, 0d" — see "The blocking rule" above for the standing-text removal this was part of.
+**Built in brief #4b (2026-09-21):** steps 1 and 2 are now self-completing, with step 2's scan requirement blocking (D33/D35) — see "The income model" and "The blocking rule" above. Prepare's own header is disabled — reads Pending, not a button — until both are resolved (`prepareGroupBlockReason` in `lib/workflow/groups.ts`, consulted inside `markStepDone`), the first real block Prepare has ever had. **Prepare's own collapsed-summary label was fixed in brief #4e** to name the specific thing outstanding ("waiting on quarterly sales" / "waiting on Form 2307" / both) instead of a generic "waiting on Client, 0d" — see "The blocking rule" above for the standing-text removal this was part of.
 
 **Step 3 (Prepare computation) can no longer be started or skipped (D54, brief #5f, her decision: "it is the heart of the app").** `controlsMode="markDoneOnly"` on its card; `lib/actions/workflowSteps.ts`'s `skipStep` refuses `PREPARE_RETURN` server-side regardless of caller. Only Mark done remains. It now holds a credits box (item 55 read-only, item 61 editable — see "The income model" above) rendering **above** the computation sheet it generates.
 
 **Step 4 (Advise client) is gated on step 3, and is no longer a waiting step (D51, briefs #5d-#5f).** No Start, no Mark waiting — `controlsMode="markDoneOnly"` here too. Its own Mark done is blocked until step 3 is Done, enforced server-side (`lib/workflow/groups.ts`'s `adviseClientBlockReason`, consulted inside `markStepDone` itself, not only by the group button) — it shows no message at all until then. The message (`lib/workflow/clientTaxAdviceMessage.ts`) comes in three versions (payable / quarterly overpayment / annual overpayment) and is saved exactly as sent when step 4 is marked Done.
 
-**A change to the figures behind an already-prepared computation reopens steps 3 and 4 while the filing is unfiled (D50, briefs #5d-#5f).** `lib/actions/workflowSteps.ts`'s `reopenPreparedFiling` — called after a figures-changing final save of step 1, a draft save of a previously-final step 1, adding/removing a certificate, a saved change to item 61, or a saved change to the starting figures. A no-op save, Replace scan, and unticking "all certificates received" on its own do **not** reopen anything (the last of these was reversed mid-sequence — brief #5d's first version had it reopen too, brief #5e found that too eager). A filed filing (step 5 Done) is never reopened; the saved advice message is cleared when step 4 reopens, so its card rebuilds a live preview until step 4 is marked Done again.
+**A change to the figures behind an already-prepared computation reopens steps 3 and 4 while the filing is unfiled (D50, briefs #5d-#5f, extended #5i).** `lib/actions/workflowSteps.ts`'s `reopenPreparedFiling` — called after a figures-changing final save of step 1, a draft save of a previously-final step 1, adding/removing a certificate, a saved change to item 61, or a saved change to the starting figures. **As of brief #5i, the same figures-changing step 1 saves also un-skip a Skipped step 2 (D61, `reopenSkippedReceive2307`), and undoing step 2's skip by hand is itself a reopening trigger (D60)** — see the paragraph on skipped steps below. A no-op save, Replace scan, and unticking "all certificates received" on its own do **not** reopen anything (the last of these was reversed mid-sequence — brief #5d's first version had it reopen too, brief #5e found that too eager). A filed filing (step 5 Done) is never reopened; the saved advice message is cleared when step 4 reopens, so its card rebuilds a live preview until step 4 is marked Done again.
 
-**A group's "Mark done" has three states, not a disabled/enabled toggle (D53, brief #5e).** A non-clickable grey "Pending" label (block reason as its hover tooltip) while blocked, the ordinary clickable button once it can finish, a green "Done" pill once every step in it is resolved. Prepare closes itself the moment all four of its steps resolve.
+**A group's header has two states, not a button (D62, brief #5i, superseding D53's three-state group button).** A non-clickable grey "Pending" label (the unresolved steps named as its hover tooltip, e.g. "Step 2, step 3 and step 4 not done.") while anything in the group is unresolved, or a green "Done" pill once every step in it is Done or Skipped. There is no clickable middle state and no group-level "Mark done" at all — see "The five groups" above. Prepare closes itself the moment all four of its steps resolve, same as every other group.
+
+**The group counter counts Done + Skipped together, with a "N skipped" suffix (D60, brief #5i).** `NA` steps are excluded from both numbers. "4 of 4 · 1 skipped · Done" once a group with one skip finishes; "4 of 4 · Done" unchanged when nothing in it was skipped. *Why counting Skipped as resolved matters:* leaving it out of the numerator ("3 of 4 · Done") read as if a step had been missed, when a skip is a decision, not an omission.
+
+**Skipped steps stay visible in their group, and can be undone (D60, brief #5i).** A skipped step renders in place, in step order, collapsed by default like Done, with a grey Skipped pill, its reason, and an **Undo skip** button. `unskipStep` (`lib/actions/workflowSteps.ts`) restores it to whatever its own rules say next — step 2 reruns `recomputeReceive2307Status` (via `reopenSkippedReceive2307`) rather than being forced to "Not started"; every other skippable step returns to `PENDING`. Refused once the filing's own step 5 is Done, same lock step 2's certificate list already has. **Which steps this applies to:** only steps that can be skipped at all — not step 1 (self-completing, never had Skip), not step 3 (D54 refuses it server-side), not step 4 (never had Skip either). Do not add an unskip path for any of these three. The top-of-workflow "Show N not applicable" toggle now covers `NA` steps only — a Skipped step is never behind it.
 
 **The "waiting on …" label only shows for a step actually waiting right now (D52, brief #5d).** It keys on the step's live `WAITING_EXTERNAL` status, not the step template's permanent `isWaitingState` flag — the old version stayed stuck reading "waiting on X" beside an already-Done `RECORD_SALES`, `RECEIVE_2307`, `RECEIVE_TRRC`, `SAWT_ACK` or `SAWT_VALIDATION`.
 
@@ -197,7 +208,7 @@ The sixteen steps are wrapped in five groups: **Prepare** (1–4), **File** (5, 
 
 ## Database rules
 
-- `ActivityLog` is append-only. No hard deletes on financial records.
+- `ActivityLog` is append-only. No hard deletes on financial records. `ActivityLog.note` (nullable `String?`, added brief #5i) carries a short human-readable note for a reopen or un-skip, alongside the usual before/after JSON snapshot.
 - **Never hardcode a value the code is supposed to derive.**
   - *One deliberate exception:* frozen computation snapshots in the seed use hand-verified literal centavo integers, so they stay an independent check on the engine. Do not "fix" these.
 - **A code-level fix does not reach rows already in the database.** The `WorkflowStepTemplate` upsert used `update: {}` on both pre-reconciliation branches, so reseeding over an existing database silently ignored every step-definition change. Fixed in this pass (the upsert now applies `update`, and stale step codes — e.g. the retired `RECORD_CRJ` — are deactivated on reseed). The class of bug stands: when changing a rule, say explicitly whether existing data needs a backfill, and offer a dry run.
@@ -229,6 +240,8 @@ ATC codes, penalty rates, compromise schedules, form field orders. If you are no
 ## UI rules
 
 Centered container ~1100px. Tables with aligned columns, not edge-pinned cards. Row text 14px, secondary 13px. Empty panels collapse to one muted line. Rows navigate to detail with a hover state. **Status colours: grey pending, purple in progress (was blue — her decision, D58, brief #5g), amber waiting, red overdue, green done.**
+
+**A status pill always goes through a label helper; never render a `FilingStatus`/`WorkflowStepStatus` value directly (D63, brief #5i).** `lib/workflow/status.ts`'s `filingStatusLabel()` and `stepStatusLabel()` map every value to a plain, sentence-case word — never a raw enum, never CSS-uppercased. Apply this everywhere a status renders: the filing page, the board (cards and its status filter dropdown — the one place a raw code was actually found and fixed), and the client page's filings table. `Form2307`'s own status enum (on `/clients/[id]/form-2307`) is a separate, unrelated enum and was left rendering raw — out of scope, not an oversight.
 
 **A left-side menu replaces the old top bar (D58, brief #5g).** `components/nav.tsx` — Dashboard, ungrouped; Work (Filings, Clients); Settings (Tax rule sets, Holidays, ATC codes), whose group heading itself links to the Settings hub page so it stays reachable. Icons from `lucide-react` — a dependency since before this brief, first actually imported here; don't add a different icon package.
 
@@ -278,7 +291,7 @@ Will hold real TINs and income data under the Data Privacy Act from November 202
 
 See `CURRENT_STATE.md`. In short:
 
-1. **The Pay group's walk and build:** amount paid (feeding item 56/58), and the prior-year carry-over from a client's own Annual overpayment. Steps 1-4 of Prepare are now walked and fixed across briefs #4c-#4e, #5a and #5d-#5f; the new look (brief #5g) is applied everywhere. The Pay group (steps 8-9) is next.
+1. **Walk the File group (steps 5, 6, 7, 10), then the Pay group (steps 8, 9).** File has never been walked on its own. Pay's own build, once walked: amount paid (feeding item 56/58), and the prior-year carry-over from a client's own Annual overpayment. The Prepare group (steps 1-4) is now closed — walked and fixed across briefs #4c-#4e, #5a, #5d-#5f, #5g's look, and #5i's finish.
 2. **Before live data in November:** back up `data/app.db`, `storage/`, and the `.env` file (she raised this 2026-09-26, deferring the how until real data exists).
 3. Build the **document archive browse view** — client → year, with a whole-year zip. It serves what she named as the most important thing the app does, and it is the only genuinely new build left in the backlog.
 4. Confirm the ATC codes against BIR at `/settings/atc-codes` (brief #5a).

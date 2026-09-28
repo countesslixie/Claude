@@ -2,7 +2,7 @@
 
 *Append new decisions. Mark superseded ones rather than deleting them.*
 *Dates during the build are approximate — most work happened across August 2026.*
-*Last reconciled: 2026-09-28 — brief #5h (D49-D59), covering briefs #5d, #5e, #5f and #5g, on top of brief #5c, brief #5b (D48), brief #5a (D43-D47) and the documentation pass (brief #4f) through briefs #4c-#4e.*
+*Last reconciled: 2026-09-28 — brief #5j (D60-D63), covering brief #5i, on top of brief #5h (D49-D59, briefs #5d-#5g), brief #5c, brief #5b (D48), brief #5a (D43-D47) and the documentation pass (brief #4f) through briefs #4c-#4e.*
 
 ---
 
@@ -176,6 +176,8 @@ The receipts confirmation, the certificate cutoff control and the computation sh
 
 **D32 — The sixteen steps are wrapped in five groups: Prepare, File, Pay, SAWT, Close** *(2026-09-20)*
 
+**⚠️ The one-click "Mark done" per group is gone, superseded 2026-09-28 by D62 (brief #5i), her decision.** A group no longer has a "Mark done" of its own at all — every step finishes on its own per-step control, and the group header only ever reports Pending or Done. Everything else below — the five groups, their membership, the non-contiguous File group, and the board's layout — is untouched and still current.
+
 *The groups:*
 
 | Group | Name | Steps |
@@ -231,12 +233,14 @@ Updates D27's table (step 2's row) and fits D27's own category rule — a 2307 i
 *The rule:* step 2 (`RECEIVE_2307`) holds one row per certificate — payor, income amount, tax withheld, ~~date received,~~ and its own scan (`Document.form2307Id`), with the remaining existing `Form2307` fields (TIN, address, ATC code, rate, the certificate's own period) behind a "more" disclosure. **❌ "Date received" is superseded 2026-09-22 by D38 (brief #4d) — the field is gone from the form and the row.** `Filing.certificatesAllReceivedAt` records the "All certificates received" checkbox. Step 2 is `DONE` only when that checkbox is ticked **and** every row has a scan attached — the first blocking rule inside Prepare. Unlike step 1, this is a genuine two-way toggle: unticking (to add a late-arriving row before filing) reverts step 2 to "Waiting on client," not to some separate unresolved state.
 
 *Skip stays, by hand, with a reason* — for clients who never issue 2307s or a quarter with none. There remains no automatic "no 2307s" client setting; that was a deliberate choice, not an oversight (mirrors D26/D28's certificate-independence design). **⚠️ Refined 2026-09-22 by D39 (brief #4d) — Skip now shows only while zero certificate rows exist; the checkbox above takes over once one is entered.**
+**⚠️ Skip is no longer step 2's only manual control once used, as of 2026-09-28, D60 (brief #5i).** A skipped step 2 stays visible in place, with an **Undo skip** button alongside its reason — see D60.
 
 *The old separate Form 2307 register screen* (`/clients/[id]/form-2307`) is now read-only — entry moved into step 2. It still shows the annual certificates-vs-sales reconciliation and the SAWT keying-worksheet link, and each row links to the filing it was claimed on, but its own entry form and route (`/form-2307/new`) are gone.
 
 **D36 — Prepare's own "Mark done" is disabled until steps 1 and 2 are resolved** *(2026-09-21, same brief)*
 Steps 1 and 2 now complete themselves (D33/D35), so Prepare's group-level "Mark done" only ever has steps 3-4 left. It is disabled, with a plain-language reason, until step 1 is `DONE` and step 2 is `DONE` or `SKIPPED` — a return can't be prepared without the sales figure or the certificates. *Proposed by Claude and flagged to the bookkeeper; if she objects, it comes out.* Implemented as `prepareGroupBlockReason()` in `lib/workflow/groups.ts`, consulted by both the group card (client-side disable) and `markGroupDone` (server-side enforcement) — one function, not two copies that could drift.
 **⚠️ The "plain-language reason" wording is superseded 2026-09-26 by D41 (brief #4e).** The reason no longer renders as standing text — it's a hover tooltip on the disabled button now. The rule itself (disabled until steps 1/2 resolve, enforced server-side) is unchanged.
+**⚠️ The group-card consumer is gone, superseded 2026-09-28 by D62 (brief #5i).** `markGroupDone` is deleted and the group card carries no "Mark done" of its own to disable. `prepareGroupBlockReason()` still gates step 3, but now solely from inside `markStepDone` — one consumer, not two.
 
 ---
 
@@ -271,6 +275,7 @@ Extends D33. D33's original "once step 1 is done, further edits never undo it" i
 **Reverses the "plain-language reason next to it" wording in D32 and D36.** The bookkeeper found the identical sentence rendering in up to three places at once for the same rule: under a group's header, under a disabled per-step "Mark done," and under the top-of-page "Next action" banner (a third spot found during this brief, not named in D32/D36's original wording but rendering the exact same text) — plus a red "Missing required documents: …" line using the same mechanism on File/Pay/SAWT. All of it is gone. Every disabled "Mark done" (group or step) now carries its reason as a `title` attribute instead — discoverable on hover, not occupying the page.
 
 *Explicitly unchanged:* the rules themselves, and their server-side enforcement — nothing about what blocks a step or a group changed, only where the explanation is displayed. The short amber "waiting on …" summary beside each group's name is unaffected and stays as the one piece of standing status text.
+**⚠️ The group half of "per step or per group" is moot as of 2026-09-28, D62 (brief #5i).** A group no longer has a "Mark done" to disable, so there's no group-level tooltip left to speak of — only a Pending/Done status label. The principle itself (a reason lives on hover, never as standing text) is unchanged and still governs every per-step "Mark done," including the disabled ones.
 
 *Prepare's summary, fixed as part of the same brief:* it used to read "waiting on Client, 0d" regardless of which of its two self-completing steps (quarterly sales, Form 2307) was actually the holdup — no more informative than the standing text it sat next to, once that text was gone. It now names the specific thing outstanding: "waiting on quarterly sales," "waiting on Form 2307," or both, falling through to the ordinary waiting-step label once both are resolved (e.g. step 4 genuinely marked waiting on the client).
 
@@ -370,9 +375,11 @@ Alongside the payor name, income amount, tax withheld and period covered that we
 
 ## 2026-09-27/28 — briefs #5d, #5e, #5f (the Prepare group's remaining walkthroughs: step 3's reopening, step 4, and mid-year clients)
 
-**D50 — A change to the figures behind a prepared computation reopens steps 3 and 4** *(2026-09-27, brief #5d; refined 2026-09-27, brief #5e; extended 2026-09-27, brief #5f)*
+**D50 — A change to the figures behind a prepared computation reopens steps 3 and 4** *(2026-09-27, brief #5d; refined 2026-09-27, brief #5e; extended 2026-09-27, brief #5f; extended again 2026-09-28, brief #5i)*
 
-*The rule.* While the filing is unfiled (step 5, `FILE_RETURN`, not Done), a change after step 3 is Done sets steps 3 and 4 back to `PENDING`. The Prepare group's own "Mark done" reverts from a Done pill back to a button as a consequence, since it's derived live from its steps.
+**⚠️ Extended 2026-09-28 by D61 and D60 (brief #5i).** The same figures-changing step 1 saves listed below now also un-skip a Skipped step 2 (D61); undoing step 2's skip by hand (D60's Undo skip) is itself a reopening trigger, same as adding or removing a certificate. Both are additions to *what reopens*, not changes to the rule itself.
+
+*The rule.* While the filing is unfiled (step 5, `FILE_RETURN`, not Done), a change after step 3 is Done sets steps 3 and 4 back to `PENDING`. **⚠️ The next sentence is superseded 2026-09-28 by D62 (brief #5i)** — there is no group-level "Mark done" left to revert; the Prepare group's header simply reads Pending again, derived live from its steps the same as before. ~~The Prepare group's own "Mark done" reverts from a Done pill back to a button as a consequence, since it's derived live from its steps.~~
 
 *What reopens* (`lib/actions/workflowSteps.ts`'s `reopenPreparedFiling`, called from each of these):
 - A final save of step 1 that actually changed the figures behind the computation (`lib/actions/quarterlySales.ts`).
@@ -394,7 +401,7 @@ Alongside the payor name, income amount, tax withheld and period covered that we
 
 **D51 — Step 4 (Advise client)** *(2026-09-27, briefs #5d–#5f, her decisions)*
 
-*Controls.* Step 4 is no longer a waiting step — Start and Mark waiting are both gone (`components/workflow-step-card.tsx`'s `controlsMode="markDoneOnly"`); it was never actually something the client responds to in a way worth tracking. Its own Mark done is blocked until step 3 (`PREPARE_RETURN`) is Done, enforced server-side (`lib/workflow/groups.ts`'s `adviseClientBlockReason`, consulted inside `markStepDone` itself) — the group's own "Mark done" can't bypass it either, since `markGroupDone` calls the same per-step check in ascending sequence order. Step 4 shows no message at all until step 3 is Done.
+*Controls.* Step 4 is no longer a waiting step — Start and Mark waiting are both gone (`components/workflow-step-card.tsx`'s `controlsMode="markDoneOnly"`); it was never actually something the client responds to in a way worth tracking. Its own Mark done is blocked until step 3 (`PREPARE_RETURN`) is Done, enforced server-side (`lib/workflow/groups.ts`'s `adviseClientBlockReason`, consulted inside `markStepDone` itself). **⚠️ The rest of this sentence is superseded 2026-09-28 by D62 (brief #5i)** — `markGroupDone` is deleted, so there is no group-level path left to bypass in the first place; `markStepDone`'s own check is the only enforcement, which is exactly what made it safe to remove the group action. ~~— the group's own "Mark done" can't bypass it either, since `markGroupDone` calls the same per-step check in ascending sequence order.~~ Step 4 shows no message at all until step 3 is Done.
 
 *The message.* A copyable client message in her own wording, built by a pure function (`lib/workflow/clientTaxAdviceMessage.ts`'s `buildClientTaxAdviceMessage`). It comes in three versions: payable (states the amount and the client due date, asks when she'll pay or whether to advance it), quarterly overpayment (states there's nothing to pay this quarter, applied to the next return), and annual overpayment (names the year-end election — refund, TCC, or carry-over — only if one is actually set; otherwise says she'll be in touch about it). The "If you have any questions…" closing line from #5d's first draft was removed in #5f — her edit.
 
@@ -409,6 +416,8 @@ Alongside the payor name, income amount, tax withheld and period covered that we
 The label (`components/workflow-step-card.tsx`) now keys on the step's live `status === WAITING_EXTERNAL`, not the seeded `isWaitingState` template flag that used to gate it. It had been wrong on every step the template marks `isWaitingState: true` — `RECORD_SALES`, `RECEIVE_2307`, `RECEIVE_TRRC`, `SAWT_ACK` and `SAWT_VALIDATION` (confirmed against `prisma/seed.ts`'s step-template rows) — each of which could show "waiting on X" beside a Done pill once actually resolved, because the flag that gates the label is permanent but the status it was describing had moved on.
 
 **D53 — The group button has three states** *(2026-09-27, brief #5e)*
+
+**⚠️ SUPERSEDED 2026-09-28 by D62 (brief #5i), her decision.** There is no group "Mark done" at all any more, in any state — only two things remain, a grey Pending label and a green Done pill, and neither is a button. The clickable middle state this entry describes is gone entirely; read on for history only.
 
 `components/workflow-group-card.tsx`'s "Mark done" now reads: a non-clickable grey **Pending** label (the block reason as its hover tooltip, D41-compliant) while blocked; the ordinary clickable **Mark done** button once the group can be finished; a green **Done** pill once every step in it is resolved.
 
@@ -487,3 +496,43 @@ A `postinstall` script now runs `prisma generate` (`package.json`). *Why:* she h
 *Not coloured.* Deliberately no red or green here — it's a figure, not a verdict, and D58's status colours are a different mechanism for a different kind of information.
 
 *Unchanged:* step 4's own advice message (D51) already said "Overpayment" in words and wasn't touched.
+
+---
+
+## 2026-09-28 — brief #5i (the Prepare group's remaining walkthrough: skipped steps, the group button, the counter, status labels)
+
+**D60 — A skipped step stays in its group, and can be undone** *(2026-09-28, brief #5i, her decision)*
+
+*The rule.* A skipped step is a decision she made, not a step that doesn't apply — it must never be hidden the way `NA` is. It renders in place inside its group, in step order, collapsed by default like Done, with a grey Skipped pill and its reason on one line. A new **Undo skip** control (`unskipStep`, `lib/actions/workflowSteps.ts`) restores the step to whatever its own rules say next — step 2 reruns `recomputeReceive2307Status` (via `reopenSkippedReceive2307`) rather than being forced back to "Not started"; every other skippable step returns to `PENDING`, its ordinary state before it was ever skipped. Refused once the filing's own step 5 (`FILE_RETURN`) is Done — the same lock step 2's certificate list already has (D34/D11). The skip reason is never silently discarded: it's kept in the `ActivityLog` "before" snapshot even once the live row's own `skippedReason` is cleared.
+
+*Which steps this applies to — stated plainly so nothing gets "fixed" that was never broken.* Only steps that can be skipped at all get an Undo skip: not step 1 (self-completing, D33, never had a Skip control), not step 3 (D54 refuses Skip outright, server-side), and not step 4 (never had a Skip — confirmed by her on the walk). Do not add an unskip path for any of these three; there is nothing to undo.
+
+*The toggle.* The top-of-workflow "Show N skipped/NA" toggle now covers `NA` steps only — relabelled "Show N not applicable," counting only `NA` steps. A Skipped step was never meant to sit behind the same toggle as a step that doesn't apply; conflating the two is exactly what let a skipped step 2 disappear from view before this brief.
+
+*The counter.* A group's own count now reads Done + Skipped together over its applicable steps (`NA` excluded from both numbers), with a "N skipped" suffix whenever the group has one — "4 of 4 · 1 skipped · Done." *Why:* "3 of 4 · Done" (Skipped left out of the numerator) made her go looking for a step she thought she'd missed, when nothing was actually outstanding.
+
+**D61 — Editing the income reopens a skipped step 2** *(2026-09-28, brief #5i, her decision)*
+
+*The rule.* While a filing is unfiled, the same step 1 saves that already reopen steps 3 and 4 under D50 (a final save that changes the figures, or a draft save of a previously-final step 1) also un-skip a Skipped step 2 (`lib/actions/quarterlySales.ts`, calling `reopenSkippedReceive2307`). Step 2's status is recomputed from its real state, not assumed — she watched it return to "Waiting on client." The skip reason is kept in the log, same as D60's manual Undo skip, logged alongside the existing figures-changed entry (e.g. "Step 2 reopened: sales changed.").
+
+*Why.* A different declared figure may mean an unexpected certificate she didn't know to expect when she first skipped step 2.
+
+*Consequence, stated plainly because it reads like a bug if you don't know it's intended.* Un-skipping step 2 this way re-blocks step 3's own gate (`prepareGroupBlockReason`, inside `markStepDone`) until step 2 is resolved again — this is intended, not an oversight. A filed filing, and a step 2 that's already Done or still open (never skipped), are both untouched.
+
+**D62 — No group has a "Mark done"; a group is finished only when its own steps are** *(2026-09-28, brief #5i, her decision)*
+
+**Supersedes D32's one-click-per-group "Mark done" and D53's three-state group button, entirely.** `markGroupDone` (`lib/actions/workflowSteps.ts`) is deleted outright, not merely hidden behind a disabled state — nothing can bypass a step's own rules through it any more. `components/workflow-group-card.tsx` loses the button along with it.
+
+*Why.* The button let her mark steps 3 and 4 done at once without actually doing either — a single click that looked like progress but skipped the very work the click was supposed to represent.
+
+*What's left.* The group header reports status only, never offers an action: a non-clickable grey **Pending** label, its tooltip naming the steps still open (e.g. "Step 2, step 3 and step 4 not done."), or a green **Done** pill once every step in the group is Done or Skipped. Every step still finishes on its own per-step control — Start/Mark waiting/Mark done/Skip where a step has them, Mark done only where it doesn't (steps 3 and 4, D54/D51). `prepareGroupBlockReason` is unaffected and still gates step 3 from inside `markStepDone` itself; only the group button's own use of it is gone.
+
+*What doesn't change.* Grouping itself, group membership, the non-contiguous File group, and the board's layout (D32) all stand exactly as before — this decision touches only how, and whether, a group is marked done, nothing about what the five groups are or what belongs in each.
+
+**D63 — Status pills show plain labels, never raw codes** *(2026-09-28, brief #5i)*
+
+*The rule.* `filingStatusLabel()` (`lib/workflow/status.ts`) now maps every `FilingStatus` value to a plain, sentence-case word or phrase — Not started, In progress, Waiting on client, Waiting on BIR, Blocked, Complete (the existing "Complete (N steps skipped)" wording is unchanged) — instead of humanizing only the `COMPLETE`-with-skips case and rendering every other value as its bare enum. A matching `stepStatusLabel()` does the same for every `WorkflowStepStatus` value: Pending, In progress, Waiting, Done, Skipped, Not applicable. Neither helper is CSS-uppercased — sentence case is the actual rendered text, not a class doing the work on top of it. D58's status colours are unaffected; this changes labels only.
+
+*Where it's applied.* Everywhere a status renders: the filing page's summary strip and step pills, the board's cards, and the client page's filings table. **The one raw code actually found and fixed** was the board's own status filter dropdown (`app/(app)/filings/page.tsx`), which listed the bare enum as each option's visible text.
+
+*Confirmed out of scope, left alone.* `Form2307`'s own status enum (`RECEIVED`/`RECORDED`/`CLAIMED_ON_RETURN`/`INCLUDED_IN_SAWT`/`ACKNOWLEDGED`/`VALIDATED`), rendered raw on the certificate register page (`/clients/[id]/form-2307`) — a separate enum, not named by this brief. `FilingStatus.NA` has a label ("Not applicable") for completeness but is confirmed unreachable — `deriveFilingStatus` never produces it.
