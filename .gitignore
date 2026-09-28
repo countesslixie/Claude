@@ -40,6 +40,11 @@ yarn-error.log*
 # local data & document vault (never committed — see SPEC.md 4/14)
 /data/*
 !/data/.gitkeep
+# the Prisma CLI (unlike the app at runtime) resolves a relative sqlite
+# DATABASE_URL against prisma/schema.prisma's directory, not cwd — running
+# `prisma migrate deploy`/`db push` from the repo root leaves a stray copy
+# here rather than in /data. Never commit it either.
+/prisma/data/
 /storage/*
 !/storage/.gitkeep
 

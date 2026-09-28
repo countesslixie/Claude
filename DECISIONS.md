@@ -2,7 +2,7 @@
 
 *Append new decisions. Mark superseded ones rather than deleting them.*
 *Dates during the build are approximate — most work happened across August 2026.*
-*Last reconciled: 2026-09-27 — brief #5b (D48), on top of brief #5a (D43-D47) and the documentation pass (brief #4f) through briefs #4c-#4e.*
+*Last reconciled: 2026-09-28 — brief #5h (D49-D59), covering briefs #5d, #5e, #5f and #5g, on top of brief #5c, brief #5b (D48), brief #5a (D43-D47) and the documentation pass (brief #4f) through briefs #4c-#4e.*
 
 ---
 
@@ -55,6 +55,7 @@ Filing early does not move it earlier; only late filing re-anchors to `filedAt +
 
 **D17 — Seed data derives every derived value; no hardcoded literals for computed fields** *(2026-08)*
 *Exception:* frozen computation snapshots use hand-verified literal centavo integers deliberately, so they remain an independent check on the engine rather than a tautology.
+**⚠️ Checked 2026-09-28 (brief #5h) against D49's form-line rework:** `prisma/seed.ts`'s `buildSnapshot()` still hand-builds the *old* shape — the same fields `LegacyFilingComputationResult` has, centavo-rounded, no item numbers, no `isOverpaymentLine` — not the new `computeQuarterlyForm`/`computeAnnualForm` form-line shape. This is correct, not stale: it's exactly what `lib/tax/types.ts` already says happens to any snapshot frozen before brief #5d — never rewritten (locked rule #3), so it may not match the new shape despite sharing a `formType`. The exception above still holds; read it now as "an independent check on the legacy engine path," since that's the path these particular seeded, already-filed snapshots exercise. A *new* seeded filing computed fresh would go through the new form-shaped functions instead — `buildSnapshot()` was not changed to do that, since nothing asked it to and the seeded filings it's used for are meant to look already-filed.
 
 **D18 — No .DAT file generation** *(2026-08)*
 A keying worksheet in Alphalist field order is the substitute. Built (`lib/sawt/`); not yet reviewed by the bookkeeper against the actual module's field order.
@@ -249,6 +250,7 @@ Supersedes the source-of-figure portions of D26 and D27 (see the ❌ markers add
 *Why, stated plainly rather than glossed over:* the bookkeeper made both calls knowingly, one brief apart, having watched the field in actual use. With both gone, **there is no control of any kind over a declared income figure.** The per-quarter Notes field (`QuarterlySales.notes`) still exists and can hold anything she chooses to write, but nothing asks for an entry and nothing requires one — it is a free-text field, not a substitute control. The only surviving reconciliation of any kind is still the annual certificates-vs-declared-sales check (`lib/reconciliation.ts`), which was never a source-level check to begin with.
 
 *What step 3 holds now:* the computation sheet it generates itself, plus the ordinary step controls (Start, Mark done, Skip). Nothing else.
+**⚠️ "Start, Mark done, Skip" is out of date as of 2026-09-27, brief #5f — see D54.** Step 3 lost Start and Skip both; only Mark done is left.
 
 **D38 — `dateReceived` is removed from `Form2307` entirely** *(2026-09-22, brief #4d)*
 Completes D34 — D34 had already stopped `dateReceived` from deciding a certificate's credit period, but kept the column itself as "a recorded fact." Brief #4d removed it outright, after switching its last two readers first:
@@ -281,6 +283,7 @@ Supersedes the `scripts/verify-real.ts` / `scripts/real-fixture.local.ts` arrang
 
 *The replacement:* `tests/tax/realFilingQ1_2026.test.ts`, an ordinary test with an inline fixture (as `/lib/tax/` tests require — D5), running with the rest of the suite every time. It carries the same five amounts already written elsewhere in these notes (gross ₱332,933.90, taxable ₱82,933.90, tax due ₱6,634.71, CWT ₱16,646.70, overpayment ₱10,011.99) and nothing else — no client name, TIN, payor name, or address. The ₱16,646.70 CWT figure is represented as a single certificate, named "Payor A," for the full amount: the real split behind that total was never recoverable in any environment this project reaches, so one certificate is what's actually verifiable rather than a plausible-looking invention. Verified to fail on a one-centavo drift in any input and to pass again once reverted, before being committed.
 `npm run verify:real` is removed along with the script it ran.
+**⚠️ The centavo figures above are what this test asserted as of this brief (2026-09-26) — superseded 2026-09-27 by D49 (brief #5d).** The test itself was rewritten to assert the filed form's own whole-peso figures instead (tax due ₱6,635.00, total credits ₱16,647.00, overpayment ₱10,012.00) — see D49 and CLAUDE.md's "How to test." What's unchanged: it is still `tests/tax/realFilingQ1_2026.test.ts`, still an ordinary committed test with an inline fixture, still running with the rest of the suite, still carrying no client-identifying data.
 
 ---
 
@@ -338,3 +341,149 @@ Alongside the payor name, income amount, tax withheld and period covered that we
 *The rename:* "Customers / payors" becomes "Payors" everywhere it was user-facing — step 1's column header, the "Add customer"/"Customer name" text, the saved-list screen and its heading and empty state, the save prompt, and the client-page nav link. **Screen text only.** Left alone, deliberately, per the brief: the `Payor` Prisma model and table, `QuarterlySalesCustomer` and its `customerName` column, the `customers`/`CustomerRow`/`customerName` identifiers throughout `components/quarterly-sales-card.tsx` and the income page, and every test and comment that names these internals. None of it was worth a migration or a wire-format rename for a label change.
 
 *Confirmed unaffected:* D26/D33 (the saved list still only fills a row/certificate, never links income to credit), D45 (certificate required fields, unchanged), D46 (scan-on-save, unchanged), D47's tick-locks-the-list rule (unchanged), D41 (no standing block-reason text — the fill-back offer is a one-line, dismissible, opt-in prompt, not a block).
+
+---
+
+## 2026-09-27 — brief #5d (bookkeeper's walkthrough of step 3: the computation itself)
+
+**D49 — The computation follows the BIR form's own lines, with its whole-peso rounding** *(2026-09-27, brief #5d, her decision)*
+
+*Which forms.* The sheet mirrors the 1701Q (items 47–58, 61–63; 59–60 left out, never used on this form) and the 1701A column A (items 47–49, 52–60, 63–65; 50–51, 61–62 left out — the annual form has no prior-quarter carry and no separate items 61/62 to total before its own item 63). Every line carries the form's own item number and wording (`lib/tax/compute.ts`'s `computeQuarterlyForm`/`computeAnnualForm`, confirmed against their `breakdown[]` arrays).
+
+*The rounding.* Rounding is half-up to the whole peso, at exactly the items eBIRForms rounds. Money is still stored as integer centavos: a rounded line is just a multiple of 100.
+- The 1701Q builds its cumulative income from each quarter's own rounded item 49 (item 50 is simply the previous quarter's own item 51) — never a rounded raw multi-quarter total.
+- The 1701A rounds its input lines (47, 52, 57–60) before computing from them; 49/53/55/56/64/65 are then computed from those already-whole figures.
+
+*Why.* She was shown the app disagreeing with her real filed Q1 return (₱6,634.71 vs the form's ₱6,635.00). She chose to follow the form.
+
+*This amends locked rule #1 (the rounding only).* The formula, the ₱250,000 rule and the cumulative approach are unchanged.
+
+*Exact figures stay exact.* The VAT threshold monitor and the annual certificates-vs-sales check still use unrounded figures — only the computation sheet itself follows the form's rounding.
+
+*Only two forms are in scope: the 1701Q and the 1701A.* She has no mixed-income clients.
+- Form 1701 has no sheet. It still runs through the old `computeFiling`, renamed `LegacyFilingComputationResult`/`LegacyFilingComputationInput` in `lib/tax/types.ts`.
+- The `MIXED_INCOME` code and the seed client stay, for the day a mixed-income client does arrive.
+
+*Markers:*
+- on D42: the real-figures test now asserts the form's figures line by line (tax due ₱6,635.00, total credits ₱16,647.00, overpayment (₱10,012.00)), not the old centavo figures — see the marker added there.
+- on D3: unaffected — money is still integer centavos throughout; whole-peso rounding just means a rounded line is a multiple of 100, computed via the same `Decimal.js`/`roundToWholePesoCents` path as every other money figure.
+
+## 2026-09-27/28 — briefs #5d, #5e, #5f (the Prepare group's remaining walkthroughs: step 3's reopening, step 4, and mid-year clients)
+
+**D50 — A change to the figures behind a prepared computation reopens steps 3 and 4** *(2026-09-27, brief #5d; refined 2026-09-27, brief #5e; extended 2026-09-27, brief #5f)*
+
+*The rule.* While the filing is unfiled (step 5, `FILE_RETURN`, not Done), a change after step 3 is Done sets steps 3 and 4 back to `PENDING`. The Prepare group's own "Mark done" reverts from a Done pill back to a button as a consequence, since it's derived live from its steps.
+
+*What reopens* (`lib/actions/workflowSteps.ts`'s `reopenPreparedFiling`, called from each of these):
+- A final save of step 1 that actually changed the figures behind the computation (`lib/actions/quarterlySales.ts`).
+- A draft save of step 1, when step 1 was previously final (going from Done back to "waiting on client" is itself the figures-changed case here).
+- Adding or removing a certificate (`lib/actions/form2307.ts`'s `addCertificate`/`deleteCertificate`).
+- A saved change to item 61/63 on this filing (`lib/actions/filings.ts`'s `updateFilingOtherCredits`) — and it propagates forward to every later filing of the same taxable year that still inherits the figure, stopping at the first one with its own saved value.
+- A saved change to the starting figures (`lib/actions/startingFigures.ts`'s `saveStartingFigures`) — reopens every unfiled filing of the year at once, since the starting figures feed all of them.
+
+*What doesn't:*
+- A save that changes nothing (`quarterlySales.ts`'s `figuresChanged` guard; `updateFilingOtherCredits`'s `changed` guard).
+- Replace scan (`lib/actions/documents.ts` — a scan swap never touches the figures).
+- Unticking "All certificates received" on its own (`lib/actions/filings.ts`'s `setAllCertificatesReceived`) — **#5e reversed #5d here, her decision:** #5d had this reopen steps 3/4 too; she found that too eager, since unticking alone changes nothing about the figures — it only reverts step 2 itself. Only actually adding or removing a certificate reopens anything downstream.
+
+*What happens when it reopens.* Each step transition is logged in `ActivityLog`, same as any other step update. The saved computation sheet is regenerated when step 3 is marked Done again (`ensureComputationSheetSaved`); the prior copy is soft-deleted, never overwritten in place. Step 4's saved advice message is cleared at the same time, so the card rebuilds a fresh live preview rather than showing stale saved text until step 4 is marked Done again.
+
+*Filed filings are untouched* — `reopenPreparedFiling` no-ops the moment `FILE_RETURN` is Done, regardless of which caller reaches it.
+
+*Why.* She found step 3 still showing Done on top of a draft (unfinal) step 1 — the sheet had been generated for figures that no longer held.
+
+**D51 — Step 4 (Advise client)** *(2026-09-27, briefs #5d–#5f, her decisions)*
+
+*Controls.* Step 4 is no longer a waiting step — Start and Mark waiting are both gone (`components/workflow-step-card.tsx`'s `controlsMode="markDoneOnly"`); it was never actually something the client responds to in a way worth tracking. Its own Mark done is blocked until step 3 (`PREPARE_RETURN`) is Done, enforced server-side (`lib/workflow/groups.ts`'s `adviseClientBlockReason`, consulted inside `markStepDone` itself) — the group's own "Mark done" can't bypass it either, since `markGroupDone` calls the same per-step check in ascending sequence order. Step 4 shows no message at all until step 3 is Done.
+
+*The message.* A copyable client message in her own wording, built by a pure function (`lib/workflow/clientTaxAdviceMessage.ts`'s `buildClientTaxAdviceMessage`). It comes in three versions: payable (states the amount and the client due date, asks when she'll pay or whether to advance it), quarterly overpayment (states there's nothing to pay this quarter, applied to the next return), and annual overpayment (names the year-end election — refund, TCC, or carry-over — only if one is actually set; otherwise says she'll be in touch about it). The "If you have any questions…" closing line from #5d's first draft was removed in #5f — her edit.
+
+*When step 4 is marked Done,* the exact text is saved on the filing (`Filing.adviceMessageSubject`/`Body`/`SavedAt`), and the card collapses to "Advised [date] · Amount payable ₱X" (or "Overpayment ₱X"). Reopening (D50) clears the saved text; marking step 4 done again rebuilds the message fresh from the live figures.
+
+*The client's due date* — shown inside the message only, changes no deadline elsewhere. It's the BIR adjusted due date minus `TaxRuleSet.clientPaymentLeadDays` (default 10, never a literal in code), shifted **earlier**, never later, to the previous working day if that lands on a weekend or a `Holiday`-table date (`lib/tax/deadlines.ts`'s `clientPaymentDueDate`).
+
+*Still true:* step 4 has no document slot at all (D27) — advising the client is an action she performs elsewhere, and the app doesn't ask her to prove it.
+
+**D52 — "Waiting on …" shows only for a step actually waiting** *(2026-09-27, brief #5d)*
+
+The label (`components/workflow-step-card.tsx`) now keys on the step's live `status === WAITING_EXTERNAL`, not the seeded `isWaitingState` template flag that used to gate it. It had been wrong on every step the template marks `isWaitingState: true` — `RECORD_SALES`, `RECEIVE_2307`, `RECEIVE_TRRC`, `SAWT_ACK` and `SAWT_VALIDATION` (confirmed against `prisma/seed.ts`'s step-template rows) — each of which could show "waiting on X" beside a Done pill once actually resolved, because the flag that gates the label is permanent but the status it was describing had moved on.
+
+**D53 — The group button has three states** *(2026-09-27, brief #5e)*
+
+`components/workflow-group-card.tsx`'s "Mark done" now reads: a non-clickable grey **Pending** label (the block reason as its hover tooltip, D41-compliant) while blocked; the ordinary clickable **Mark done** button once the group can be finished; a green **Done** pill once every step in it is resolved.
+
+*Why.* A disabled "Mark done" looked like a button she could press and nothing would happen — the same complaint, one level up, that motivated tooltips over standing text (D41).
+
+*Also confirmed:* Prepare closes itself the moment steps 1–4 are all resolved — there is no separate "close the group" click; the group card's own state is entirely derived from its steps, same as before this brief. She confirmed she wants it this way.
+
+*Marker on D36:* its "disabled, with a plain-language reason" wording is superseded twice over now — first by D41 (tooltip, not standing text), and the disabled state itself is now the "Pending" label described here, not a disabled button.
+
+**D54 — Step 3 can't be started or skipped** *(2026-09-27, brief #5f, her decision: "it is the heart of the app")*
+
+Start and Skip are both gone from step 3's card (`controlsMode="markDoneOnly"`, same mechanism as D51's step 4). `lib/actions/workflowSteps.ts`'s `skipStep` refuses `PREPARE_RETURN` outright, server-side, so the rule can't be bypassed by calling the action directly. Step 3 holds the credits box (item 55 read-only, item 61 editable — see D55), which now sits **above** the computation sheet it generates, so she fills in credits first and reads the result after.
+
+*Marker on D37:* its "the ordinary step controls (Start, Mark done, Skip)" line describing step 3 is now out of date — see the marker added there.
+
+**D55 — The credit lines: 55, 56 and 61** *(2026-09-27, brief #5e; reworked 2026-09-27, brief #5f, her decisions)*
+
+*Item 61 / 63 (other tax credits) — one figure per return, not per year.* Stored on `Filing.otherCreditsCents`/`otherCreditsDescription`; `null` means "not yet saved on this filing." It inherits the previous filing's own saved figure (or, for the year's first in-app filing, the starting figures' item 61) until it's saved here — `lib/filingComputation.ts`'s `effectiveOtherCreditsFor` walks that chain, never copying an inherited figure in as if it were locally saved. Save/Edit/Cancel, same shape as the income page's D40 pattern; locked once this filing's own step 5 is Done. **This supersedes brief #5e's first version, which briefly lived as a year-level field on `ClientTaxYear`** — one taxable year, one figure, no per-quarter override — before she asked for it to vary return by return instead. `ClientTaxYear` itself carries no such field today; confirmed absent from `prisma/schema.prisma`.
+
+*Item 55 / 57 (prior year's excess credit) — display-only on step 3, entered only in the starting figures.* It still appears in full on every return of the year (D12, unchanged) — `ClientTaxYear.priorYearExcessCreditCents` is the one figure the tax engine reads, written once from the starting figures (D56) and never edited on the year record directly any more: the Taxable-years table's credit column and the tax-year edit form's credit field are both gone (`lib/validation/clientTaxYear.ts` no longer accepts it). Automatic carry-over from last year's own Annual overpayment into next year's starting figure is **not built** — deferred to the Pay-group work, and first actually matters for the 2026→2027 boundary.
+
+*Item 56 / 58 (payments for earlier quarters) — calculated, not typed:* the sum of `Filing.amountPaidCents` across this taxable year's earlier, already-filed filings. **Known gap:** nothing in the app writes `amountPaidCents` yet for a return filed inside the app, so this line reads ₱0 for any quarter actually prepared and filed here — only a mid-year client's *outside* starting figure (`StartingFigures.amountPaidThisReturnCents`, D56) currently feeds it. The Pay-group build is what's expected to close this.
+
+## 2026-09-27 — brief #5f (mid-year clients; the live Q3 cycle is coming and every current client joins mid-year)
+
+**D56 — Starting figures for a client joining mid-year** *(2026-09-27, brief #5f, designed with her 2026-09-27)*
+
+*Why.* Every current client's Q1 and Q2 2026 were filed from Excel, so at go-live every client joins the app mid-year — there was no "first quarter in the app" scenario the original design assumed.
+
+*What she enters,* per client-year, typed from the client's latest return filed outside the app, into `StartingFigures` (one row per `clientId`/`taxableYear`):
+- `latestOutsideReturn`: `NONE`, `Q1`, `Q2` or `Q3`
+- item 55 (prior year's excess credit) — always entered, regardless of `latestOutsideReturn`
+- item 51 (cumulative taxable income as of that return)
+- items 57 and 58 (withholding for previous quarters, and for that quarter)
+- item 56 (payments for previous quarters) and, separately, the amount actually paid on that return itself
+- item 61 with its description
+- optional non-operating income so far this year
+
+*Rules* (`lib/validation/startingFigures.ts`): non-operating income can't exceed cumulative income. The figures are read-only after Save, with an Edit button (same shape as D40's income-page pattern). They're locked for good once the year's first in-app return is filed (`lib/startingFigures.ts`'s `isStartingFiguresLocked` — derived from whether that filing's own step 5 is Done, never a stored flag).
+
+*How the figures flow:* into 1701Q items 50 (previous cumulative), 55, 56 and 57 on the year's first in-app return; into 1701A items 47, 52, 58 and 59 for a client whose whole year is reconstructed from starting figures, with declared full-year sales computed as item 51 minus non-operating income. The VAT threshold monitor includes the starting cumulative income, not just what's been declared in the app.
+
+*Outside quarters.* A period `latestOutsideReturn` names as already filed gets **no `Filing` row generated at all** (`lib/workflow/filingGeneration.ts`'s `generateFilingsForClientYear` skips it outright) — that absence is what keeps it off the board, the dashboard, and every overdue/aging check; there's no workflow to be behind on. `Filing.filedOutsideApp` is a separate, narrower flag for the rarer case where a `Filing` row already existed (generated before starting figures later named that period outside) — `saveStartingFigures` sets or clears it on whatever rows already exist, rather than deleting them. **Corrected here against the code, not as the brief for this pass described it:** a flagged (`filedOutsideApp: true`) row is *not* hidden on the client page — it renders explicitly as "Filed outside the app," greyed out with no status or deadline, rather than either vanishing or being shown as ordinary work (confirmed in `app/(app)/clients/[id]/page.tsx` and `app/(app)/clients/[id]/income/page.tsx`, and stated plainly in the schema comment on the flag itself). The *ordinary* case shows no line simply because there is nothing to iterate — no row was ever created — not because of a deliberate suppression rule.
+Saving starting figures **does not itself create the newly-inside period's `Filing` row** — it only reclassifies existing rows' `filedOutsideApp` flag and reopens filings that inherit (D50). Bringing a newly-inside period onto the board still takes an ordinary (idempotent, safe to re-run) call to "Generate filings" afterward — that's the actual mechanism behind her observation that Q2 appeared once she moved `latestOutsideReturn` from Q2 back to Q1.
+
+*Known limit.* The annual certificates-vs-sales check only ever sees certificates entered in the app, so for a mid-year client it covers only the in-app portion of the year — it can't falsely flag a problem, but it isn't a full-year check for that client.
+
+*Order for a new client:* add the client → add the tax year → enter the starting figures → generate filings. Either order of the middle two works, since generation simply skips whatever starting figures currently name as outside.
+
+**D57 — `npm install` regenerates the database client** *(2026-09-27, brief #5f)*
+
+A `postinstall` script now runs `prisma generate` (`package.json`). *Why:* she hit a red error screen twice from a stale Prisma Client after pulling a migration, before realizing `npm install` alone doesn't regenerate it.
+
+---
+
+## 2026-09-28 — brief #5g (the new look)
+
+**D58 — The new look** *(2026-09-27/28, brief #5g, her decisions)*
+
+*Palette,* copied from her other app and defined once as CSS variables in `app/globals.css`, exposed to Tailwind via `@theme inline` (Tailwind v4 — confirmed via `@import "tailwindcss"` and the absence of a `tailwind.config.*` file; no upgrade, per locked rule #9): purple `#7046C6` (`--purple-600`) for place and clickable things, her own red/green/amber, a lavender-grey page background (`--background`), white cards (`--surface`).
+- Status colours: grey pending, **purple** in progress (was blue — her decision), amber waiting, red overdue, green done.
+- The `--faint` grey (`#8a879a`) measures 3.49:1 against white — below the usual 4.5:1 text minimum. **Kept knowingly:** she read it and found it fine. (Flagged again here rather than silently accepted, since it's a real accessibility number, not a design opinion.)
+
+*Font.* Plus Jakarta Sans, weights 400/500/600/700, Latin subset, `.woff2`, fetched once via `npm pack @fontsource/plus-jakarta-sans` and committed into the repo (`app/fonts/plus-jakarta-sans/`, with its OFL licence alongside), loaded via `next/font/local`. `next/font/google` was rejected outright — it fetches from Google at every build or `dev` start, which is exactly the outbound request locked rule #7 forbids, and fails silently (plain fallback font, no warning) the moment the laptop is offline. Verified live with all non-localhost network requests blocked: the app renders identically, and zero external requests are attempted. Tabular figures (the font's own `tnum` OpenType feature, confirmed present) are applied to money columns wherever amounts line up — the computation sheet, and the 2307/SAWT/tax-rule-set tables.
+
+*Menu.* A left-side menu headed "BIR Filing Manager" / "8% Tax Rate," replacing the old top bar: Dashboard (ungrouped) · **Work** (Filings, Clients) · **Settings** (Tax rule sets, Holidays, ATC codes). The Settings *heading itself* links to `/settings` — the old hub page, otherwise now unreachable from the menu, that still lists what's built and what's coming later. Icons come from `lucide-react`, a `package.json` dependency since before this brief but never actually imported until now — not a new dependency.
+
+*Archive documents stay plain.* The generated computation sheet's HTML (`lib/documents/computationSheetHtml.ts`) uses the new font stack and plain ink/faint/line/amber/green hex values directly — no purple, no dependency on the app's own stylesheet — since it's meant to outlast the app and be read as a standalone file.
+
+**D59 — An overpayment shows in parentheses** *(2026-09-28, brief #5g)*
+
+1701Q item 63 and 1701A item 65 now show an overpayment as **"(₱X)"**, with the row labelled "… — overpayment" (e.g. "63. Tax Payable/(Overpayment) — overpayment"), both on screen (`components/computation-sheet-panel.tsx`) and in the saved computation-sheet HTML. `BreakdownLine` gained an `isOverpaymentLine` flag for exactly this row; `lib/money.ts`'s `formatBreakdownAmount()` is the one place that turns it into parentheses, used by both renderers.
+
+*Why.* Her walkthrough of #5f found item 63 showing a plain positive figure indistinguishable from tax payable, even though the sheet's own heading already correctly said "Overpayment" — the heading was right, the table row wasn't.
+
+*Not coloured.* Deliberately no red or green here — it's a figure, not a verdict, and D58's status colours are a different mechanism for a different kind of information.
+
+*Unchanged:* step 4's own advice message (D51) already said "Overpayment" in words and wasn't touched.

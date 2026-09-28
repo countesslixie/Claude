@@ -1,7 +1,7 @@
 # PROJECT_MASTER.md
 
 *Permanent project memory. Update only when something long-lived genuinely changes.*
-*Last reconciled: 2026-09-27 — brief #5c (reworded the income-record layer table to say "payor," matching D48), on top of brief #5b (the "Save … to payors" dialog, fill-back, renamed to "Payors" on screen), brief #5a, and the documentation pass (brief #4f) through briefs #4c-#4e.*
+*Last reconciled: 2026-09-28 — brief #5h, covering briefs #5d (the form-line computation), #5e (step 4 gating, year-level credits since superseded), #5f (per-return credits, starting figures for mid-year clients) and #5g (the new look), on top of brief #5c, brief #5b, brief #5a, and the documentation pass (brief #4f) through briefs #4c-#4e.*
 
 > Build status lives in CURRENT_STATE.md. This file is the intended application and the rules that govern it.
 
@@ -9,7 +9,7 @@
 
 ## Application
 
-**BIR 8% Freelancer Practice Manager**
+**BIR 8% Freelancer Practice Manager** — on screen (the left-side menu, brief #5g) it reads **"BIR Filing Manager"**, subtitled **"8% Tax Rate."**
 
 A local-first web application used by one bookkeeper to manage Philippine tax compliance for freelance and professional clients who have elected the 8% income tax option.
 
@@ -40,7 +40,7 @@ Under the 8% regime the arithmetic is simple — only gross receipts are taxed. 
 
 Before this system the work lived across scattered per-client Excel files and folders, and weeks would pass without the bookkeeper being able to say which step a client was on.
 
-**Primary success metric:** a dashboard that makes "I'm lost as to which process I'm in" structurally impossible. *Met — the dashboard answers this for all three clients at a glance.*
+**Primary success metric:** a dashboard that makes "I'm lost as to which process I'm in" structurally impossible. *Met — the dashboard answers this for all four clients at a glance.*
 
 ## Intended users
 
@@ -53,11 +53,12 @@ One bookkeeper, alone, on a single laptop. Not deployed. Not client-facing.
 - `taxableBase = MAX(0, cumulativeGross − allowableDeduction)`; `incomeTaxDue = taxableBase × 8%`.
 - `allowableDeduction` = ₱250,000 for `PURELY_SELF_EMPLOYED`, ₱0 for `MIXED_INCOME`.
 - The ₱250,000 is applied **in full from Q1 onward**, never prorated.
-- `taxPayable = incomeTaxDue − cumulativeCWT − priorPeriodPayments − priorYearExcessCredit`.
+- `taxPayable = incomeTaxDue − cumulativeCWT − priorPeriodPayments − priorYearExcessCredit − otherCredits`.
 - `priorPeriodPayments` means amounts **actually remitted**, never computed liabilities.
-- Negative result = **overpayment**; never rendered as negative tax due.
+- Negative result = **overpayment**; never rendered as negative tax due — since brief #5g (D59) an overpayment on the computation sheet's own final row reads "(₱X)," labelled "… — overpayment," never a plain figure that could be mistaken for tax due.
 - **Prior-year excess credit appears in every cumulative period**, not only the first.
 - Mixed income earners file **1701**, not 1701A.
+- **The computation sheet follows the BIR form's own line items and whole-peso rounding, not centavo rounding throughout (D49, brief #5d, her decision).** `lib/tax/compute.ts`'s `computeQuarterlyForm` (1701Q, items 47–58, 61–63) and `computeAnnualForm` (1701A column A, items 47–49, 52–60, 63–65) round half-up to the whole peso at exactly the items eBIRForms rounds; money is still stored as integer centavos, a rounded line is simply a multiple of 100. She was shown the app disagreeing with her own filed Q1 return (₱6,634.71 vs. the form's ₱6,635.00) and chose to follow the form. **Only the 1701Q and the 1701A are built this way** — she has no mixed-income clients, so `MIXED_INCOME`'s annual return (Form 1701) has no form-line sheet and still runs through the old, unrounded `computeFiling` (renamed `LegacyFilingComputationResult`/`Input`). The VAT threshold monitor and the annual certificates-vs-sales check are unaffected — both still compare unrounded figures.
 
 ### Income entry (D26, D33)
 - **Gross sales come from one place only: the client's declared figure for the quarter.** Certificates contribute nothing to it.
@@ -76,6 +77,20 @@ One bookkeeper, alone, on a single laptop. Not deployed. Not client-facing.
 Once income is declared-only, nothing in the system can be cross-checked against anything: the client's stated quarterly figure IS the income record. **Step 3 used to carry an acknowledgement that closed part of that gap — a required source-of-figure field, plus an optional attachment for the client's own confirming message. Both are gone (D37, briefs #4c and #4d, the bookkeeper's own decision).** Step 3 now holds only the computation sheet it generates itself, plus the ordinary step controls.
 
 The declared figure is accepted as given. The per-quarter Notes field (`QuarterlySales.notes`) still exists and can hold anything she chooses to write about a quarter, but nothing asks for an entry there and nothing requires one — it is a free-text field, not a substitute control. The only reconciliation of any kind left in the system is the annual certificates-vs-declared-sales check below, which was never a check against the sales figure's own source to begin with — it only catches certificates that, summed, exceed what was declared.
+
+### Starting figures for a client joining mid-year (D56, brief #5f)
+
+Every one of her current clients' Q1 and Q2 2026 were filed from Excel, so at go-live every client joins the app mid-year. `StartingFigures` (one row per client per taxable year) holds the handful of figures typed once from a client's latest return filed outside the app: `latestOutsideReturn` (`NONE`/`Q1`/`Q2`/`Q3`), item 55, item 51, items 57 and 58, item 56, the amount actually paid on that outside return, item 61 with its description, and optional non-operating income so far. Non-operating income can't exceed cumulative income; the figures are read-only after Save, with Edit; they lock for good once the year's first in-app return is filed.
+
+A period `latestOutsideReturn` names as already filed gets **no `Filing` row at all** — that absence, not a filter, is what keeps it off the board, the dashboard, and every overdue check. `Filing.filedOutsideApp` is the separate, narrower flag for a `Filing` row that already existed before starting figures later named its period outside; such a row renders on the client page as an explicit **"Filed outside the app"** line, not as ordinary work and not hidden either. Saving starting figures reclassifies existing rows and reopens filings that inherit the figures (see "Reopening" under Workflow below) — it does not itself create a newly-inside period's `Filing` row; that still takes an ordinary re-run of "Generate filings" (safe — it skips periods that already have a row or are still named outside).
+
+Order for a new client: add the client → add the tax year → enter the starting figures → generate filings. The middle two can happen in either order.
+
+### Credits: items 55, 56 and 61 (D55, briefs #5e/#5f)
+
+- **Item 61 (1701Q) / item 63 (1701A) — other tax credits/payments — is one figure per return, not per year.** Stored on `Filing.otherCreditsCents`/`otherCreditsDescription`; a return with no saved value of its own inherits the previous return's figure, or the starting figures' item 61 for the year's first in-app return. Save/Edit/Cancel; locked once that return's own step 5 is `DONE`. A saved change reopens this filing (see Workflow below) and propagates forward to every later filing of the year still inheriting.
+- **Item 55 (1701Q) / item 57 (1701A) — prior year's excess credit — is display-only on step 3**, entered only once, in the starting figures. It still appears in full on every return of the year (D12). Automatic carry-over of a client's *own* Annual overpayment into the following year's starting figure is **not built** — deferred to the Pay-group work, first relevant at the 2026→2027 boundary.
+- **Item 56 (1701Q) / item 58 (1701A) — payments for earlier quarters — is calculated**, from `Filing.amountPaidCents` on this year's earlier, already-filed returns. **Known gap:** nothing in the app writes `amountPaidCents` for a return filed inside the app yet, so this line is ₱0 for any in-app-filed quarter until the Pay-group work adds it — today it's only ever populated via a mid-year client's own starting-figures amount.
 
 ### Creditable withholding (Form 2307)
 - **A certificate counts in the filing whose step 2 it was entered under (D34, brief #4b, supersedes D10).** `Form2307.claimedOnFilingId` is set once, at entry, and never reassigned. `certificateCutoffDate`, the manual override, and the resolver function are gone.
@@ -108,8 +123,13 @@ The declared figure is accepted as given. The per-quarter Notes field (`Quarterl
 ### Workflow
 - Sixteen steps. Step 1 **Record quarterly sales**, step 2 **Receive Form 2307 from client** (D28). Steps 11–14 (SAWT) conditional on `requiresSawt`.
 - **Steps 1 and 2 are self-completing (D33/D35, brief #4b) and carry no manual controls at all** — no Start, Mark waiting, Mark done, Skip on step 1; step 2 keeps only Skip (with a reason). Step 1's status is derived: "Waiting on client" until a final Save of the quarter's sales, then Done. Step 2's status is derived: "Waiting on client" until done or skipped, done once "all certificates received" is ticked and every certificate row has its own scan.
+- **Step 3 (Prepare computation) can no longer be started or skipped (D54, brief #5f, her decision: "it is the heart of the app")** — only Mark done remains. It holds the credits box (item 55 read-only, item 61 editable) above the computation sheet it generates.
+- **Step 4 (Advise client) is no longer a waiting step (D51, briefs #5d–#5f)** — no Start, no Mark waiting. Its Mark done is blocked, server-side, until step 3 is Done, and it shows no message until then. The message is a copyable, client-facing draft in one of three versions (payable / quarterly overpayment / annual overpayment), and its own client-facing due date is the BIR due date minus a configurable lead time, shifted earlier on a weekend or holiday.
+- **A change to the figures behind an already-prepared computation reopens steps 3 and 4 while the filing is still unfiled (D50, briefs #5d–#5f).** A figures-changing save of step 1, adding or removing a certificate, a saved change to item 61, or a saved change to the starting figures all reopen; a no-op save, Replace scan, and unticking "all certificates received" on its own do not. A filed filing (step 5 Done) is never reopened.
+- **A group's "Mark done" has three states, not two (D53, brief #5e):** a non-clickable grey "Pending" label (its reason as a hover tooltip) while blocked, the ordinary clickable button once it can finish, and a green "Done" pill once every step in it is resolved. Prepare closes itself the moment all four of its steps resolve — there is no separate group-level click.
 - Filing status is **derived** from its steps, never hand-set: all `DONE`/`NA`/`SKIPPED` → `COMPLETE`.
 - **`SKIPPED` requires a written reason** and stays visibly distinct from `NA`.
+- **The "waiting on …" label shows only for a step actually waiting right now (D52, brief #5d)** — it keys on the step's live status, not the step template's permanent "this step can wait" flag, which previously left a stale "waiting on X" reading beside an already-Done pill on five different steps.
 
 ### Workflow groups (D32)
 
@@ -125,7 +145,7 @@ The sixteen steps are wrapped in **five groups** — Prepare, File, Pay, SAWT, C
 
 **Step numbers are not renumbered to make groups contiguous.** Group 2 (File) is deliberately not contiguous — the TRRC (step 10) sits with File rather than with Pay (group 3, steps 8–9) between them, because eBIRForms' TRRC confirms the *filing*, not the payment (`WorkflowStep.category` for step 10 has always been `FILING`). Step numbers record when things happen; groups record what they belong to. A filing can therefore sit at "File," waiting only on the TRRC, after "Pay" is already fully done — this is normal, not out-of-order, and raises no warning. The board's card for such a filing sits in its earliest incomplete *group* (group order, not step sequence) and carries that group's waiting state (e.g. "File — waiting on BIR, 12d") so it doesn't read as unfiled.
 
-**Blocking surfaces at group level, but the underlying rule (D27) is unchanged for every group except Prepare.** A group's "Mark done" is disabled while any step inside it is missing a required document — the same blocking steps as before, reported once per group. **Prepare is the exception (brief #4b):** since steps 1 and 2 now self-complete and carry no doc slots of their own, Prepare's "Mark done" is disabled instead by `prepareGroupBlockReason()` — until step 1 is Done and step 2 is Done or Skipped. **As of brief #4e (D41), the reason is a hover tooltip on the disabled "Mark done" button, not standing text on the page** — this applies the same way to Prepare's block as to every other group's. Close still blocks on nothing. The election hard-blocker and the step 13→14 dependency (D29) are unaffected and still apply; expanding a group exposes every per-step control (attach, skip with reason, mark waiting) exactly as before grouping existed, except steps 1 and 2 themselves, which now have no such controls at all.
+**Blocking surfaces at group level, but the underlying rule (D27) is unchanged for every group except Prepare.** A group's "Mark done" is disabled while any step inside it is missing a required document — the same blocking steps as before, reported once per group. **Prepare is the exception (brief #4b):** since steps 1 and 2 now self-complete and carry no doc slots of their own, Prepare's "Mark done" is disabled instead by `prepareGroupBlockReason()` — until step 1 is Done and step 2 is Done or Skipped. **As of brief #4e (D41), the reason is a hover tooltip, not standing text on the page** — this applies the same way to Prepare's block as to every other group's. **As of brief #5e (D53), the disabled state itself is a non-clickable grey "Pending" label, not a disabled button** — the tooltip still carries the reason. Close still blocks on nothing. The election hard-blocker and the step 13→14 dependency (D29) are unaffected and still apply; expanding a group exposes every per-step control (attach, skip with reason, mark waiting) exactly as before grouping existed, except steps 1 and 2 themselves, which now have no such controls at all.
 
 Group membership is a fixed lookup table (`lib/workflow/groups.ts`), not the `category` field repurposed — `category` alone would put step 4 (`ADVISE_CLIENT`) and step 16 (`SEND_CLIENT_PACKAGE`), both `CLIENT_COMM`, in the same group despite belonging to different points in the cycle.
 
@@ -162,7 +182,7 @@ Marking a step `WAITING` blocks nothing, with one exception: **waiting at step 1
 
 ## Technology stack
 
-Next.js 15 App Router · TypeScript strict · Prisma + SQLite (`data/app.db`) · Tailwind CSS (a small custom component set in `components/ui/`, not built on Radix despite `@radix-ui/*` being installed unused) · Zod · Luxon pinned `Asia/Manila` · Decimal.js, money as integer centavos · Vitest · jszip · exceljs (SAWT keying worksheet export) · Server Actions for CRUD · documents on the local filesystem under `./storage`
+Next.js 15 App Router · TypeScript strict · Prisma + SQLite (`data/app.db`) · **Tailwind CSS v4** (`@theme inline`, no `tailwind.config.*` — a small custom component set in `components/ui/`, not built on Radix despite `@radix-ui/*` being installed unused) · Zod · Luxon pinned `Asia/Manila` · Decimal.js, money as integer centavos · Vitest · jszip · exceljs (SAWT keying worksheet export) · Server Actions for CRUD · documents on the local filesystem under `./storage` · **Plus Jakarta Sans**, committed into the repo (`app/fonts/`) and loaded via `next/font/local` — never `next/font/google` (D58, brief #5g) · **`lucide-react`**, a dependency since before brief #5g and now actually used, for the left-side menu's icons
 
 ## Storage architecture
 
@@ -179,7 +199,9 @@ Next.js 15 App Router · TypeScript strict · Prisma + SQLite (`data/app.db`) ·
 ## UI principles
 
 - Centered container ~1100px. Tables with aligned columns, not edge-pinned cards. Row text 14px, secondary 13px. Empty panels collapse to one muted line. Rows navigate to detail. Filters persist across navigation.
-- Status colours: grey pending, blue in progress, amber waiting, red overdue, green done.
+- **A left-side menu (D58, brief #5g)** replaces the old top bar — Dashboard, ungrouped; Work (Filings, Clients); Settings (Tax rule sets, Holidays, ATC codes), whose group heading itself links to the Settings hub page.
+- **Status colours: grey pending, purple in progress (was blue — her decision, D58, brief #5g), amber waiting, red overdue, green done.** Colours are CSS variable tokens (`app/globals.css`), never a hard-coded hex value on a screen.
+- **An overpayment on the computation sheet's own final row shows in parentheses, never a plain positive figure (D59, brief #5g)** — "(₱X)," labelled "… — overpayment," not coloured (it's a figure, not a verdict).
 - **Density is not the goal; being operable is.** "Dense over pretty" was read too literally and produced a first test drive that stopped at step 4.
 - **The page leads with the work, not the output, two ways at once.** A next-action line and summary strip sit at the top of the filing page, answering "what do I do now" without a scroll — the first test drive's specific complaint ("I don't know what to do with it... I realized I need to scroll down"). Separately, anything belonging to a step lives inside that step's own card rather than as a page-level panel at the bottom — the second test drive's complaint ("not sure what the bottom boxes are for"). These are two different fixes for two different findings; keep both. (The certificate cutoff and client-confirmation panels these two fixes originally described are both gone — see D34 and D37 — but the two fixes themselves, and the reasoning behind keeping them separate, still stand.)
 - **A document belongs to its step, not to the page** (D30). Anything belonging to a step renders inside that step's card.
@@ -188,7 +210,7 @@ Next.js 15 App Router · TypeScript strict · Prisma + SQLite (`data/app.db`) ·
 
 ## Data status and security
 
-- **No real client data is in the application today.** The three clients are fictitious seed data. The Excel files remain the master for every live client. One real client's Q1 2026 figures are reproduced in `tests/tax/realFilingQ1_2026.test.ts` (D42, brief #4e) — a committed test with an inline fixture carrying amounts and taxpayer type only, nothing that identifies the client (no name, TIN, payor name, or address). The earlier arrangement (`scripts/verify-real.ts` reading a gitignored `scripts/real-fixture.local.ts`) is gone — that local fixture, it turned out, had never actually existed on any machine this project has run on, so the guard it was meant to provide had never once run.
+- **No real client data is in the application today.** The four clients (including `garcia-r`, the mid-year starting-figures sample added by brief #5f) are fictitious seed data. The Excel files remain the master for every live client. One real client's Q1 2026 figures are reproduced in `tests/tax/realFilingQ1_2026.test.ts` (D42, brief #4e) — a committed test with an inline fixture carrying amounts and taxpayer type only, nothing that identifies the client (no name, TIN, payor name, or address). The earlier arrangement (`scripts/verify-real.ts` reading a gitignored `scripts/real-fixture.local.ts`) is gone — that local fixture, it turned out, had never actually existed on any machine this project has run on, so the guard it was meant to provide had never once run.
 - **Real data enters at the live Q3 cycle** — certificates expected early November 2026, 1701Q due November 16. The Data Privacy Act (RA 10173) applies from that moment.
 - **While the data is seeded, schema changes may be destructive and reseeding is free.** No migration path needs preserving. This licence expires when the live cycle begins.
 - Runs local only. No analytics, telemetry, error SDKs, CDN fonts, or outbound runtime requests.
@@ -197,7 +219,7 @@ Next.js 15 App Router · TypeScript strict · Prisma + SQLite (`data/app.db`) ·
 
 ## Do not change without discussing first
 
-1. The 8% formula, the ₱250,000 rule, the cumulative approach
+1. The 8% formula, the ₱250,000 rule, the cumulative approach, and the computation sheet's own whole-peso rounding at the items the BIR form itself rounds (D49) — money is still integer centavos everywhere else
 2. The certificate credit-period rule (D34: the filing it was entered under, locked once filed) and D11 (no amended returns), which is what makes it safe
 3. `computationSnapshot` immutability and the `AmendmentAlert` pattern
 4. Money as integer centavos; no float arithmetic anywhere
@@ -212,3 +234,6 @@ Next.js 15 App Router · TypeScript strict · Prisma + SQLite (`data/app.db`) ·
 13. The archive's independence from the database
 14. The "Payors" list's independence from income and certificates (D44) — no foreign key from `QuarterlySalesCustomer` or `Form2307` to `Payor`, ever
 15. Fill-back (D48) only ever fills a blank field on a payor — never overwrites one it already has
+16. **Only the 1701Q and the 1701A are built as form-line sheets (D49)** — `MIXED_INCOME`'s annual return (Form 1701) has no sheet and stays on the old, unrounded computation path
+17. **Starting figures (D56) replace outside quarters, not a Filing row** — a period named already-filed-outside-the-app gets no `Filing` row generated for it at all; do not "fix" this into always generating one
+18. **Fonts and other static assets are stored inside the repo and never fetched at build, dev-start, or runtime (D58)** — this is what `next/font/local` over `next/font/google` bought; do not reintroduce a network-loaded font or asset
