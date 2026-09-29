@@ -78,6 +78,12 @@ Next.js 15 App Router · TypeScript strict · Prisma + SQLite (`data/app.db`) ·
                                which controls the Next banner may offer),
                                clientTaxAdviceMessage.ts (step 4's message,
                                D51), adviceMessage.ts (live/saved assembly),
+                               midYearGuard.ts (D78, brief #5n — the Generate
+                               refusal for a mid-year client with no starting
+                               figures),
+                               aging.ts (deriveStepAging, birWaitTone and
+                               birWaitTags — D72/D79, the one copy of the
+                               amber/red BIR-wait rule),
                                status.ts (filingStatusLabel/stepStatusLabel,
                                D63, brief #5i — every status pill's one
                                source of a plain label)
@@ -146,7 +152,8 @@ Next.js 15 App Router · TypeScript strict · Prisma + SQLite (`data/app.db`) ·
                                (D58, brief #5g; locked rule #7)
 /next.config.ts                experimental.serverActions.bodySizeLimit = "25mb"
                                (D64, brief #5k) — the only non-default entry
-/prisma/                       schema, migrations, seed
+/prisma/                       schema, migrations, seed.ts (reference data) and
+                               seedScenarios.ts (the eight sample clients, D82)
 /storage/                      gitignored document vault
 /data/                         gitignored SQLite db
 /scripts/                      one-off tools, not part of the app
@@ -188,6 +195,8 @@ A missing quarter is zero, not an error — but a filing whose OWN quarter has n
 **The scan is part of saving a certificate, not a separate step afterward (D46, brief #5a).** `addCertificate` refuses to save without a file. A saved row's only remaining scan action is **Replace** (one-for-one — the old scan is soft-deleted, not accumulated).
 
 **Starting figures cover a client joining the app mid-year (D56, brief #5f).** `StartingFigures` (one row per client-year) holds `latestOutsideReturn` plus the handful of figures typed once from a client's last return filed outside the app — item 55, item 51, items 57/58, item 56, the amount paid on that outside return, item 61 with a description, optional non-operating income. A period `latestOutsideReturn` names as outside gets **no `Filing` row generated at all** (`lib/workflow/filingGeneration.ts`'s `generateFilingsForClientYear` skips it) — that's what keeps it off the board and dashboard, not a filter. `Filing.filedOutsideApp` covers the rarer case where a row already existed before being named outside; such a row renders on the client page as an explicit "Filed outside the app" line, not hidden. Locked once the year's first in-app return is filed.
+
+**Generate refuses for a client engaged mid-year with no starting figures (D78, brief #5n, her decision).** `generateFilingsForClientYear` (`lib/workflow/filingGeneration.ts`, via `lib/workflow/midYearGuard.ts`) creates nothing when: `engagedSince` falls inside the taxable year after January 1; at least one quarter's period ended before `engagedSince`; and no `StartingFigures` row exists for that client and year. The message names the client, the date and the quarters and links to that year's starting figures ("Benedicto started July 1, 2026. Enter Benedicto's starting figures first, so Q1 and Q2 aren't created as work."). **There is no override button, and `engagedSince` must never start excluding quarters on its own — starting figures remain the only thing that says which quarters were filed outside the app.** Any saved row satisfies the guard, including "latest outside return: none". A client engaged February 10 lists no quarter (none had ended) and is unaffected, as is anyone engaged on or before January 1 or with no date. Enforced inside the function, not just on the button; "add tax year" never generates filings, so it needs no guard.
 
 **Credits: items 55, 56 and 61 (D55, briefs #5e/#5f).** Item 61 (1701Q) / 63 (1701A) is one figure **per return** (`Filing.otherCreditsCents`/`otherCreditsDescription`), inheriting the previous filing's saved value (or the starting figures') until saved here, locked once filed — this superseded a brief #5e version that briefly lived as one figure per taxable year on `ClientTaxYear` before she asked for it to vary return by return. Item 55 (1701Q) / 57 (1701A) is display-only on step 3, entered only in the starting figures, and still appears in full on every return of the year (D12) — the Taxable-years table's own credit column/edit field are gone. Item 56 (1701Q) / 58 (1701A) is calculated from `Filing.amountPaidCents` on earlier filed returns — currently ₱0 for any quarter actually filed inside the app, since nothing writes that field yet; this is the Pay group's own build to close.
 
@@ -288,6 +297,15 @@ This is grouping only: it changes nothing about what any step requires, blocks, 
 - Migrations that add constraints should be verified to actually reject bad values.
 - **While the database holds only seed data, destructive migrations are fine** — drop, migrate, reseed. No migration path needs preserving. **This licence expires when live data is entered in November 2026.**
 
+## Seed data (D82, brief #5n)
+
+- **Every seeded client is fictitious.** Invent new names; never reuse a name typed in by hand during a walkthrough (they may be real people, and the seed is committed to git).
+- **Every past-due filing is Complete or doesn't exist.** No half-worked overdue leftovers.
+- **Drive each filing to its state through the real server actions** (`saveQuarterlySales`, `addCertificate`, `markStepDone`, `savePayment`, `uploadDocument`, …) so auto-waiting (D68/D71), nothing-to-pay NA (D76), item 56 (D75) and the mid-year guard (D78) come out exactly as the app produces them. Anything set by hand is named, with why, in `prisma/seedScenarios.ts`'s header (currently: Client/ClientTaxYear/Payor rows, whose create actions redirect, and back-dated `waitingSince` ages). Actions run outside Next only because `prisma/seed.ts` stubs `next/cache` before a dynamic import — never import `seedScenarios` statically.
+- **Seeded documents are small placeholders clearly marked SAMPLE** (a one-page PDF, or text for the DAT), saved through the normal storage path.
+- **Each client's Notes holds a one-line "Sample …" scenario.** Keep TaxRuleSet, Holiday and ATC seeding as is (WI010/WI011 stay unverified, D19); the suite depends on the seeded TaxRuleSet. Tax tests still never read seed data (D5).
+- **The seed never deletes.** Reference data is upserted; the sample clients are built only when none exist. To start clean: `npx prisma migrate reset --force` (drops the database, re-applies migrations, runs the seed) — Prisma refuses to run this under an AI agent without her explicit consent, so it has not been run by Claude here; the equivalent manual sequence (delete `data/app.db`, `npx prisma migrate deploy`, `npx tsx prisma/seed.ts`) has. Older text saying plain `npx tsx prisma/seed.ts` "replaces all data" was wrong for the upsert-based seed.
+
 ## Business rules you must not quietly change
 
 1. The 8% formula, the ₱250,000 deduction (full from Q1, never prorated, `PURELY_SELF_EMPLOYED` only), the cumulative approach, and the computation sheet's own whole-peso rounding at the items the BIR form itself rounds (D49) — money is still integer centavos everywhere else
@@ -324,6 +342,12 @@ Centered container ~1100px. Tables with aligned columns, not edge-pinned cards. 
 
 **An overpayment on the computation sheet's own final row shows in parentheses, never a plain positive figure (D59, brief #5g).** "(₱X)," labelled "… — overpayment," both on screen and in the generated HTML. Not coloured red or green — it's a figure, not a verdict. Step 4's own message already said "Overpayment" in words and is untouched.
 
+**A board card outside BIR Confirmations tags any BIR wait it carries (D79, brief #5n).** "TRRC · 2d" / "SAWT validation · 8d", coloured by the same thresholds as the step pill via `lib/workflow/aging.ts` (`birWaitTags`/`birWaitTone` — never a second copy of the aging logic). Still one card per filing, in its earliest incomplete group (D70). Inside BIR Confirmations there is no tag; the card's wait line goes red at twice the expected days.
+
+**A slim bar is pinned to the top of the filing page once its header scrolls away (D80, brief #5n).** `components/filing-sticky-bar.tsx`: client and period, next step, "Go to step" — or "Complete." Fixed beside the menu (`left-60`), not over it; unmounted while the real header is visible. **"Go to step" (`components/go-to-step.tsx`, shared with the Next banner's own "Go to step") expands the step's group and scrolls to `#step-<STEPCODE>`; every step card sits in a wrapper with `scroll-mt-20` so the bar never covers its first line.** Don't wrap a step card in the filing page without keeping that id.
+
+**"Nothing to pay — overpayment ₱X" is muted grey, and a group with every step NA shows no "0 of 0" counter (D81, brief #5n).** Amber means waiting; nothing is waiting here. Built from `lib/workflow/groups.ts`'s `nothingToPayLabel`/`groupCounterLabel`.
+
 **Density is not the goal; being operable is.** "Dense over pretty" was taken too far and produced a first test drive that stopped at step 4 of 16.
 
 **Lead with the work, not the output.** The filing page opens with a next-action line naming the next step, then a compact summary strip, then the checklist — anything a step produces or needs (the computation sheet, step 2's certificate rows) sits collapsed inside the step it belongs to, not as a full-width panel ahead of or detached from the checklist. (The certificate cutoff control and the client confirmation panel this once also named are both gone — see D34 and D37 in DECISIONS.md.)
@@ -357,15 +381,15 @@ Will hold real TINs and income data under the Data Privacy Act from November 202
 - `_test-files/` at the repo root — disposable dummy documents for test drives (untracked).
 - `npm install` writes an `allowScripts` block into `package.json`. It is machine-local and blocks branch switches; the user stashes before checking out.
 - **`npm install` also regenerates the Prisma Client now**, via a `postinstall` script (D57, brief #5f) — she'd hit a stale-client error twice after pulling a migration without a separate `npx prisma generate`.
-- **The update routine, in order, after pulling:** close the app · `git stash` · `git pull` · `npm install` · `npx prisma migrate deploy` (only when a brief added migrations) · `npx tsx prisma/seed.ts` (only when a reseed is actually wanted — it replaces all data).
+- **The update routine, in order, after pulling:** close the app · `git stash` · `git pull` · `npm install` · `npx prisma migrate deploy` (only when a brief added migrations) · `npx prisma migrate reset --force` (only when a clean reseed is actually wanted — it DROPS the database, including any client added by hand, then re-applies the migrations and runs the seed).
 - **`git fetch origin <branch>` before trusting a local `git log`** is now the first step of every pass, not just before a branch-relationship check — a local checkout has been caught behind the remote twice now (see `CURRENT_STATE.md`'s "Where the code is").
 
 ## Current priorities
 
 See `CURRENT_STATE.md`. In short:
 
-1. **Walk the eAFS group (steps 11, 12, 13, 15), the last group untouched.** The Prepare group (steps 1-4) closed across briefs #4c-#4e, #5a, #5d-#5f, #5g's look, and #5i's finish; the File group (steps 5, 6, 7) closed across brief #5k (the 1 MB upload crash, D64, plus D65-D67) and #5l (D68/D69); **the six-group split and the Pay group (steps 8, 9) are now both built (brief #5m, D70-D77)** — see "The six groups" above and "The blocking rule" above for what steps 8/9/10/14 do now. Item 56/58 no longer reads a permanent ₱0 for an in-app quarter — `MAKE_PAYMENT` feeds it. eAFS and BIR Confirmations (step 10/14) are separate groups now (D70); BIR Confirmations is done as of this brief (steps 10 and 14 both auto-wait-and-self-complete). What's left in eAFS: steps 11-13 and 15 have not had a dedicated walkthrough of their own.
+1. **Walk the eAFS group (steps 11, 12, 13, 15), the last group untouched — start with sample scenario D (Corazon Mendoza, Q3) after a reseed.** The Prepare group (steps 1-4) closed across briefs #4c-#4e, #5a, #5d-#5f, #5g's look, and #5i's finish; the File group (steps 5, 6, 7) closed across brief #5k (the 1 MB upload crash, D64, plus D65-D67) and #5l (D68/D69); **the six-group split and the Pay group (steps 8, 9) are now both built (brief #5m, D70-D77)** — see "The six groups" above and "The blocking rule" above for what steps 8/9/10/14 do now. Item 56/58 no longer reads a permanent ₱0 for an in-app quarter — `MAKE_PAYMENT` feeds it. eAFS and BIR Confirmations (step 10/14) are separate groups now (D70); BIR Confirmations is done as of this brief (steps 10 and 14 both auto-wait-and-self-complete). What's left in eAFS: steps 11-13 and 15 have not had a dedicated walkthrough of their own.
 2. **Before live data in November:** back up `data/app.db`, `storage/`, and the `.env` file (she raised this 2026-09-26, deferring the how until real data exists).
 3. Build the **document archive browse view** — client → year, with a whole-year zip. It serves what she named as the most important thing the app does, and it is the only genuinely new build left in the backlog.
 4. Confirm the ATC codes against BIR at `/settings/atc-codes` (brief #5a).
-5. **Decide on the live Q3 cycle** — 1701Q due **November 16, 2026**. For each real client: add the client, add the tax year, enter the starting figures (brief #5f — every current client joins mid-year), then generate filings. Excel remains the master until she decides otherwise.
+5. **Decide on the live Q3 cycle** — 1701Q due **November 16, 2026**. For each real client: add the client, add the tax year, enter the starting figures (brief #5f — every current client joins mid-year; Generate refuses until they're saved, D78), then generate filings. Excel remains the master until she decides otherwise.

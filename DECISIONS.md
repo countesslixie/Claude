@@ -2,7 +2,7 @@
 
 *Append new decisions. Mark superseded ones rather than deleting them.*
 *Dates during the build are approximate — most work happened across August 2026.*
-*Last reconciled: 2026-09-29 — brief #5m (D70-D77), six groups replacing D32's five, BIR Confirmations built, and the Pay group built (closing D55's item 56/58 gap) — on top of brief #5l (D68-D69), brief #5k (D64-D67), brief #5j (D60-D63), brief #5i, brief #5h (D49-D59, briefs #5d-#5g), brief #5c, brief #5b (D48), brief #5a (D43-D47) and the documentation pass (brief #4f) through briefs #4c-#4e.*
+*Last reconciled: 2026-09-29 — brief #5n (D78-D82: the mid-year guard, the BIR-wait tag, the slim filing bar, "Nothing to pay", and the rebuilt seed), on top of brief #5m (D70-D77), six groups replacing D32's five, BIR Confirmations built, and the Pay group built (closing D55's item 56/58 gap) — on top of brief #5l (D68-D69), brief #5k (D64-D67), brief #5j (D60-D63), brief #5i, brief #5h (D49-D59, briefs #5d-#5g), brief #5c, brief #5b (D48), brief #5a (D43-D47) and the documentation pass (brief #4f) through briefs #4c-#4e.*
 
 ---
 
@@ -744,4 +744,46 @@ D69 (brief #5l) fixed this specifically for File. The same bug existed in the OL
 
 ---
 
-**Documentation reconciled through brief #5m** (this pass) — see the "Last reconciled" line at the top of this file, CURRENT_STATE.md, PROJECT_MASTER.md and CLAUDE.md.
+## 2026-09-29 — brief #5n (mid-year guard, BIR tag, sticky bar, "Nothing to pay", a clean seed)
+
+**D78 — Generate refuses for a client engaged mid-year with no starting figures** *(2026-09-29, brief #5n §1, her decision)*
+
+*What happened.* She created a client with Engaged since = July 1, 2026 and clicked Generate for 2026: Q1, Q2, Q3 and Annual were all created, so Q1 and Q2 showed as overdue work. Correct by D56's rules — only `StartingFigures.latestOutsideReturn` keeps an outside quarter from being generated, and she hadn't entered any — but it happened silently.
+
+*The rule.* Starting figures stay the ONE place that says which quarters were filed outside the app. `engagedSince` never excludes a quarter on its own. `generateFilingsForClientYear` (`lib/workflow/filingGeneration.ts`) refuses — before creating anything — when all three hold: the client's `engagedSince` falls inside the taxable year after January 1; at least one quarterly period ended before `engagedSince` (Manila calendar days, D20 — `lib/workflow/midYearGuard.ts`'s `quartersEndedBeforeEngagement`); and no `StartingFigures` row exists for that client and year. Enforced in the function itself, so the "Generate" action and anything else that calls it are covered — not just the button. Any saved starting-figures row satisfies it, including "latest outside return: none" (then Generate runs normally and creates all four). No override button.
+
+*The message* names the client (first word of the registered name), the date and the affected quarters, and links to that year's starting-figures screen — or to "New tax year" when the year has no tax-year row yet, since that screen can't open without one: "Benedicto started July 1, 2026. Enter Benedicto's starting figures first, so Q1 and Q2 aren't created as work." (The brief's own example said "her"; the wording avoids a pronoun, since none is stored.)
+
+*Confirmed reading, as the brief asked.* A client engaged February 10 lists **no** quarter — Q1 hadn't ended yet — so generation is allowed. Same for January 1 or earlier, no `engagedSince` at all, or a different year. A client engaged April 1 lists Q1 only; October 1 lists Q1, Q2 and Q3. The Annual never appears (Dec 31 is never before an in-year date).
+
+*"Add tax year" checked:* `createClientTaxYear` (`lib/actions/clientTaxYears.ts`) creates only the tax-year row and never generates filings, so it needs no guard.
+
+**D79 — Board cards carry a "TRRC · Nd" / "SAWT validation · Nd" tag while waiting on BIR, outside the BIR Confirmations column** *(2026-09-29, brief #5n §2, her decision)*
+
+She keeps D70's rule (a card sits in its earliest unfinished group — one card per filing, in the column of her next piece of work), so a filed-and-paid filing with eAFS work still open sits in eAFS. New: when a card is in any column other than BIR Confirmations and step 10 and/or step 14 is `WAITING_EXTERNAL`, a small tag shows "TRRC · 2d" and/or "SAWT validation · 8d". Days and colour come from `deriveStepAging` — the same function as the step pill — via `lib/workflow/aging.ts`'s `birWaitTags` / `birWaitTone`; both step cards' "Waiting on BIR" pill now call `birWaitTone` too, so there is one copy of the amber/red rule (amber while waiting, red at twice `expectedResponseDays`, never green). A card already in BIR Confirmations gets no tag; its own wait line turns **red** once either wait is past twice its expected days (added while verifying the walkthrough — her scenario G expects that card to read red).
+
+**D80 — A slim bar pinned to the top of the filing page** *(2026-09-29, brief #5n §3, her decision)*
+
+Once the page header scrolls out of view, a bar fixed to the content area (`left-60`, beside the menu, never over it) shows only: "Rosario Garcia — TY2026 Q3 · Next: Step 8 Make payment · Go to step" — or "… · Complete" with no link. It isn't rendered at all while the real header is on screen (an `IntersectionObserver`, no new dependency; `components/filing-sticky-bar.tsx`). D58's colour tokens and a border-bottom, no shadow.
+
+*"Go to step" (`components/go-to-step.tsx`) now really expands the right group and scrolls to the step.* **The brief said the bar should behave "exactly like the Next banner's link (D77)," and described that link as expanding the group — it didn't:** D77's banner link was a plain `#checklist` anchor, so it only jumped to the top of the whole Workflow card. Found against the tree, not the brief. Both the banner's "Go to step" and the bar's now share one behaviour: each group card listens for the step being requested and opens itself; every step card is wrapped in `id="step-<STEPCODE>"` with `scroll-margin-top` of 80px against the bar's ~37px, so the first line of the card is never covered (measured: the step lands 80px below the top). The banner's separate "Go to checklist" link in Mark-done modes is unchanged.
+
+*Known, not changed here:* both the banner and the bar name the earliest unresolved step by raw step sequence (`currentStepCode`), so a filing whose only open work is eAFS reads "Next: Step 10 — TRRC" (a step she can only wait on), while the board and dashboard already pick by group order (D74). Left alone as outside the brief; see CURRENT_STATE.md.
+
+**D81 — "Nothing to pay — overpayment ₱X" in muted grey; no counter on an all-NA group** *(2026-09-29, brief #5n §4, her decision)*
+
+Pay's note after steps 8/9 both go NA reads "Nothing to pay — overpayment ₱8,200.00" (or plain "Nothing to pay" for exactly ₱0), built by `lib/workflow/groups.ts`'s `nothingToPayLabel` from `lib/money.ts`'s formatting, in muted grey (`text-faint`) — amber means waiting and nothing is waiting. The "0 of 0" counter is hidden for **any** group whose steps are all NA (`groupCounterLabel` returns null); the Done pill and the note are enough. Filings filed before brief #5m kept a live payment form because D76's NA rule only runs when step 5 is marked Done — no backfill, since the database is reseeded (D82), and the new seed reaches this state by really marking step 5 done.
+
+*Rosario Garcia's Q3 is ₱8,200.00 on a fresh seed.* The ₱8,600.00 seen during the #5m walkthrough cannot be reproduced from a fresh seed, because a fresh seed used to leave her Q3 empty — any overpayment came from figures typed during the walkthrough. Under her starting figures (item 55 ₱0; item 56 = ₱2,000 + ₱8,000 = ₱10,000; item 57 = ₱10,000 + ₱15,000 = ₱25,000; item 58 = ₱0, no certificates; item 61 = ₱0) the overpayment is ₱15,000 − 8% × Q3 sales, so ₱8,200 is Q3 sales of ₱85,000 and ₱8,600 is ₱80,000: a ₱5,000 difference in the Q3 sales typed in produces exactly the ₱400. Nothing is counted twice — the ₱8,000 paid on Q2 sits only in item 56, the ₱15,000 Q2 withholding only in item 57. Most likely a sales figure was edited between two walkthrough runs. The new seed enters ₱85,000 through `saveQuarterlySales`, so the figure is now reproducible and asserted by a test.
+
+**D82 — The seed is rebuilt as labelled fictitious scenarios, driven through the real actions, with no half-worked overdue filings** *(2026-09-29, brief #5n §5, her request)*
+
+The old seed mixed sample clients, hand-set step statuses and half-worked overdue Q2 filings ("Blocked" cards in odd columns). `prisma/seed.ts` now keeps only the reference data (TaxRuleSet, Holiday, AtcCode — WI010/WI011 still unverified, D19 — and the step template) and hands the rest to `prisma/seedScenarios.ts`: eight fictitious clients, one scenario each, each with a one-line "Sample …" note, driven by `saveStartingFigures`, `generateFilingsAction`, `saveQuarterlySales`, `addCertificate`, `setAllCertificatesReceived`, `skipStep`, `markStepDone`, `savePayment` and `uploadDocument` (so auto-waiting D68/D71, nothing-to-pay NA D76, item 56 D75, the mid-year guard D78 and SHA-256/naming all come from the real code). Seeded documents are small one-page PDFs (or a text file for the DAT) reading "SAMPLE — …", written through the normal storage path. Every past-due filing is Complete or doesn't exist; Annual filings (due April 2027) exist Not started. See CURRENT_STATE.md's "Sample data" table.
+
+*Set by hand, and why:* the `Client`, `ClientTaxYear` and `Payor` rows (their create actions redirect into a page, which can't run outside Next); `waitingSince` on steps 10/14 and the `completedAt` of the step that started the wait (the app stamps "now", so a seeded wait would always read 0 days); nothing else. **No `computationSnapshot` is written** — production `markStepDone` has never frozen one (D76's note), so seeded filed returns are unfrozen exactly like one filed in the app today; D17's frozen-snapshot exception therefore has nothing to cover in the new seed (the old `buildSnapshot` is gone with the old scenarios). `waitingSince` ages are relative to seed time (D17's era note): D ≈ 2 days, E ≈ 3, F ≈ 1, G TRRC ≈ 8 (red) and SAWT validation ≈ 3.
+
+*Re-running.* Reference data is upserted, so `npx tsx prisma/seed.ts` is safe to repeat; the sample clients are only built when none exist (all present → left alone; some present → stops and says to reset). The seed does NOT wipe a database: to start clean use `npx prisma migrate reset --force`. This also corrects older docs that said the plain seed command "replaces all data". Tested: `tests/seed/seedScenarios.test.ts` seeds a throwaway database twice and checks every scenario.
+
+---
+
+**Documentation reconciled through brief #5m** (that pass; brief #5n's own additions are D78–D82 above) — see the "Last reconciled" line at the top of this file, CURRENT_STATE.md, PROJECT_MASTER.md and CLAUDE.md.
