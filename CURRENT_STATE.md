@@ -228,6 +228,17 @@ All four share one key: client × taxable year × period.
 
 ---
 
+## Changed by brief #5o (2026-09-29) — one line each; a documentation pass will fold these in
+
+- **Filed returns are frozen** (D83): step 5 Done writes `computationSnapshot` + `filedAt` in the same transaction; one reader (`getFilingSheet`); later differences raise an amber "figures changed since filed" line with Dismiss. Reseed required for databases seeded before this brief.
+- **"Next" follows group order** (D84): shared helper for the banner, slim bar and dashboard; skips locked and BIR-waiting steps; "Next: waiting on BIR — TRRC, 3d" with no button when nothing of hers is left.
+- **eAFS group unlocks after File and Pay** (D85); step 11 has two upload boxes and needs both (D86); step 12 is the eSubmission email draft, saved on Done (D87, new `TaxRuleSet.eSubmissionEmail` setting + `Filing.dataEmail*`, one new migration); step 13 waits on BIR after 12 and completes on upload (D88); step 15 has no slot and no Skip (D89 — D27's third category is gone).
+- **No Form 2307 on the filing → steps 11-15 all NA** (D93) — settles the quarterly-eAFS open question. Scenario F now has a certificate; A, E have no eAFS at all.
+- **Step 10 is "Save TRRC email", step 14 "Save eAFS validation email"** (D90/D92); board tag and header say "eAFS validation".
+- **A group with every step NA has no Expand** (D91).
+- **Twenty-first test drive** (2026-09-29, her check of #5n and first eAFS walk): produced D83-D93. Verified live on a fresh seed — see the summary of that brief.
+- Found, not changed: D75's payment lock already stops most edits reaching a filed return (see D83); whether to relax it is her call.
+
 ## Sample data
 
 The seed (D82) builds eight fictitious clients, all TY2026, each with its scenario in the client's Notes field. Built through the app's own actions; ages are relative to seed time and drift as real time passes.

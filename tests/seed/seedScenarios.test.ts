@@ -122,6 +122,7 @@ describe("seed scenarios (D82)", () => {
     expect(statusOf(f, "SAVE_SUBMISSION_SS")).toBe("PENDING");
     expect(statusOf(f, "SAVE_FORM_COPY")).toBe("PENDING");
     expect(statusOf(f, "RECEIVE_TRRC")).toBe("WAITING_EXTERNAL");
+    for (const code of ["ALPHALIST_ENTRY", "EMAIL_DAT", "SAWT_ACK", "EAFS_SUBMIT"]) expect(statusOf(f, code)).toBe("PENDING"); // has a certificate; locked until Pay is done
   });
 
   it("G: everything of hers done including eAFS, TRRC waiting about 8 days, validation waiting", async () => {

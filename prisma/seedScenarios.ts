@@ -472,9 +472,9 @@ export async function seedScenarios(prisma: PrismaClient, actorId: string): Prom
     registeredAddress: "61 Luna St, San Juan City, Metro Manila",
     taxpayerType: "PURELY_SELF_EMPLOYED",
     lineOfBusiness: "Carpentry and fit-out",
-    withholdingBps: null,
+    withholdingBps: 500,
     engagedSince: "2026-01-12",
-    notes: "Sample F: Q3 filed (step 5 done) but the submission screenshot and filed form are not saved yet — File group mid-way, BIR Confirmations already waiting on the TRRC.",
+    notes: "Sample F: Q3 filed (step 5 done) but the submission screenshot and filed form are not saved yet — File group mid-way, BIR Confirmations already waiting on the TRRC. Has a certificate, so the eAFS group is locked until Pay is done.",
   });
   await startingFigures(ocampo.id, "Q2", { cumulativeIncome: "300,000.00" });
   await generate(ocampo.id);
@@ -484,7 +484,22 @@ export async function seedScenarios(prisma: PrismaClient, actorId: string): Prom
       ["Direct client — Dizon Residence", "120,000.00"],
       ["Direct client — Aquino Renovation", "80,000.00"],
     ]);
-    await skipReceive2307(filing.id);
+    await addCert(
+      filing.id,
+      {
+        payor: "Ilustre Builders, Inc.",
+        tin: "330-555-603-000",
+        address: "8 Ortigas Ave, Pasig City",
+        atc: "WI010",
+        income: "120,000.00",
+        withheld: "6,000.00",
+        from: "2026-07-01",
+        to: "2026-09-30",
+      },
+      `Form 2307, ${label(ocampo.registeredName, "Q3")}`,
+      dateStr(4),
+    );
+    await setAllCertificatesReceived(filing.id, true);
     await prepareAdviseFile(filing.id);
     await backdateWait(filing.id, "RECEIVE_TRRC", 1, "FILE_RETURN");
   }
