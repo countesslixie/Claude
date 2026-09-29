@@ -213,7 +213,7 @@ export async function instantiateWorkflowSteps(
  * Recomputes Filing.requiresSawt from actual Form2307 records (SPEC.md 5:
  * "derived: any Form2307 in period"). Call this whenever a Form2307 is
  * created/deleted for a client. If requiresSawt flips from false to true,
- * un-NA's steps 11-14 back to PENDING so they become visible — a filing
+ * un-NA's the conditional steps (11-15, D93) back to PENDING so they become visible — a filing
  * generated when no certificates were expected can still turn out to
  * need SAWT once one actually arrives.
  */
@@ -240,10 +240,27 @@ export async function recomputeRequiresSawt(clientId: string, taxableYear: numbe
   const actorId = await getActorId();
   await prisma.filing.update({ where: { id: filing.id }, data: { requiresSawt, actorId } });
 
+  // D93 (brief #5o) — the whole eAFS group (11, 12, 13, 15) plus step 14 is
+  // conditional on there being a Form 2307 on this filing. The NA state
+  // follows the live certificate list until the return is filed (D34 — the
+  // certificate list is locked from step 5 on, so from filing onwards the
+  // state is fixed): adding the first certificate brings the steps back,
+  // removing the last makes them NA again. One mechanism for both
+  // directions, the same one that sets them NA at generation.
+  const fileReturn = await prisma.workflowStep.findFirst({ where: { filingId: filing.id, stepCode: "FILE_RETURN" } });
+  if (fileReturn?.status === "DONE") return;
+
   if (requiresSawt) {
     await prisma.workflowStep.updateMany({
       where: { filingId: filing.id, isConditional: true, status: "NA" },
       data: { status: "PENDING" },
+    });
+  } else {
+    // Only untouched (PENDING) steps go back to NA — with the eAFS group locked until
+    // Pay is Done, nothing in it can have been started while certificates can still change.
+    await prisma.workflowStep.updateMany({
+      where: { filingId: filing.id, isConditional: true, status: "PENDING" },
+      data: { status: "NA" },
     });
   }
 }

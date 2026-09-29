@@ -105,6 +105,22 @@ describe("workflow step actions", () => {
   }
 
   /**
+   * D85/D86 (brief #5o) — opens the eAFS gate for tests of the steps AFTER it: File and Pay
+   * (5-9) and steps 11-12 set Done directly (each has its own dedicated test elsewhere).
+   */
+  async function openEafsGate(filingId: string, upToStep12 = true) {
+    await prisma.workflowStep.updateMany({
+      where: {
+        filingId,
+        stepCode: {
+          in: ["FILE_RETURN", "SAVE_SUBMISSION_SS", "SAVE_FORM_COPY", "MAKE_PAYMENT", "SAVE_PROOF_PAYMENT", ...(upToStep12 ? ["ALPHALIST_ENTRY", "EMAIL_DAT"] : [])],
+        },
+      },
+      data: { status: "DONE", completedAt: new Date() },
+    });
+  }
+
+  /**
    * D27 (reconciled from laughing-darwin's commit 7bfbd5d) — the
    * corrected blocking rule: markStepDone is blocked while a required doc
    * slot is empty, and succeeds once filled. Q2 is used here (not Q1) so
@@ -227,11 +243,11 @@ describe("workflow step actions", () => {
   it("skipStep requires a non-empty reason — no silent skips (SPEC.md 7.2)", async () => {
     const { filing } = await makeClientWithQ2Filing("p3-step-skip");
     // D75 (brief #5m §3) -- MAKE_PAYMENT can no longer be skipped at all
-    // (see the dedicated Pay-group test below); EAFS_SUBMIT is still an
-    // ordinary skippable step, so it's used here for the generic
-    // reason-required rule.
+    // (see the dedicated Pay-group test below); D89 (brief #5o) took Skip away
+    // from step 15 too, so SEND_CLIENT_PACKAGE (step 16) is the ordinary
+    // skippable step used here for the generic reason-required rule.
     const step = await prisma.workflowStep.findFirstOrThrow({
-      where: { filingId: filing.id, stepCode: "EAFS_SUBMIT" },
+      where: { filingId: filing.id, stepCode: "SEND_CLIENT_PACKAGE" },
     });
 
     const blocked = await skipStep(step.id, "");
@@ -297,16 +313,11 @@ describe("workflow step actions", () => {
       expect(parseDocSlots(step2.requiredDocSlots).every((s) => !s.required)).toBe(true);
     });
 
-    it("steps 4, 12, and 16 have no doc slots at all; step 15's slot is optional", async () => {
-      for (const stepCode of ["ADVISE_CLIENT", "EMAIL_DAT", "SEND_CLIENT_PACKAGE"]) {
+    it("steps 4, 12, 15 and 16 have no doc slots at all (D89 retired step 15's optional slot, and D27's third category with it)", async () => {
+      for (const stepCode of ["ADVISE_CLIENT", "EMAIL_DAT", "EAFS_SUBMIT", "SEND_CLIENT_PACKAGE"]) {
         const template = await prisma.workflowStepTemplate.findUniqueOrThrow({ where: { stepCode } });
         expect(parseDocSlots(template.requiredDocSlots)).toEqual([]);
       }
-
-      const eafs = await prisma.workflowStepTemplate.findUniqueOrThrow({ where: { stepCode: "EAFS_SUBMIT" } });
-      const eafsSlots = parseDocSlots(eafs.requiredDocSlots);
-      expect(eafsSlots.length).toBeGreaterThan(0);
-      expect(eafsSlots.every((s) => !s.required)).toBe(true);
     });
 
     it("the seven blocking steps (6,7,9,10,11,13,14) still require their documents", async () => {
@@ -326,7 +337,7 @@ describe("workflow step actions", () => {
       }
     });
 
-    it("non-blocking steps mark DONE freely, with or without their optional slot", async () => {
+    it("non-blocking steps mark DONE freely", async () => {
       const { filing } = await makeClientWithQ2Filing("p3-nonblocking");
 
       // RECORD_SALES and RECEIVE_2307 resolved first -- brief #4c requires
@@ -346,12 +357,9 @@ describe("workflow step actions", () => {
       });
       expect((await markStepDone(makePaymentStep.id)).ok).toBe(true);
 
-      // EAFS_SUBMIT's confirmation is the one documented exception:
-      // optional, never demanded, never blocking.
-      const eafs = await prisma.workflowStep.findFirstOrThrow({
-        where: { filingId: filing.id, stepCode: "EAFS_SUBMIT" },
-      });
-      expect((await markStepDone(eafs.id)).ok).toBe(true);
+      // D89 (brief #5o): step 15 carries no document at all now, and D85/D93 make it
+      // live only on a filing with certificates and after Pay -- its own tests are
+      // in tests/actions/eafsGroup.test.ts.
     });
 
     it("D71 (brief #5m §2): step 14 is locked until step 13 is Done, then waits on BIR automatically and completes on upload -- the 13->14 dependency now enforced by the lock itself", async () => {
@@ -381,6 +389,9 @@ describe("workflow step actions", () => {
         where: { filingId: filing.id, stepCode: "SAWT_VALIDATION" },
       });
       expect(validationStep.status).toBe("PENDING");
+      // Step 5 for real (auto-starts step 10's wait, D68); everything else the eAFS gate needs set directly.
+      await fileTheReturn(filing.id);
+      await openEafsGate(filing.id);
 
       // Locked while step 13 isn't Done -- the upload itself is refused,
       // not just markStepDone (D71, the same shape D67 gave steps 6/7).
@@ -393,7 +404,7 @@ describe("workflow step actions", () => {
       expect(stillLocked.ok).toBe(false);
       expect(stillLocked.error).toMatch(/step 13/i);
 
-      await markStepWaitingExternal(ackStep.id); // step 13 waiting, not done -- still locked
+      expect((await markStepWaitingExternal(ackStep.id)).ok).toBe(false); // D88: no manual Mark waiting on 13 either
       const stillLockedWhileWaiting = await uploadDocument(formData);
       expect(stillLockedWhileWaiting.ok).toBe(false);
 
@@ -404,9 +415,9 @@ describe("workflow step actions", () => {
       ackFormData.set("workflowStepId", ackStep.id);
       ackFormData.set("docSlotCode", "acknowledgement");
       ackFormData.set("documentDate", "2026-08-15");
-      await uploadDocument(ackFormData);
-      const ackDone = await markStepDone(ackStep.id);
-      expect(ackDone.ok).toBe(true);
+      expect((await uploadDocument(ackFormData)).ok).toBe(true); // D88: the upload itself completes step 13
+      expect((await prisma.workflowStep.findUniqueOrThrow({ where: { id: ackStep.id } })).status).toBe("DONE");
+      expect((await markStepDone(ackStep.id)).ok).toBe(false); // ...and there is no Mark done to click
 
       const nowWaiting = await prisma.workflowStep.findUniqueOrThrow({ where: { id: validationStep.id } });
       expect(nowWaiting.status).toBe("WAITING_EXTERNAL");
@@ -415,7 +426,6 @@ describe("workflow step actions", () => {
       // Step 10 (RECEIVE_TRRC) waiting blocks nothing downstream -- filing
       // the return (which now auto-starts step 10 waiting on BIR, D68) has
       // no effect on step 14.
-      await fileTheReturn(filing.id);
       const trrcStep = await prisma.workflowStep.findUniqueOrThrow({ where: { id: (await prisma.workflowStep.findFirstOrThrow({ where: { filingId: filing.id, stepCode: "RECEIVE_TRRC" } })).id } });
       expect(trrcStep.status).toBe("WAITING_EXTERNAL");
 
@@ -451,6 +461,7 @@ describe("workflow step actions", () => {
         },
       });
       await recomputeRequiresSawt(client.id, 2026, "Q2");
+      await openEafsGate(filing.id);
       const ackStep = await prisma.workflowStep.findFirstOrThrow({
         where: { filingId: filing.id, stepCode: "SAWT_ACK" },
       });
@@ -490,8 +501,7 @@ describe("workflow step actions", () => {
       ackFormData.set("workflowStepId", ackStep.id);
       ackFormData.set("docSlotCode", "acknowledgement");
       ackFormData.set("documentDate", "2026-08-15");
-      await uploadDocument(ackFormData);
-      await markStepDone(ackStep.id);
+      await uploadDocument(ackFormData); // completes step 13 by itself (D88)
 
       const nowAllowed = await markStepDone(validationStep.id);
       expect(nowAllowed.ok).toBe(true);
@@ -769,9 +779,9 @@ describe("workflow step actions", () => {
     it("unskipStep restores any other skippable step to PENDING", async () => {
       const { filing } = await makeClientWithQ2Filing("p5i-unskip-other-step");
       // D75 (brief #5m §3) -- MAKE_PAYMENT can no longer be skipped at
-      // all; EAFS_SUBMIT is still an ordinary skippable step.
+      // all; step 16 is still an ordinary skippable step (D89 took Skip off step 15).
       const eafsStep = await prisma.workflowStep.findFirstOrThrow({
-        where: { filingId: filing.id, stepCode: "EAFS_SUBMIT" },
+        where: { filingId: filing.id, stepCode: "SEND_CLIENT_PACKAGE" },
       });
       await skipStep(eafsStep.id, "Not required this quarter.");
 
@@ -1049,7 +1059,7 @@ describe("workflow step actions", () => {
         [
           { stepCode: "SAVE_SUBMISSION_SS", title: "Save submission-page screenshot", status: "PENDING", requiredDocSlots: [{ slotCode: "submission_screenshot", label: "Submission-page screenshot", required: true, acceptedTypes: ["pdf"] }] },
           { stepCode: "SAVE_FORM_COPY", title: "Download and save filed form", status: "PENDING", requiredDocSlots: [{ slotCode: "filed_form", label: "Filed form PDF", required: true, acceptedTypes: ["pdf"] }] },
-          { stepCode: "RECEIVE_TRRC", title: "Receive & save BIR confirmation (TRRC)", status: "PENDING", requiredDocSlots: [{ slotCode: "trrc", label: "TRRC email/PDF", required: true, acceptedTypes: ["pdf"] }] },
+          { stepCode: "RECEIVE_TRRC", title: "Save TRRC email", status: "PENDING", requiredDocSlots: [{ slotCode: "trrc", label: "TRRC email/PDF", required: true, acceptedTypes: ["pdf"] }] },
         ],
         new Map(),
       );

@@ -2,12 +2,9 @@ import { describe, it, expect } from "vitest";
 import { buildClientPackageEmail, type ClientPackageEmailInput } from "@/lib/workflow/clientPackageEmail";
 
 /**
- * Rework brief #2 §5 / #3 item 3b — the step 16 client email draft. The
- * eAFS line is conditional: the eAFS confirmation is the one document in
- * the cycle addressed to the client rather than the bookkeeper (D27's
- * exception), so step 16 -- the one point in the cycle where she's
- * writing to that client anyway -- asks her to forward it, but only when
- * it isn't already on file.
+ * Rework brief #2 §5 / #3 item 3b — the step 16 client email draft. D89
+ * (brief #5o) — step 15 has no document at all now, so the email neither
+ * asks the client to forward an eAFS confirmation nor lists one.
  */
 function baseInput(overrides: Partial<ClientPackageEmailInput> = {}): ClientPackageEmailInput {
   return {
@@ -22,7 +19,6 @@ function baseInput(overrides: Partial<ClientPackageEmailInput> = {}): ClientPack
     isOverpayment: false,
     finalAmountCents: 11_500_00,
     hasCertificates: true,
-    eafsConfirmationSaved: false,
     nextPeriodLabel: "Q3",
     nextPeriodDueDate: new Date("2026-11-16T00:00:00.000Z"),
     ...overrides,
@@ -30,16 +26,10 @@ function baseInput(overrides: Partial<ClientPackageEmailInput> = {}): ClientPack
 }
 
 describe("buildClientPackageEmail", () => {
-  it("asks the client to forward the eAFS confirmation when step 15's slot is still empty", () => {
-    const email = buildClientPackageEmail(baseInput({ eafsConfirmationSaved: false }));
-    expect(email.body).toContain("If you received the eAFS confirmation email, please forward it");
-    expect(email.body).not.toContain("· eAFS confirmation");
-  });
-
-  it("drops the forwarding request and lists the eAFS confirmation as a package item once it's saved", () => {
-    const email = buildClientPackageEmail(baseInput({ eafsConfirmationSaved: true }));
+  it("never mentions eAFS: no forwarding request and no package line (D89)", () => {
+    const email = buildClientPackageEmail(baseInput());
+    expect(email.body).not.toMatch(/eAFS/i);
     expect(email.body).not.toContain("please forward it");
-    expect(email.body).toContain("· eAFS confirmation");
   });
 
   it("omits the certificates line and the withholding line when there are no certificates", () => {

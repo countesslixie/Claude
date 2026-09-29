@@ -27,6 +27,7 @@ import { WorkflowGroupCard } from "@/components/workflow-group-card";
 import { RecordSalesStepCard } from "@/components/record-sales-step-card";
 import { Receive2307StepCard, type CertificateRow } from "@/components/receive-2307-step-card";
 import { FileGroupDocStepCard } from "@/components/file-group-doc-step-card";
+import { EmailDatStepCard } from "@/components/email-dat-step-card";
 import { MakePaymentStepCard } from "@/components/make-payment-step-card";
 import { NextActionControl } from "@/components/next-action-control";
 import { FilingStickyBar } from "@/components/filing-sticky-bar";
@@ -44,11 +45,13 @@ import {
   adviseClientBlockReason,
   nextActionModeForStepCode,
   nextActionForFiling,
+  stepLockReason,
   nothingToPayLabel,
   type GroupStepInput,
 } from "@/lib/workflow/groups";
 import { parseDocSlots, type DocSlotDef, type WorkflowStepStatus } from "@/lib/workflow/types";
 import { computeFilingCompleteness } from "@/lib/workflow/completeness";
+import { buildESubmissionEmail } from "@/lib/workflow/eSubmissionEmail";
 import { buildClientPackageEmail } from "@/lib/workflow/clientPackageEmail";
 import { buildLiveAdviceMessageForFiling } from "@/lib/workflow/adviceMessage";
 import { ALL_PERIODS, ownSalesQuarterOf, periodToSingleQuarterCovered, quarterNumberDateRange } from "@/lib/tax/periods";
@@ -113,9 +116,6 @@ export default async function FilingDetailPage({
   );
   const makePaymentStep = filing.workflowSteps.find((s) => s.stepCode === "MAKE_PAYMENT");
   const isStep8Done = makePaymentStep?.status === "DONE";
-  // D71 (brief #5m §2) — step 14 (SAWT_VALIDATION) unlocks once step 13
-  // (SAWT_ACK) is Done, the same shape D67 gave steps 6/7 off step 5.
-  const isSawtAckDone = filing.workflowSteps.find((s) => s.stepCode === "SAWT_ACK")?.status === "DONE";
   const boundSavePayment = savePayment.bind(null, filing.id);
   const paymentLocked = await isPaymentLocked(filing.clientId, filing.taxableYear, filing.period);
   const previousChannels = (
@@ -179,6 +179,8 @@ export default async function FilingDetailPage({
         where: { clientId_taxableYear_period: { clientId: filing.clientId, taxableYear: filing.taxableYear, period: nextPeriod } },
       })
     : null;
+
+  const ruleSetForEmail = await prisma.taxRuleSet.findUnique({ where: { taxableYear: filing.taxableYear } });
 
   const now = new Date();
   const allSteps: StepCardData[] = filing.workflowSteps.map((s) => {
@@ -289,8 +291,6 @@ export default async function FilingDetailPage({
     ADVISE_CLIENT: adviseBlockReason,
   };
 
-  const eafsStep = filing.workflowSteps.find((s) => s.stepCode === "EAFS_SUBMIT");
-  const eafsConfirmationSaved = (eafsStep?.documents ?? []).some((d) => d.docSlotCode === "eafs_confirmation");
 
   // §5.3 — informational "documents not yet attached" note (D27
   // reconciliation, rework brief #2 §7): only DONE/IN_PROGRESS steps, all
@@ -355,7 +355,6 @@ export default async function FilingDetailPage({
     isOverpayment: sheet.isOverpayment,
     finalAmountCents: sheet.isOverpayment ? sheet.overpaymentCents : sheet.taxPayableCents,
     hasCertificates: summaryFigures.cwtCents > 0,
-    eafsConfirmationSaved,
     nextPeriodLabel: nextPeriod,
     nextPeriodDueDate: nextFiling?.adjustedDueDate ?? null,
   });
@@ -688,7 +687,14 @@ export default async function FilingDetailPage({
                 isComplete={summary.isComplete}
                 unresolvedSummary={summary.unresolvedSummary}
                 outstandingLabel={summary.outstandingLabel}
-                noteLabel={def.code === "PAY" ? payNothingToPayLabel : null}
+                noteLabel={
+                  def.code === "PAY"
+                    ? payNothingToPayLabel
+                    : def.code === "EAFS" && summary.totalCount === 0
+                      ? "Not applicable — no Form 2307" // D93: eAFS applies only when there are certificates
+                      : null
+                }
+                notApplicable={summary.totalCount === 0 && steps.length === 0}
                 defaultOpen={def.code === activeGroupCode}
                 stepCodes={def.stepCodes}
               >
@@ -733,20 +739,20 @@ export default async function FilingDetailPage({
                       />
                     );
                   }
-                  // D67/D71/D75 — steps 6, 7 (File), 10, 14 (BIR
-                  // Confirmations) are self-completing once their own
-                  // gating step is Done, the same reasoning steps 1/2
-                  // already get their own bespoke cards for.
+                  // D67/D71/D75/D86/D88 — steps 6, 7 (File), 10, 14 (BIR
+                  // Confirmations), 11 and 13 (eAFS) are self-completing once
+                  // their own gating step is Done, the same reasoning steps 1/2
+                  // already get their own bespoke cards for. Step 11 has TWO
+                  // upload boxes and completes only when both files are in.
                   if (
                     step.stepCode === "SAVE_SUBMISSION_SS" ||
                     step.stepCode === "SAVE_FORM_COPY" ||
                     step.stepCode === "RECEIVE_TRRC" ||
-                    step.stepCode === "SAWT_VALIDATION"
+                    step.stepCode === "SAWT_VALIDATION" ||
+                    step.stepCode === "ALPHALIST_ENTRY" ||
+                    step.stepCode === "SAWT_ACK"
                   ) {
-                    const slot = step.requiredDocSlots[0];
-                    const isUnlocked = step.stepCode === "SAWT_VALIDATION" ? isSawtAckDone : isFilingLocked;
-                    const lockedMessage =
-                      step.stepCode === "SAWT_VALIDATION" ? "Available once step 13 is done." : "Available once step 5 is done.";
+                    const lock = stepLockReason(step.stepCode, filing.workflowSteps);
                     return (
                       <FileGroupDocStepCard
                         key={step.id}
@@ -754,14 +760,50 @@ export default async function FilingDetailPage({
                         sequence={step.sequence}
                         title={step.title}
                         status={step.status}
-                        isUnlocked={isUnlocked}
-                        lockedMessage={lockedMessage}
-                        slotCode={slot.slotCode}
-                        slotLabel={slot.label}
-                        documents={step.documents}
+                        isUnlocked={lock == null}
+                        lockedMessage={lock ?? ""}
+                        slots={step.requiredDocSlots.map((slot) => ({
+                          slotCode: slot.slotCode,
+                          label: slot.label,
+                          documents: step.documents.filter((d) => d.docSlotCode === slot.slotCode),
+                        }))}
                         waitingOnLabel={step.waitingOnLabel}
                         agingDaysWaiting={step.agingDaysWaiting}
                         agingTone={step.agingTone}
+                      />
+                    );
+                  }
+                  // D87 (brief #5o §4) — step 12: the eSubmission email draft.
+                  if (step.stepCode === "EMAIL_DAT") {
+                    const saved = filing.dataEmailSavedAt != null && step.status === "DONE";
+                    const liveEmail = buildESubmissionEmail({
+                      toAddress: ruleSetForEmail?.eSubmissionEmail ?? "",
+                      period: filing.period,
+                      taxableYear: filing.taxableYear,
+                      formType: filing.formType,
+                      registeredName: filing.client.registeredName,
+                      tin: filing.client.tin,
+                      branchCode: filing.client.branchCode,
+                      rdoCode: filing.client.rdoCode,
+                    });
+                    const datDoc = allSteps
+                      .find((x) => x.stepCode === "ALPHALIST_ENTRY")
+                      ?.documents.find((d) => d.docSlotCode === "dat_file");
+                    return (
+                      <EmailDatStepCard
+                        key={step.id}
+                        stepId={step.id}
+                        clientId={filing.clientId}
+                        sequence={step.sequence}
+                        title={step.title}
+                        status={step.status}
+                        lockedMessage={stepLockReason(step.stepCode, filing.workflowSteps)}
+                        to={saved ? (filing.dataEmailTo ?? liveEmail.to) : liveEmail.to}
+                        subject={saved ? (filing.dataEmailSubject ?? liveEmail.subject) : liveEmail.subject}
+                        body={saved ? (filing.dataEmailBody ?? liveEmail.body) : liveEmail.body}
+                        rdoMissing={liveEmail.rdoMissing}
+                        datFile={datDoc ? { id: datDoc.id, filename: datDoc.originalFilename } : null}
+                        savedAtLabel={filing.dataEmailSavedAt ? formatManilaDate(filing.dataEmailSavedAt) : null}
                       />
                     );
                   }
@@ -793,7 +835,6 @@ export default async function FilingDetailPage({
                   // WAITING_EXTERNAL on its own (Pay's own header line
                   // says "waiting on proof of payment" instead).
                   if (step.stepCode === "SAVE_PROOF_PAYMENT") {
-                    const slot = step.requiredDocSlots[0];
                     return (
                       <FileGroupDocStepCard
                         key={step.id}
@@ -803,9 +844,11 @@ export default async function FilingDetailPage({
                         status={step.status}
                         isUnlocked={isStep8Done}
                         lockedMessage="Available once step 8 is done."
-                        slotCode={slot.slotCode}
-                        slotLabel={slot.label}
-                        documents={step.documents}
+                        slots={step.requiredDocSlots.map((slot) => ({
+                          slotCode: slot.slotCode,
+                          label: slot.label,
+                          documents: step.documents.filter((d) => d.docSlotCode === slot.slotCode),
+                        }))}
                         waitingOnLabel={step.waitingOnLabel}
                         agingDaysWaiting={step.agingDaysWaiting}
                         agingTone={step.agingTone}
@@ -822,10 +865,12 @@ export default async function FilingDetailPage({
                       controlsMode={
                         step.stepCode === "ADVISE_CLIENT" ||
                         step.stepCode === "PREPARE_RETURN" ||
-                        step.stepCode === "FILE_RETURN"
+                        step.stepCode === "FILE_RETURN" ||
+                        step.stepCode === "EAFS_SUBMIT"
                           ? "markDoneOnly"
                           : "full"
                       }
+                      lockedMessage={step.stepCode === "EAFS_SUBMIT" ? stepLockReason(step.stepCode, filing.workflowSteps) : null}
                     />
                   );
                     })()}

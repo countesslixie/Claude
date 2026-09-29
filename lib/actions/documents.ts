@@ -8,7 +8,12 @@ import { buildStorageRelativePath, saveDocumentFile } from "@/lib/documents/stor
 import { computeSha256 } from "@/lib/documents/storage";
 import { manilaDateInputToJsDate, formatManilaDate } from "@/lib/dates";
 import { recomputeReceive2307Status, recomputeFileGroupDocStepStatus } from "@/lib/actions/workflowSteps";
-import { SELF_COMPLETING_DOC_STEP_CODES, SELF_COMPLETING_UNLOCK_STEP_CODE } from "@/lib/workflow/groups";
+import {
+  SELF_COMPLETING_DOC_STEP_CODES,
+  SELF_COMPLETING_UNLOCK_STEP_CODE,
+  EAFS_SELF_COMPLETING_STEP_CODES,
+  stepLockReason,
+} from "@/lib/workflow/groups";
 import { MAX_UPLOAD_BYTES } from "@/lib/upload";
 
 export type UploadDocumentResult = {
@@ -95,6 +100,17 @@ export async function saveDocumentForStep(params: {
     if (unlockStep?.status !== "DONE") {
       return { ok: false, error: `Can't attach this document until step ${unlockStep?.sequence ?? "?"} is marked done.` };
     }
+  }
+
+  // D85/D93 (brief #5o) — the eAFS group's steps take documents only once File
+  // and Pay are Done (and, within it, once the step before is Done), and never
+  // on a filing with no Form 2307 (the step is NA). Enforced here, not just by
+  // the UI hiding the boxes.
+  if (EAFS_SELF_COMPLETING_STEP_CODES.includes(step.stepCode)) {
+    if (step.status === "NA") return { ok: false, error: "This step doesn't apply — there's no Form 2307 on this filing." };
+    const allSteps = await prisma.workflowStep.findMany({ where: { filingId: filing.id } });
+    const lock = stepLockReason(step.stepCode, allSteps);
+    if (lock) return { ok: false, error: `Can't attach this document yet. ${lock}` };
   }
 
   const buffer = Buffer.from(await params.file.arrayBuffer());

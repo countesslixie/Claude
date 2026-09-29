@@ -130,7 +130,7 @@ describe("generateFilingsForClientYear", () => {
     expect(filings.map((f) => f.period).sort()).toEqual(["ANNUAL", "Q3"]); // no rows at all for Q1/Q2 — never BLOCKED, no workflow, no deadline
   });
 
-  it("instantiates the full 16-step checklist per filing, with steps 11-14 NA and RECEIVE_2307 waiting from certificatesExpectedBy", async () => {
+  it("instantiates the full 16-step checklist per filing, with steps 11-15 NA and RECEIVE_2307 waiting from certificatesExpectedBy", async () => {
     const client = await prisma.client.create({
       data: {
         code: `p3-gen-steps-${Date.now()}`,
@@ -153,9 +153,9 @@ describe("generateFilingsForClientYear", () => {
 
     expect(steps).toHaveLength(16);
 
-    // §16 item 12: zero 2307s yet -> steps 11-14 auto-NA.
+    // §16 item 12 / D93: zero 2307s yet -> steps 11-15 (the whole eAFS group plus 14) auto-NA.
     const conditionalSteps = steps.filter((s) => s.isConditional);
-    expect(conditionalSteps).toHaveLength(4);
+    expect(conditionalSteps).toHaveLength(5);
     expect(conditionalSteps.every((s) => s.status === "NA")).toBe(true);
 
     // RECEIVE_2307's waiting clock starts from certificatesExpectedBy (SPEC.md 3.6).

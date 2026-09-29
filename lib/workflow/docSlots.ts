@@ -105,8 +105,8 @@ export interface PackageReadiness {
 const DEPENDENCY_LABELS: Record<string, string> = {
   SAVE_FORM_COPY: "Download and save filed form (step 7)",
   SAVE_PROOF_PAYMENT: "Save proof of payment (step 9)",
-  RECEIVE_TRRC: "Receive & save BIR confirmation, TRRC (step 10)",
-  SAWT_VALIDATION: "Receive & save SAWT validation email (step 14)",
+  RECEIVE_TRRC: "Save TRRC email (step 10)",
+  SAWT_VALIDATION: "Save eAFS validation email (step 14)",
 };
 
 /**

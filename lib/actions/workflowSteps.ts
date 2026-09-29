@@ -16,11 +16,15 @@ import {
   NO_START_NO_SKIP_STEP_CODES,
   BIR_CONFIRMATIONS_UNLOCK_STEP_CODE,
   BIR_WAIT_STEP_CODES,
+  EAFS_SELF_COMPLETING_STEP_CODES,
+  groupForStepCode,
+  stepLockReason,
 } from "@/lib/workflow/groups";
+import { buildESubmissionEmail } from "@/lib/workflow/eSubmissionEmail";
 import { buildLiveAdviceMessageForFiling } from "@/lib/workflow/adviceMessage";
 import { Prisma } from "@prisma/client";
 import { getFilingSheet, readFilingSheet } from "@/lib/filingComputation";
-import type { FilingComputationResult } from "@/lib/tax/types";
+import type { FilingComputationResult, Period } from "@/lib/tax/types";
 
 export type StepActionResult = { ok: boolean; error?: string };
 
@@ -77,6 +81,22 @@ export async function markStepDone(stepId: string): Promise<StepActionResult> {
       error:
         "8% election for this taxable year is not confirmed Elected — Q1 steps cannot be marked done until this is resolved (SPEC.md 3.1: an unconfirmed election may default to graduated rates, making this filing's computation wrong).",
     };
+  }
+
+  // D86/D88 (brief #5o §4) — steps 11 and 13 complete themselves when their
+  // document(s) are saved; there is no Mark done to click, refused here so
+  // it can't be bypassed by calling this action directly.
+  if (EAFS_SELF_COMPLETING_STEP_CODES.includes(step.stepCode)) {
+    return { ok: false, error: `Step ${step.sequence} completes by itself once its file${step.stepCode === "ALPHALIST_ENTRY" ? "s are" : " is"} saved — there's no Mark done.` };
+  }
+
+  // D85 (brief #5o §3) — the eAFS group (11, 12, 13, 15) opens only once File
+  // and Pay are Done; step 12 also needs step 11. Enforced here for every
+  // step in the group. A step that doesn't apply (no Form 2307, D93) can't be worked at all.
+  if (groupForStepCode(step.stepCode)?.code === "EAFS") {
+    if (step.status === "NA") return { ok: false, error: "This step doesn't apply — there's no Form 2307 on this filing." };
+    const lock = stepLockReason(step.stepCode, step.filing.workflowSteps);
+    if (lock) return { ok: false, error: lock };
   }
 
   // Brief #4c fix — the group-level block (brief #4b's prepareGroupBlockReason)
@@ -185,25 +205,7 @@ export async function markStepDone(stepId: string): Promise<StepActionResult> {
   // Done, so neither can have been touched yet — making this a one-way
   // transition that's never re-triggered by a later no-op call to this
   // same function.
-  for (const [gatedStepCode, gatingStepCode] of Object.entries(BIR_CONFIRMATIONS_UNLOCK_STEP_CODE)) {
-    if (step.stepCode !== gatingStepCode) continue;
-    const gatedStep = step.filing.workflowSteps.find((s) => s.stepCode === gatedStepCode);
-    if (!gatedStep || gatedStep.status !== "PENDING") continue;
-    const gatedUpdated = await prisma.workflowStep.update({
-      where: { id: gatedStep.id },
-      data: { status: "WAITING_EXTERNAL", waitingSince: now, actorId },
-    });
-    await logActivity({
-      entityType: "WorkflowStep",
-      entityId: gatedStep.id,
-      action: "UPDATE",
-      before: gatedStep,
-      after: gatedUpdated,
-      actorId,
-      note: `Step ${gatedUpdated.sequence} started waiting on BIR automatically.`,
-    });
-    await recomputeFilingStatus(step.filingId, actorId);
-  }
+  await startGatedBirWaits(step.filingId, step.stepCode, actorId, now);
 
   // D76 (brief #5m §3.4, her decision) — "nothing to pay" makes steps 8
   // and 9 (MAKE_PAYMENT, SAVE_PROOF_PAYMENT) NA automatically, at the
@@ -241,6 +243,8 @@ export async function markStepDone(stepId: string): Promise<StepActionResult> {
     }
   }
 
+  if (step.stepCode === "EMAIL_DAT") await saveDataEmailDraft(step.filingId);
+
   // Brief #5e §3 — the message is saved exactly as sent at the moment
   // step 4 is marked Done, not rebuilt live afterward. If reopening later
   // clears it (see reopenPreparedFiling below), marking step 4 done again
@@ -263,6 +267,62 @@ export async function markStepDone(stepId: string): Promise<StepActionResult> {
   revalidatePath("/filings");
 
   return { ok: true };
+}
+
+/**
+ * D68/D71/D88 — the moment a step that gates a BIR wait is Done, the gated
+ * step (if still PENDING) starts waiting on BIR by itself, `waitingSince`
+ * stamped to that instant: step 5 -> 10, step 12 -> 13, step 13 -> 14. Used
+ * by markStepDone AND by recomputeFileGroupDocStepStatus, since step 13 now
+ * completes through an upload (not a Mark done) and must still start step
+ * 14's wait. A one-way transition — it only ever touches a PENDING step.
+ */
+async function startGatedBirWaits(filingId: string, doneStepCode: string, actorId: string, now: Date): Promise<void> {
+  for (const [gatedStepCode, gatingStepCode] of Object.entries(BIR_CONFIRMATIONS_UNLOCK_STEP_CODE)) {
+    if (doneStepCode !== gatingStepCode) continue;
+    const gatedStep = await prisma.workflowStep.findFirst({ where: { filingId, stepCode: gatedStepCode } });
+    if (!gatedStep || gatedStep.status !== "PENDING") continue;
+    const gatedUpdated = await prisma.workflowStep.update({
+      where: { id: gatedStep.id },
+      data: { status: "WAITING_EXTERNAL", waitingSince: now, actorId },
+    });
+    await logActivity({
+      entityType: "WorkflowStep",
+      entityId: gatedStep.id,
+      action: "UPDATE",
+      before: gatedStep,
+      after: gatedUpdated,
+      actorId,
+      note: `Step ${gatedUpdated.sequence} started waiting on BIR automatically.`,
+    });
+    await recomputeFilingStatus(filingId, actorId);
+  }
+}
+
+/**
+ * D87 (brief #5o §4) — when step 12 is marked Done, the exact eSubmission
+ * email draft (to, subject, body) is saved on the filing, the same pattern
+ * as step 4's advice message (D51): the card then shows what was actually
+ * sent, never a rebuild from since-changed client details.
+ */
+async function saveDataEmailDraft(filingId: string): Promise<void> {
+  const filing = await prisma.filing.findUnique({ where: { id: filingId }, include: { client: true } });
+  if (!filing) return;
+  const ruleSet = await prisma.taxRuleSet.findUnique({ where: { taxableYear: filing.taxableYear } });
+  const email = buildESubmissionEmail({
+    toAddress: ruleSet?.eSubmissionEmail ?? "",
+    period: filing.period as Period,
+    taxableYear: filing.taxableYear,
+    formType: filing.formType,
+    registeredName: filing.client.registeredName,
+    tin: filing.client.tin,
+    branchCode: filing.client.branchCode,
+    rdoCode: filing.client.rdoCode,
+  });
+  await prisma.filing.update({
+    where: { id: filingId },
+    data: { dataEmailTo: email.to, dataEmailSubject: email.subject, dataEmailBody: email.body, dataEmailSavedAt: new Date() },
+  });
 }
 
 /**
@@ -516,7 +576,11 @@ export async function recomputeFileGroupDocStepStatus(stepId: string): Promise<v
   });
   if (!step) return;
 
-  const hasDoc = step.documents.length > 0;
+  // D86 — a step with more than one required slot (step 11: generated report
+  // AND DAT file) is complete only when EVERY required slot has a file.
+  // Single-slot steps behave exactly as before.
+  const hasDoc =
+    step.documents.length > 0 && missingRequiredSlots(parseDocSlots(step.requiredDocSlots), step.documents).length === 0;
   const actorId = await getActorId();
 
   if (hasDoc && step.status !== "DONE") {
@@ -540,6 +604,8 @@ export async function recomputeFileGroupDocStepStatus(stepId: string): Promise<v
     });
     await logActivity({ entityType: "WorkflowStep", entityId: step.id, action: "UPDATE", before: step, after: updated, actorId });
     await recomputeFilingStatus(step.filingId, actorId);
+    // D71/D88 — a step completed by an upload can be the gate for the next BIR wait (13 -> 14).
+    await startGatedBirWaits(step.filingId, step.stepCode, actorId, new Date());
     revalidatePath(`/clients/${step.filing.clientId}/filings/${step.filingId}`);
     revalidatePath("/filings");
   } else if (!hasDoc && step.status === "DONE") {
@@ -610,7 +676,7 @@ export async function markStepWaitingExternal(stepId: string): Promise<StepActio
   // above), so there's nothing left for a manual click to do. Refused
   // here, not just by removing the button, so it can't be bypassed by
   // calling this action directly.
-  if (step.stepCode === "RECEIVE_TRRC" || step.stepCode === "SAWT_VALIDATION") {
+  if (step.stepCode === "RECEIVE_TRRC" || step.stepCode === "SAWT_VALIDATION" || step.stepCode === "SAWT_ACK") {
     return {
       ok: false,
       error: `Step ${step.sequence} starts waiting on BIR automatically once its own earlier step is done — there's no manual Mark waiting any more.`,

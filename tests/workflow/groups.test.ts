@@ -543,10 +543,10 @@ describe("nextActionModeForStepCode (D77)", () => {
     }
   });
 
-  it("every other step (11-13, 15, 16) keeps the full Start + Mark done pair", () => {
-    for (const code of ["ALPHALIST_ENTRY", "EMAIL_DAT", "SAWT_ACK", "EAFS_SUBMIT", "SEND_CLIENT_PACKAGE"]) {
-      expect(nextActionModeForStepCode(code)).toBe("full");
-    }
+  it("D86-D89 (brief #5o): 11 and 13 are go-to-step (self-completing), 12 and 15 Mark done only; only step 16 keeps Start + Mark done", () => {
+    for (const code of ["ALPHALIST_ENTRY", "SAWT_ACK"]) expect(nextActionModeForStepCode(code)).toBe("goToStep");
+    for (const code of ["EMAIL_DAT", "EAFS_SUBMIT"]) expect(nextActionModeForStepCode(code)).toBe("markDoneOnly");
+    expect(nextActionModeForStepCode("SEND_CLIENT_PACKAGE")).toBe("full");
   });
 });
 

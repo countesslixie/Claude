@@ -545,6 +545,14 @@ model Filing {
   adviceMessageBody    String?
   adviceMessageSavedAt DateTime?
 
+  // Brief #5o §4 (D87) — step 12's "Email DAT file to BIR eSubmission": the
+  // exact draft (to/subject/body) saved when step 12 is marked Done, the
+  // same pattern as step 4's advice message above. Null until then.
+  dataEmailTo      String?
+  dataEmailSubject String?
+  dataEmailBody    String?
+  dataEmailSavedAt DateTime?
+
   // Brief #5f §3 — item 61 (1701Q) / item 63 (1701A), "Other Tax
   // Credits/Payments." One figure PER RETURN now (supersedes brief #5e's
   // year-level ClientTaxYear.otherCreditsCents) — it can change from
@@ -759,6 +767,11 @@ model TaxRuleSet {
   // adjusted BIR due date (shifted earlier on a weekend/holiday). Never a
   // literal in code; display-only, changes no real deadline.
   clientPaymentLeadDays Int @default(10)
+
+  // Brief #5o §4 (D87) — the BIR eSubmission address step 12's email draft
+  // is addressed to, as given by the bookkeeper (never a literal in code, D4).
+  // Editable on the tax rule set screen; confirm it against BIR before live use (D19).
+  eSubmissionEmail String @default("esubmission@bir.gov.ph")
 
   // Late filing exposure (informational only — see SPEC.md 3.7)
   surchargeRateBps          Int?

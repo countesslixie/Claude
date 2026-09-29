@@ -92,8 +92,13 @@ describe("end-to-end: driving a filing from step 1 to step 16", () => {
         expect(uploadResult.ok).toBe(true);
       }
 
-      const doneResult = await markStepDone(step.id);
-      expect(doneResult.ok).toBe(true);
+      // Steps 6, 7, 9, 10, 11, 13, 14 complete themselves once their file(s) are in
+      // (D67/D71/D75/D86/D88) and have no Mark done; the rest are marked Done.
+      const afterUploads = await prisma.workflowStep.findUniqueOrThrow({ where: { id: step.id } });
+      if (afterUploads.status !== "DONE") {
+        const doneResult = await markStepDone(step.id);
+        expect(doneResult.ok, `${step.stepCode}: ${doneResult.error}`).toBe(true);
+      }
     }
 
     const finalSteps = await prisma.workflowStep.findMany({ where: { filingId: filing.id } });

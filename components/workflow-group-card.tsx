@@ -43,6 +43,7 @@ export function WorkflowGroupCard({
   noteLabel = null,
   defaultOpen,
   stepCodes,
+  notApplicable = false,
   children,
 }: {
   name: string;
@@ -58,6 +59,12 @@ export function WorkflowGroupCard({
   defaultOpen: boolean;
   /** D77/D80 — every step code in this group, so "Go to step" knows which group to expand. */
   stepCodes: readonly string[];
+  /**
+   * D91 (brief #5o §5) — every step in this group is NA and none is being shown
+   * (the "Show N not applicable" toggle is off): there is nothing to expand, so
+   * the header is plain text with no Expand link and no empty box under it.
+   */
+  notApplicable?: boolean;
   children: React.ReactNode;
 }) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
@@ -71,6 +78,18 @@ export function WorkflowGroupCard({
     window.addEventListener(OPEN_STEP_EVENT, onOpenStep);
     return () => window.removeEventListener(OPEN_STEP_EVENT, onOpenStep);
   }, [stepCodes]);
+
+  if (notApplicable) {
+    return (
+      <div className="rounded-lg border border-line">
+        <div className="flex flex-wrap items-center gap-2 p-3">
+          <span className="text-sm font-medium text-ink">{name}</span>
+          {isComplete && <StatusBadge tone="done">Done</StatusBadge>}
+          {noteLabel && <span className="text-xs text-faint">{noteLabel}</span>}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-lg border border-line">

@@ -22,8 +22,6 @@ export interface ClientPackageEmailInput {
   isOverpayment: boolean;
   finalAmountCents: number;
   hasCertificates: boolean;
-  /** True once step 15's optional eAFS slot already has a document. */
-  eafsConfirmationSaved: boolean;
   nextPeriodLabel: Period | null;
   nextPeriodDueDate: Date | null;
 }
@@ -38,7 +36,6 @@ export function buildClientPackageEmail(input: ClientPackageEmailInput): { subje
     "  · BIR confirmation (TRRC)",
   ];
   if (input.hasCertificates) contentsLines.push("  · Form 2307 certificates claimed this quarter");
-  if (input.eafsConfirmationSaved) contentsLines.push("  · eAFS confirmation");
 
   const summaryLines = [
     `  Gross sales/receipts        ${centsToPesos(input.grossSalesCents, { withSymbol: true })}`,
@@ -65,10 +62,6 @@ export function buildClientPackageEmail(input: ClientPackageEmailInput): { subje
     ...summaryLines,
     "",
   ];
-
-  if (!input.eafsConfirmationSaved) {
-    bodyLines.push("If you received the eAFS confirmation email, please forward it so I can keep it on file.", "");
-  }
 
   if (input.nextPeriodLabel && input.nextPeriodDueDate) {
     bodyLines.push(

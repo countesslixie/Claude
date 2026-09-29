@@ -134,6 +134,15 @@ export function TaxRuleSetForm({
           errors={errs("eafsDeadlineOffsetDays")}
           required
         />
+        <Field
+          name="eSubmissionEmail"
+          label="BIR eSubmission email address (step 12's draft is addressed to this)"
+          type="email"
+          defaultValue={v("eSubmissionEmail") || "esubmission@bir.gov.ph"}
+          errors={errs("eSubmissionEmail")}
+          required
+          hint="As given by the bookkeeper — confirm against BIR before live use"
+        />
       </fieldset>
 
       <fieldset className="grid grid-cols-1 gap-4 sm:grid-cols-2">

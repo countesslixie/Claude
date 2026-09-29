@@ -65,6 +65,7 @@ export function WorkflowStepCard({
   suppressTooltip = false,
   extra,
   controlsMode = "full",
+  lockedMessage = null,
 }: {
   step: StepCardData;
   /** A blocking reason from another step's state, e.g. step 13 -> 14 (D29). */
@@ -84,6 +85,8 @@ export function WorkflowStepCard({
    * #5f §1 removes Skip from it entirely) and step 4 (ADVISE_CLIENT).
    */
   controlsMode?: "full" | "markDoneOnly";
+  /** D85 — when set (eAFS step 15 before Pay is Done), the card shows this one muted line and no controls at all. */
+  lockedMessage?: string | null;
 }) {
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
@@ -130,6 +133,7 @@ export function WorkflowStepCard({
   }
 
   const isResolved = step.status === "DONE" || step.status === "NA" || step.status === "SKIPPED";
+  const isResolvedEarly = isResolved;
 
   // D27 — the app blocks on documents it receives, never on proof the
   // bookkeeper did something: only `required` slots gate DONE. Optional
@@ -189,6 +193,8 @@ export function WorkflowStepCard({
           </Button>
         </div>
       )}
+
+      {lockedMessage && !isResolvedEarly && <p className="mt-1 text-xs text-faint">{lockedMessage}</p>}
 
       {extra && <div className="mt-2">{extra}</div>}
 
@@ -322,7 +328,7 @@ export function WorkflowStepCard({
         </div>
       )}
 
-      {!isResolved && (
+      {!isResolved && !lockedMessage && (
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           {controlsMode === "full" && step.status === "PENDING" && (
             <Button size="sm" variant="secondary" disabled={isPending} onClick={() => run(() => markStepInProgress(step.id))}>

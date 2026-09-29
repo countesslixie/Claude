@@ -110,7 +110,18 @@ export const BIR_CONFIRMATIONS_SELF_COMPLETING_STEP_CODES: readonly string[] = [
 export const BIR_CONFIRMATIONS_UNLOCK_STEP_CODE: Record<string, string> = {
   RECEIVE_TRRC: "FILE_RETURN",
   SAWT_VALIDATION: "SAWT_ACK",
+  // D88 (brief #5o) — step 13 waits on BIR the moment step 12 is Done, exactly like 10 and 14.
+  // (It lives in the eAFS group, not BIR Confirmations; the map is named for the mechanism.)
+  SAWT_ACK: "EMAIL_DAT",
 };
+
+/**
+ * D86/D88 (brief #5o §4) — the two eAFS steps that complete themselves when
+ * their document(s) are saved: step 11 (BOTH the generated report and the
+ * DAT file must be present) and step 13 (the acknowledgement email). Neither
+ * has Start, Mark done, Mark waiting or Skip — refused server-side.
+ */
+export const EAFS_SELF_COMPLETING_STEP_CODES: readonly string[] = ["ALPHALIST_ENTRY", "SAWT_ACK"];
 
 /**
  * D75 (brief #5m §3.3) — step 9 (SAVE_PROOF_PAYMENT) unlocks once step 8
@@ -138,6 +149,7 @@ export const SELF_COMPLETING_DOC_STEP_CODES: readonly string[] = [
   ...FILE_GROUP_SELF_COMPLETING_STEP_CODES,
   ...BIR_CONFIRMATIONS_SELF_COMPLETING_STEP_CODES,
   ...PAY_SELF_COMPLETING_STEP_CODES,
+  ...EAFS_SELF_COMPLETING_STEP_CODES,
 ];
 
 /**
@@ -168,6 +180,11 @@ export const NO_START_NO_SKIP_STEP_CODES: readonly string[] = [
   ...FILE_GROUP_NO_START_NO_SKIP,
   ...PAY_GROUP_NO_START_NO_SKIP,
   "SAWT_VALIDATION",
+  // D86-D89 (brief #5o §4) — the whole eAFS group: 11 and 13 complete on upload, 12 and 15 are Mark done only.
+  "ALPHALIST_ENTRY",
+  "EMAIL_DAT",
+  "SAWT_ACK",
+  "EAFS_SUBMIT",
 ];
 
 /**
@@ -201,9 +218,17 @@ const NEXT_ACTION_GO_TO_STEP: readonly string[] = [
   "SAVE_PROOF_PAYMENT",
   "RECEIVE_TRRC",
   "SAWT_VALIDATION",
+  "ALPHALIST_ENTRY",
+  "SAWT_ACK",
 ];
 
-const NEXT_ACTION_MARK_DONE_ONLY: readonly string[] = ["PREPARE_RETURN", "ADVISE_CLIENT", "FILE_RETURN"];
+const NEXT_ACTION_MARK_DONE_ONLY: readonly string[] = [
+  "PREPARE_RETURN",
+  "ADVISE_CLIENT",
+  "FILE_RETURN",
+  "EMAIL_DAT",
+  "EAFS_SUBMIT",
+];
 
 export function nextActionModeForStepCode(stepCode: string): NextActionMode {
   if (NEXT_ACTION_GO_TO_STEP.includes(stepCode)) return "goToStep";

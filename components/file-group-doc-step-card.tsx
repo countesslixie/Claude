@@ -57,9 +57,7 @@ export function FileGroupDocStepCard({
   status,
   isUnlocked,
   lockedMessage,
-  slotCode,
-  slotLabel,
-  documents,
+  slots,
   waitingOnLabel,
   agingDaysWaiting,
   agingTone,
@@ -72,16 +70,19 @@ export function FileGroupDocStepCard({
   isUnlocked: boolean;
   /** e.g. "Available once step 5 is done." — shown in place of any controls while locked. */
   lockedMessage: string;
-  slotCode: string;
-  slotLabel: string;
-  documents: FileGroupDoc[];
+  /**
+   * One entry per required document. Steps 6, 7, 9, 10, 13, 14 have one; step 11
+   * (D86) has two — the generated report and the DAT file — and is Done only when
+   * BOTH have a file (lib/actions/workflowSteps.ts's recomputeFileGroupDocStepStatus).
+   */
+  slots: { slotCode: string; label: string; documents: FileGroupDoc[] }[];
   waitingOnLabel: string | null;
   agingDaysWaiting: number | null;
   agingTone: "green" | "amber" | "red" | null;
 }) {
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
-  const [showReplace, setShowReplace] = useState(false);
+  const [replacing, setReplacing] = useState<string | null>(null);
 
   const isDone = status === "DONE";
   const isWaiting = status === "WAITING_EXTERNAL";
@@ -95,7 +96,7 @@ export function FileGroupDocStepCard({
   // all (D75 §3.3), so this never fires for it.
   const isWaitingOnBir = isWaiting && waitingOnLabel === "BIR";
 
-  function handleUpload(formData: FormData) {
+  function handleUpload(slotCode: string, formData: FormData) {
     const file = formData.get("file");
     if (file instanceof File) {
       const tooLarge = fileTooLargeMessage(file);
@@ -113,7 +114,7 @@ export function FileGroupDocStepCard({
         setMessage(result.error ?? "Upload failed.");
         return;
       }
-      setShowReplace(false);
+      setReplacing(null);
       if (result.duplicateWarning) setMessage(result.duplicateWarning);
     });
   }
@@ -142,65 +143,61 @@ export function FileGroupDocStepCard({
 
       {!isNA && !isUnlocked && <p className="mt-1 text-xs text-faint">{lockedMessage}</p>}
 
-      {!isNA && isUnlocked && documents.length > 0 && (
-        <ul className="mt-2 flex flex-col gap-0.5">
-          {documents.map((d) => (
-            <li key={d.id} className="text-xs">
-              <a href={`/api/documents/${d.id}/download`} className="text-ink-secondary underline hover:text-ink">
-                {d.originalFilename}
-              </a>{" "}
-              <span className="text-faint">({d.documentDate})</span>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {!isNA && isUnlocked && !isDone && (
-        <form action={handleUpload} className="mt-2 flex items-center gap-1.5">
-          <p className="sr-only">{slotLabel}</p>
-          <Input type="file" name="file" required className="h-8 text-xs" />
-          <Input
-            type="date"
-            name="documentDate"
-            defaultValue={new Date().toISOString().split("T")[0]}
-            className="h-8 w-36 text-xs"
-          />
-          <Button type="submit" size="sm" variant="secondary" disabled={isPending}>
-            Upload
-          </Button>
-        </form>
-      )}
-
-      {isUnlocked && isDone && !showReplace && (
-        <button
-          type="button"
-          onClick={() => setShowReplace(true)}
-          className="mt-1 text-xs text-faint underline hover:text-ink"
-        >
-          Replace
-        </button>
-      )}
-      {isUnlocked && isDone && showReplace && (
-        <form action={handleUpload} className="mt-1 flex items-center gap-1.5">
-          <Input type="file" name="file" required className="h-8 text-xs" />
-          <Input
-            type="date"
-            name="documentDate"
-            defaultValue={new Date().toISOString().split("T")[0]}
-            className="h-8 w-36 text-xs"
-          />
-          <Button type="submit" size="sm" variant="secondary" disabled={isPending}>
-            Replace
-          </Button>
-          <button
-            type="button"
-            onClick={() => setShowReplace(false)}
-            className="text-xs text-faint underline hover:text-ink-secondary"
-          >
-            Cancel
-          </button>
-        </form>
-      )}
+      {!isNA &&
+        isUnlocked &&
+        slots.map((slot) => {
+          const hasFile = slot.documents.length > 0;
+          const showForm = !hasFile || replacing === slot.slotCode;
+          return (
+            <div key={slot.slotCode} className={slots.length > 1 ? "mt-2 rounded border border-line bg-background p-2" : "mt-2"}>
+              {slots.length > 1 && <p className="text-xs font-medium text-ink-secondary">{slot.label}</p>}
+              {hasFile && (
+                <ul className="flex flex-col gap-0.5">
+                  {slot.documents.map((d) => (
+                    <li key={d.id} className="text-xs">
+                      <a href={`/api/documents/${d.id}/download`} className="text-ink-secondary underline hover:text-ink">
+                        {d.originalFilename}
+                      </a>{" "}
+                      <span className="text-faint">({d.documentDate})</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {showForm ? (
+                <form action={(fd) => handleUpload(slot.slotCode, fd)} className="mt-1 flex items-center gap-1.5">
+                  <p className="sr-only">{slot.label}</p>
+                  <Input type="file" name="file" required className="h-8 text-xs" />
+                  <Input
+                    type="date"
+                    name="documentDate"
+                    defaultValue={new Date().toISOString().split("T")[0]}
+                    className="h-8 w-36 text-xs"
+                  />
+                  <Button type="submit" size="sm" variant="secondary" disabled={isPending}>
+                    {hasFile ? "Replace" : "Upload"}
+                  </Button>
+                  {hasFile && (
+                    <button
+                      type="button"
+                      onClick={() => setReplacing(null)}
+                      className="text-xs text-faint underline hover:text-ink-secondary"
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </form>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setReplacing(slot.slotCode)}
+                  className="mt-1 text-xs text-faint underline hover:text-ink"
+                >
+                  Replace
+                </button>
+              )}
+            </div>
+          );
+        })}
 
       {message && <p className="mt-2 rounded bg-amber-tint px-2 py-1 text-xs text-amber">{message}</p>}
     </div>

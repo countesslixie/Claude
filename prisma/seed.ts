@@ -273,7 +273,7 @@ const WORKFLOW_STEP_TEMPLATE: Array<{
   {
     stepCode: "RECEIVE_TRRC",
     sequence: 10,
-    title: "Receive & save BIR confirmation (TRRC)",
+    title: "Save TRRC email", // D90 (brief #5o) — was "Receive & save BIR confirmation (TRRC)"
     category: "FILING",
     isWaitingState: true,
     waitingOnLabel: "BIR",
@@ -322,7 +322,7 @@ const WORKFLOW_STEP_TEMPLATE: Array<{
   {
     stepCode: "SAWT_VALIDATION",
     sequence: 14,
-    title: "Receive & save validation email",
+    title: "Save eAFS validation email", // D92 (brief #5o) — was "Receive & save validation email"
     category: "SAWT",
     isConditional: true,
     conditionExpression: "requiresSawt == true",
@@ -334,18 +334,18 @@ const WORKFLOW_STEP_TEMPLATE: Array<{
     ],
   },
   {
-    // The one documented exception (D27): the eAFS confirmation is
-    // addressed to the client, not the bookkeeper, and often never
-    // reaches her — she can't obtain it on demand. Optional and hidden
-    // behind a disclosure, never demanded, never blocking; she can still
-    // save it when she has it.
+    // D89 (brief #5o, her decision) — no document at all: the eAFS
+    // confirmation is addressed to the client and she doesn't need it saved.
+    // This retires D27's one documented exception (an optional slot).
+    // D93 — conditional like 11-14: eAFS applies only when the filing has a
+    // Form 2307. Mark done only (no Start, no Skip).
     stepCode: "EAFS_SUBMIT",
     sequence: 15,
     title: "Complete and submit eAFS",
     category: "ATTACHMENT",
-    requiredDocSlots: [
-      { slotCode: "eafs_confirmation", label: "eAFS confirmation", required: false, acceptedTypes: ["pdf", "jpg"] },
-    ],
+    isConditional: true,
+    conditionExpression: "requiresSawt == true",
+    requiredDocSlots: [],
   },
   {
     // No slot (D27, §5) — replaced by a package download button and a
@@ -401,6 +401,29 @@ async function seedWorkflowStepTemplate() {
   await prisma.workflowStepTemplate.updateMany({
     where: { stepCode: { notIn: currentStepCodes } },
     data: { isActive: false },
+  });
+
+  // D90/D92/D89/D93 (brief #5o) -- same class of bug as D66's: existing
+  // WorkflowStep rows keep their own copy of title, doc slots and the
+  // conditional flag. Backfilled so a plain reseed over an existing database
+  // reaches them: the two renames, step 15 losing its slot and becoming
+  // conditional, and step 15 going NA on a filing with no Form 2307 that
+  // hasn't started it.
+  await prisma.workflowStep.updateMany({
+    where: { stepCode: "RECEIVE_TRRC", title: "Receive & save BIR confirmation (TRRC)" },
+    data: { title: "Save TRRC email" },
+  });
+  await prisma.workflowStep.updateMany({
+    where: { stepCode: "SAWT_VALIDATION", title: "Receive & save validation email" },
+    data: { title: "Save eAFS validation email" },
+  });
+  await prisma.workflowStep.updateMany({
+    where: { stepCode: "EAFS_SUBMIT" },
+    data: { requiredDocSlots: "[]", isConditional: true, conditionExpression: "requiresSawt == true" },
+  });
+  await prisma.workflowStep.updateMany({
+    where: { stepCode: "EAFS_SUBMIT", status: "PENDING", filing: { requiresSawt: false } },
+    data: { status: "NA" },
   });
 
   // D66 (brief #5k §3) -- a WorkflowStep row keeps its own copy of title,

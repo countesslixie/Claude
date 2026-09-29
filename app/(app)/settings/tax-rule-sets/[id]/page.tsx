@@ -29,6 +29,7 @@ export default async function EditTaxRuleSetPage({
     annualDueMonthDay: ruleSet.annualDueMonthDay,
     sawtDeadlineOffsetDays: String(ruleSet.sawtDeadlineOffsetDays),
     eafsDeadlineOffsetDays: String(ruleSet.eafsDeadlineOffsetDays),
+    eSubmissionEmail: ruleSet.eSubmissionEmail,
     surchargeRateBps: ruleSet.surchargeRateBps != null ? String(ruleSet.surchargeRateBps) : "",
     interestRateBpsPerAnnum:
       ruleSet.interestRateBpsPerAnnum != null ? String(ruleSet.interestRateBpsPerAnnum) : "",

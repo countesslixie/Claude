@@ -113,7 +113,7 @@ describe("seed scenarios (D82)", () => {
     expect(f.amountPaidCents).toBeNull();
     expect(firstRunOutput).toContain("Rosario Garcia TY2026 Q3 overpayment: ₱8,200.00");
     for (const code of ["ALPHALIST_ENTRY", "EMAIL_DAT", "SAWT_ACK", "SAWT_VALIDATION"]) expect(statusOf(f, code)).toBe("NA");
-    expect(statusOf(f, "EAFS_SUBMIT")).toBe("PENDING");
+    expect(statusOf(f, "EAFS_SUBMIT")).toBe("NA"); // D93: no certificate -> the whole eAFS group is NA
   });
 
   it("F: step 5 done, steps 6/7 not saved, TRRC waiting", async () => {
@@ -132,6 +132,16 @@ describe("seed scenarios (D82)", () => {
     expect(statusOf(f, "RECEIVE_TRRC")).toBe("WAITING_EXTERNAL");
     expect(daysWaiting(f, "RECEIVE_TRRC")).toBe(8);
     expect(statusOf(f, "SAWT_VALIDATION")).toBe("WAITING_EXTERNAL");
+    // seeded through the real path: step 12's draft was saved when it was marked Done, and both returns are frozen (D83)
+    expect(f.dataEmailSubject).toMatch(/^SAWT 1701Q 09302026 GLORIA TOLENTINO \d{12}$/);
+    expect(f.computationSnapshot).not.toBeNull();
+    expect(f.filedAt).not.toBeNull();
+  });
+
+  it("every filed sample return has a frozen snapshot", async () => {
+    const filed = await db.filing.findMany({ where: { workflowSteps: { some: { stepCode: "FILE_RETURN", status: "DONE" } } } });
+    expect(filed.length).toBeGreaterThan(0);
+    expect(filed.every((f) => f.computationSnapshot != null && f.filedAt != null)).toBe(true);
   });
 
   it("H: the mixed-income sample has an Annual filing only, not started", async () => {

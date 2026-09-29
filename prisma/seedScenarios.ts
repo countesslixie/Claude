@@ -332,7 +332,7 @@ export async function seedScenarios(prisma: PrismaClient, actorId: string): Prom
     await payTaxPayable(filing, d.paid, "GCash");
     await upload(filing.id, "SAVE_PROOF_PAYMENT", "proof", sampleFile(`Proof of payment, ${label(villamor.registeredName, q)}`, "SAMPLE_proof.pdf"), d.paid);
     await upload(filing.id, "RECEIVE_TRRC", "trrc", sampleFile(`TRRC, ${label(villamor.registeredName, q)}`, "SAMPLE_TRRC.pdf"), d.trrc);
-    await done(filing.id, "EAFS_SUBMIT");
+    // no certificates -> the whole eAFS group is NA (D93), so there is no step 15 to do
     await done(filing.id, "SEND_CLIENT_PACKAGE");
   }
 
@@ -437,7 +437,7 @@ export async function seedScenarios(prisma: PrismaClient, actorId: string): Prom
     withholdingBps: null, // no certificates: step 2 is skipped from the start, steps 11-14 NA
     engagedSince: "2026-01-15",
     notes:
-      "Sample E: Q3 overpayment, filed, no certificates. Pay reads 'Nothing to pay — overpayment'; the eAFS group shows only step 15. Q1/Q2 were filed outside the app (starting figures).",
+      "Sample E: Q3 overpayment, filed, no certificates. Pay reads 'Nothing to pay — overpayment'; the eAFS group reads 'Not applicable — no Form 2307' (D93). Q1/Q2 were filed outside the app (starting figures).",
   });
   // Her latest return filed outside the app is Q2 (illustrative figures): item 51 ₱500,000,
   // items 57/58 ₱10,000 + ₱15,000, item 56 ₱2,000, ₱8,000 paid on Q2 itself.
@@ -503,7 +503,7 @@ export async function seedScenarios(prisma: PrismaClient, actorId: string): Prom
     withholdingBps: 500,
     engagedSince: "2026-01-18",
     notes:
-      "Sample G: Q3 — everything of hers is done including eAFS; TRRC waiting about 8 days (red) and SAWT validation waiting. The card sits in BIR Confirmations.",
+      "Sample G: Q3 — everything of hers is done including eAFS; TRRC waiting about 8 days (red) and eAFS validation waiting. The card sits in BIR Confirmations.",
   });
   await startingFigures(tolentino.id, "Q2", {
     cumulativeIncome: "300,000.00",
@@ -541,12 +541,11 @@ export async function seedScenarios(prisma: PrismaClient, actorId: string): Prom
     // eAFS group: steps 11, 12, 13, 15 — all of hers.
     await upload(filing.id, "ALPHALIST_ENTRY", "generated_report", sampleFile(`Alphalist report, ${label(name, "Q3")}`, "SAMPLE_alphalist.pdf"), dateStr(8));
     await upload(filing.id, "ALPHALIST_ENTRY", "dat_file", sampleFile(`DAT file, ${label(name, "Q3")}`, "SAMPLE_alphalist.dat", "text"), dateStr(8));
-    await done(filing.id, "ALPHALIST_ENTRY");
+    // step 11 completed itself once BOTH files were in (D86); step 12 is Mark done (saves the email draft, D87)
+    // and starts step 13's wait (D88); uploading the acknowledgement completes 13 and starts step 14's wait (D71).
     await done(filing.id, "EMAIL_DAT");
     await upload(filing.id, "SAWT_ACK", "acknowledgement", sampleFile(`Acknowledgement email, ${label(name, "Q3")}`, "SAMPLE_ack.pdf"), dateStr(6));
-    await done(filing.id, "SAWT_ACK"); // starts step 14's wait automatically (D71)
-    await upload(filing.id, "EAFS_SUBMIT", "eafs_confirmation", sampleFile(`eAFS confirmation, ${label(name, "Q3")}`, "SAMPLE_eafs.pdf"), dateStr(5));
-    await done(filing.id, "EAFS_SUBMIT");
+    await done(filing.id, "EAFS_SUBMIT"); // step 15: Mark done only, no file (D89)
     await backdateWait(filing.id, "RECEIVE_TRRC", 8, "FILE_RETURN");
     await backdateWait(filing.id, "SAWT_VALIDATION", 3, "SAWT_ACK");
   }
