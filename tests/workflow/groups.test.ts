@@ -8,6 +8,8 @@ import {
   prepareGroupBlockReason,
   payGroupBlockReason,
   nextActionModeForStepCode,
+  groupCounterLabel,
+  nothingToPayLabel,
   type GroupStepInput,
 } from "@/lib/workflow/groups";
 
@@ -545,5 +547,35 @@ describe("nextActionModeForStepCode (D77)", () => {
     for (const code of ["ALPHALIST_ENTRY", "EMAIL_DAT", "SAWT_ACK", "EAFS_SUBMIT", "SEND_CLIENT_PACKAGE"]) {
       expect(nextActionModeForStepCode(code)).toBe("full");
     }
+  });
+});
+
+describe("all-NA group header (D81, brief #5n §4)", () => {
+  const pay = WORKFLOW_GROUPS.find((g) => g.code === "PAY")!;
+  const eafs = WORKFLOW_GROUPS.find((g) => g.code === "EAFS")!;
+  const naSteps = (codes: string[]) => codes.map((stepCode) => ({ stepCode, status: "NA" as const, waitingOnLabel: null, agingDaysWaiting: null }));
+
+  it("Pay with steps 8 and 9 both NA is complete with a 0-of-0 count — and the counter label is null", () => {
+    const summary = summarizeGroup(pay, naSteps(["MAKE_PAYMENT", "SAVE_PROOF_PAYMENT"]));
+    expect(summary.isComplete).toBe(true);
+    expect(summary.totalCount).toBe(0);
+    expect(groupCounterLabel(summary.doneCount, summary.totalCount, summary.skippedCount)).toBeNull();
+  });
+
+  it("applies to any group, not just Pay (eAFS with 11-13 and 15 all NA)", () => {
+    const summary = summarizeGroup(eafs, naSteps(["ALPHALIST_ENTRY", "EMAIL_DAT", "SAWT_ACK", "EAFS_SUBMIT"]));
+    expect(groupCounterLabel(summary.doneCount, summary.totalCount, summary.skippedCount)).toBeNull();
+  });
+
+  it("an ordinary group still shows its counter, with the skipped suffix", () => {
+    expect(groupCounterLabel(4, 4, 0)).toBe("4 of 4");
+    expect(groupCounterLabel(4, 4, 1)).toBe("4 of 4 · 1 skipped");
+    expect(groupCounterLabel(0, 1, 0)).toBe("0 of 1");
+  });
+
+  it("Nothing to pay shows the amount for an overpayment, plain for exactly zero", () => {
+    expect(nothingToPayLabel(true, 820000)).toBe("Nothing to pay — overpayment ₱8,200.00");
+    expect(nothingToPayLabel(false, 0)).toBe("Nothing to pay");
+    expect(nothingToPayLabel(true, 0)).toBe("Nothing to pay");
   });
 });

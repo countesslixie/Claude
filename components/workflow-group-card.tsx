@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { StatusBadge } from "@/components/status-badge";
 import { OPEN_STEP_EVENT } from "@/components/go-to-step";
+import { groupCounterLabel } from "@/lib/workflow/groups";
 
 /**
  * Brief #4a — a collapsed group shows its name, progress, and what's
@@ -25,12 +26,11 @@ import { OPEN_STEP_EVENT } from "@/components/go-to-step";
  * "N skipped" suffix whenever any step in the group is skipped, so a skip
  * never reads as if it silently vanished from the count.
  *
- * D76 (brief #5m §3.4) — `outstandingLabel` can be non-null even while
- * `isComplete` is true: Pay's "Nothing to pay — overpayment ₱X" line
- * shows alongside the green Done pill once steps 8/9 both resolve to NA.
- * Every other group's `outstandingLabel` is always null once complete (by
- * construction in lib/workflow/groups.ts), so this is a safe
- * generalisation, not a special case wired in here.
+ * D76/D81 (briefs #5m/#5n) — Pay's "Nothing to pay — overpayment ₱X" line
+ * shows alongside the green Done pill once steps 8/9 both resolve to NA. It
+ * comes in as `noteLabel`, muted grey (D81: amber means waiting, and nothing
+ * is waiting), and the "0 of 0" counter is hidden for any group whose steps
+ * are all NA.
  */
 export function WorkflowGroupCard({
   name,
@@ -40,6 +40,7 @@ export function WorkflowGroupCard({
   isComplete,
   unresolvedSummary,
   outstandingLabel,
+  noteLabel = null,
   defaultOpen,
   stepCodes,
   children,
@@ -52,12 +53,15 @@ export function WorkflowGroupCard({
   /** Brief #5i §3 — the Pending label's tooltip, e.g. "Step 3 and step 4 not done." */
   unresolvedSummary: string | null;
   outstandingLabel: string | null;
+  /** D81 — a plain muted-grey note (Pay's "Nothing to pay — overpayment ₱X"). Amber is for waiting only, and nothing is waiting here. */
+  noteLabel?: string | null;
   defaultOpen: boolean;
   /** D77/D80 — every step code in this group, so "Go to step" knows which group to expand. */
   stepCodes: readonly string[];
   children: React.ReactNode;
 }) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
+  const counter = groupCounterLabel(doneCount, totalCount, skippedCount);
 
   useEffect(() => {
     function onOpenStep(e: Event) {
@@ -77,11 +81,9 @@ export function WorkflowGroupCard({
           className="flex flex-1 flex-wrap items-center gap-2 text-left"
         >
           <span className="text-sm font-medium text-ink">{name}</span>
-          <span className="text-xs text-faint">
-            {doneCount} of {totalCount}
-            {skippedCount > 0 && ` · ${skippedCount} skipped`}
-          </span>
+          {counter && <span className="text-xs text-faint">{counter}</span>}
           {isComplete && <StatusBadge tone="done">Done</StatusBadge>}
+          {noteLabel && <span className="text-xs text-faint">{noteLabel}</span>}
           {outstandingLabel && <span className="text-xs text-amber">{outstandingLabel}</span>}
           <span className="ml-auto text-xs text-faint underline">{isOpen ? "Collapse" : "Expand"}</span>
         </button>

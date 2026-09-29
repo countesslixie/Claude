@@ -1,6 +1,7 @@
 import { isResolved } from "./status";
 import { missingRequiredSlots, type AttachedDocument, type DocSlotLike } from "./docSlots";
 import type { WorkflowStepStatus } from "./types";
+import { centsToPesos } from "@/lib/money";
 
 /**
  * Brief #4a — the sixteen steps wrapped in groups. This changes nothing
@@ -570,4 +571,27 @@ export function summarizeGroup(group: WorkflowGroupDef, steps: GroupStepInput[])
   }
 
   return { code: group.code, name: group.name, doneCount, totalCount, skippedCount, isComplete, blockReason, outstandingLabel, unresolvedSummary };
+}
+
+/**
+ * D81 (brief #5n §4) — the "4 of 4 · 1 skipped" counter beside a group's
+ * name. Null when the group has no applicable step at all (every step NA):
+ * "0 of 0" said nothing, and the Done pill plus the group's note are enough.
+ * Applies to any group, not just Pay.
+ */
+export function groupCounterLabel(doneCount: number, totalCount: number, skippedCount: number): string | null {
+  if (totalCount === 0) return null;
+  return `${doneCount} of ${totalCount}${skippedCount > 0 ? ` · ${skippedCount} skipped` : ""}`;
+}
+
+/**
+ * D76/D81 — Pay's note once steps 8 and 9 are both NA. Built from the
+ * return's own figures (this module stays free of I/O; the page supplies
+ * them): "Nothing to pay — overpayment ₱X" for an overpayment, plain
+ * "Nothing to pay" for exactly ₱0.
+ */
+export function nothingToPayLabel(isOverpayment: boolean, overpaymentCents: number): string {
+  return isOverpayment && overpaymentCents > 0
+    ? `Nothing to pay — overpayment ${centsToPesos(overpaymentCents, { withSymbol: true })}`
+    : "Nothing to pay";
 }

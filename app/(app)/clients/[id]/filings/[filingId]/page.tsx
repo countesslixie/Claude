@@ -43,6 +43,7 @@ import {
   prepareGroupBlockReason,
   adviseClientBlockReason,
   nextActionModeForStepCode,
+  nothingToPayLabel,
   type GroupStepInput,
 } from "@/lib/workflow/groups";
 import { parseDocSlots, type DocSlotDef, type WorkflowStepStatus } from "@/lib/workflow/types";
@@ -320,11 +321,7 @@ export default async function FilingDetailPage({
   const payStep8Status = filing.workflowSteps.find((s) => s.stepCode === "MAKE_PAYMENT")?.status;
   const payStep9Status = filing.workflowSteps.find((s) => s.stepCode === "SAVE_PROOF_PAYMENT")?.status;
   const payNothingToPayLabel =
-    payStep8Status === "NA" && payStep9Status === "NA"
-      ? sheet.isOverpayment
-        ? `Nothing to pay — overpayment ${centsToPesos(sheet.overpaymentCents, { withSymbol: true })}`
-        : "Nothing to pay"
-      : null;
+    payStep8Status === "NA" && payStep9Status === "NA" ? nothingToPayLabel(sheet.isOverpayment, sheet.overpaymentCents) : null;
 
   // Brief #5d — the sheet's shape now depends on formType (1701Q/1701A get
   // the new item-numbered result, MIXED_INCOME's 1701 keeps the old
@@ -682,7 +679,8 @@ export default async function FilingDetailPage({
                 skippedCount={summary.skippedCount}
                 isComplete={summary.isComplete}
                 unresolvedSummary={summary.unresolvedSummary}
-                outstandingLabel={def.code === "PAY" ? (payNothingToPayLabel ?? summary.outstandingLabel) : summary.outstandingLabel}
+                outstandingLabel={summary.outstandingLabel}
+                noteLabel={def.code === "PAY" ? payNothingToPayLabel : null}
                 defaultOpen={def.code === activeGroupCode}
                 stepCodes={def.stepCodes}
               >
