@@ -4,7 +4,6 @@ import { useState, useTransition } from "react";
 import { StatusBadge, type StatusTone } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { logFollowUp } from "@/lib/actions/workflowSteps";
 import { uploadDocument } from "@/lib/actions/documents";
 import { stepStatusLabel } from "@/lib/workflow/status";
 import { fileTooLargeMessage } from "@/lib/upload";
@@ -19,46 +18,48 @@ export interface FileGroupDoc {
 }
 
 /**
- * Brief #5k §4 (D67) — steps 6, 7 and 10 (SAVE_SUBMISSION_SS,
- * SAVE_FORM_COPY, RECEIVE_TRRC): the file IS the step (D27), so there is
- * no Mark done button here at all — attaching the document completes the
- * step by itself (lib/actions/workflowSteps.ts's
+ * Every self-completing document step (D67/D71/D75): steps 6, 7 (File), 9
+ * (Pay), 10, 14 (BIR Confirmations). The file IS the step (D27), so there
+ * is no Mark done button here at all — attaching the document completes
+ * the step by itself (lib/actions/workflowSteps.ts's
  * recomputeFileGroupDocStepStatus), the same self-completing pattern
  * RECEIVE_2307 already uses (D46).
  *
- * Locked entirely until step 5 (FILE_RETURN) is Done: just the Pending
- * pill and a muted "Available once step 5 is done" line, no upload box
- * and no controls of any kind. This is status about this step's own
- * state, not a block-reason explaining a disabled button (D41) — the
- * same distinction the amber "waiting on..." group summary already
- * relies on — so it's allowed to render as standing text here.
+ * Locked entirely until its own gating step is Done: just the Pending pill
+ * and a muted "Available once step N is done" line, no upload box and no
+ * controls of any kind. This is status about this step's own state, not a
+ * block-reason explaining a disabled button (D41) — the same distinction
+ * the amber "waiting on..." group summary already relies on — so it's
+ * allowed to render as standing text here.
  *
  * Once unlocked, the upload box (file + date + Upload) sits directly on
  * the card with no "Attach" link to open it first. Once Done, the file
  * shows as a normal saved document row with a Replace action (one-for-one,
  * D46's pattern).
  *
- * Brief #5l §1 (D68) — RECEIVE_TRRC (step 10) no longer has a manual Mark
- * waiting: it enters WAITING_EXTERNAL by itself the moment step 5 is
- * marked Done (markStepDone's own FILE_RETURN branch,
- * lib/actions/workflowSteps.ts), since a TRRC is always owed once the
- * return is filed. All that's left here for that state is Log follow-up,
- * the same control every other waiting step already has — shown whenever
- * `status` is live WAITING_EXTERNAL, which in practice is only ever true
- * for step 10 (6 and 7 never enter that status at all), so no per-step
- * flag is needed to gate it.
+ * D68/D71 (briefs #5l/#5m) — steps 10 and 14 alone enter WAITING_EXTERNAL
+ * automatically (the instant their own gating step is Done), never by a
+ * manual click — there is no Mark waiting button anywhere on this card for
+ * any of the five steps it's used for. D72 (brief #5m §2) — no Log
+ * follow-up either: she can't follow up with BIR on any of these, so the
+ * only thing a waiting state shows is a single "Waiting on BIR · Nd" pill,
+ * coloured by the aging thresholds (amber while waiting, red once past
+ * twice the expected response days — never green on a waiting step),
+ * replacing what used to be three separate pieces (grey "waiting on"
+ * text, a green aging pill, and an amber "Waiting" status pill all at
+ * once).
  */
 export function FileGroupDocStepCard({
   stepId,
   sequence,
   title,
   status,
-  isStep5Done,
+  isUnlocked,
+  lockedMessage,
   slotCode,
   slotLabel,
   documents,
   waitingOnLabel,
-  followUpCount,
   agingDaysWaiting,
   agingTone,
 }: {
@@ -66,13 +67,14 @@ export function FileGroupDocStepCard({
   sequence: number;
   title: string;
   status: string;
-  /** Whether step 5 (FILE_RETURN) is Done — this card is locked until then. */
-  isStep5Done: boolean;
+  /** Whether this card's own gating step is Done — locked until then. */
+  isUnlocked: boolean;
+  /** e.g. "Available once step 5 is done." — shown in place of any controls while locked. */
+  lockedMessage: string;
   slotCode: string;
   slotLabel: string;
   documents: FileGroupDoc[];
   waitingOnLabel: string | null;
-  followUpCount: number;
   agingDaysWaiting: number | null;
   agingTone: "green" | "amber" | "red" | null;
 }) {
@@ -82,14 +84,15 @@ export function FileGroupDocStepCard({
 
   const isDone = status === "DONE";
   const isWaiting = status === "WAITING_EXTERNAL";
-
-  function run(action: () => Promise<{ ok: boolean; error?: string }>) {
-    setMessage(null);
-    startTransition(async () => {
-      const result = await action();
-      if (!result.ok) setMessage(result.error ?? "Could not update this step.");
-    });
-  }
+  // D76 — an NA'd step (SAVE_PROOF_PAYMENT, on a "nothing to pay" return)
+  // sits behind the "Show N not applicable" toggle like any other NA step
+  // — just its pill, never a locked message or a form, the same as the
+  // generic WorkflowStepCard already does for NA.
+  const isNA = status === "NA";
+  // D72 — the single combined pill applies wherever this card is used for
+  // a BIR wait (steps 10, 14); step 9 never enters WAITING_EXTERNAL at
+  // all (D75 §3.3), so this never fires for it.
+  const isWaitingOnBir = isWaiting && waitingOnLabel === "BIR";
 
   function handleUpload(formData: FormData) {
     const file = formData.get("file");
@@ -119,21 +122,26 @@ export function FileGroupDocStepCard({
       <div className="flex items-start justify-between gap-2">
         <p className="text-sm font-medium text-ink">
           {sequence}. {title}
-          {isWaiting && waitingOnLabel && (
-            <span className="ml-1 text-xs font-normal text-faint">waiting on {waitingOnLabel}</span>
-          )}
         </p>
         <div className="flex items-center gap-1.5">
-          {agingTone && <StatusBadge tone={AGING_TONE[agingTone]}>{agingDaysWaiting}d</StatusBadge>}
-          <StatusBadge tone={isDone ? "done" : isWaiting ? "waiting" : "pending"}>
-            {stepStatusLabel(status as WorkflowStepStatus)}
-          </StatusBadge>
+          {isWaitingOnBir ? (
+            <StatusBadge tone={agingTone === "red" ? "overdue" : "waiting"}>
+              Waiting on BIR{agingDaysWaiting != null ? ` · ${agingDaysWaiting}d` : ""}
+            </StatusBadge>
+          ) : (
+            <>
+              {agingTone && <StatusBadge tone={AGING_TONE[agingTone]}>{agingDaysWaiting}d</StatusBadge>}
+              <StatusBadge tone={isDone ? "done" : isWaiting ? "waiting" : "pending"}>
+                {stepStatusLabel(status as WorkflowStepStatus)}
+              </StatusBadge>
+            </>
+          )}
         </div>
       </div>
 
-      {!isStep5Done && <p className="mt-1 text-xs text-faint">Available once step 5 is done.</p>}
+      {!isNA && !isUnlocked && <p className="mt-1 text-xs text-faint">{lockedMessage}</p>}
 
-      {isStep5Done && documents.length > 0 && (
+      {!isNA && isUnlocked && documents.length > 0 && (
         <ul className="mt-2 flex flex-col gap-0.5">
           {documents.map((d) => (
             <li key={d.id} className="text-xs">
@@ -146,32 +154,23 @@ export function FileGroupDocStepCard({
         </ul>
       )}
 
-      {isStep5Done && !isDone && (
-        <div className="mt-2 flex flex-col gap-2">
-          {isWaiting && (
-            <div>
-              <Button size="sm" variant="secondary" disabled={isPending} onClick={() => run(() => logFollowUp(stepId))}>
-                Log follow-up ({followUpCount})
-              </Button>
-            </div>
-          )}
-          <form action={handleUpload} className="flex items-center gap-1.5">
-            <p className="sr-only">{slotLabel}</p>
-            <Input type="file" name="file" required className="h-8 text-xs" />
-            <Input
-              type="date"
-              name="documentDate"
-              defaultValue={new Date().toISOString().split("T")[0]}
-              className="h-8 w-36 text-xs"
-            />
-            <Button type="submit" size="sm" variant="secondary" disabled={isPending}>
-              Upload
-            </Button>
-          </form>
-        </div>
+      {!isNA && isUnlocked && !isDone && (
+        <form action={handleUpload} className="mt-2 flex items-center gap-1.5">
+          <p className="sr-only">{slotLabel}</p>
+          <Input type="file" name="file" required className="h-8 text-xs" />
+          <Input
+            type="date"
+            name="documentDate"
+            defaultValue={new Date().toISOString().split("T")[0]}
+            className="h-8 w-36 text-xs"
+          />
+          <Button type="submit" size="sm" variant="secondary" disabled={isPending}>
+            Upload
+          </Button>
+        </form>
       )}
 
-      {isStep5Done && isDone && !showReplace && (
+      {isUnlocked && isDone && !showReplace && (
         <button
           type="button"
           onClick={() => setShowReplace(true)}
@@ -180,7 +179,7 @@ export function FileGroupDocStepCard({
           Replace
         </button>
       )}
-      {isStep5Done && isDone && showReplace && (
+      {isUnlocked && isDone && showReplace && (
         <form action={handleUpload} className="mt-1 flex items-center gap-1.5">
           <Input type="file" name="file" required className="h-8 text-xs" />
           <Input

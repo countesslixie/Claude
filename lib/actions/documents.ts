@@ -8,7 +8,7 @@ import { buildStorageRelativePath, saveDocumentFile } from "@/lib/documents/stor
 import { computeSha256 } from "@/lib/documents/storage";
 import { manilaDateInputToJsDate, formatManilaDate } from "@/lib/dates";
 import { recomputeReceive2307Status, recomputeFileGroupDocStepStatus } from "@/lib/actions/workflowSteps";
-import { FILE_GROUP_SELF_COMPLETING_STEP_CODES } from "@/lib/workflow/groups";
+import { SELF_COMPLETING_DOC_STEP_CODES, SELF_COMPLETING_UNLOCK_STEP_CODE } from "@/lib/workflow/groups";
 import { MAX_UPLOAD_BYTES } from "@/lib/upload";
 
 export type UploadDocumentResult = {
@@ -81,16 +81,19 @@ export async function saveDocumentForStep(params: {
     return { ok: false, error: `This file is ${fileMb} MB — the limit is ${limitMb} MB.` };
   }
 
-  // D67 (brief #5k §4) — steps 6, 7 and 10 unlock only once step 5
-  // (FILE_RETURN) is Done. Enforced here, in the upload action itself,
-  // not just by the UI hiding the upload box, so it can't be bypassed by
-  // calling this action directly.
-  if (FILE_GROUP_SELF_COMPLETING_STEP_CODES.includes(step.stepCode)) {
-    const fileReturnStep = await prisma.workflowStep.findFirst({
-      where: { filingId: filing.id, stepCode: "FILE_RETURN" },
+  // D67/D71/D75 — every self-completing doc step (6, 7, 9, 10, 14) unlocks
+  // only once its own gating step is Done (FILE_RETURN for 6/7; MAKE_PAYMENT
+  // for 9; FILE_RETURN for 10; SAWT_ACK for 14 — see
+  // SELF_COMPLETING_UNLOCK_STEP_CODE). Enforced here, in the upload action
+  // itself, not just by the UI hiding the upload box, so it can't be
+  // bypassed by calling this action directly.
+  const unlockStepCode = SELF_COMPLETING_UNLOCK_STEP_CODE[step.stepCode];
+  if (unlockStepCode) {
+    const unlockStep = await prisma.workflowStep.findFirst({
+      where: { filingId: filing.id, stepCode: unlockStepCode },
     });
-    if (fileReturnStep?.status !== "DONE") {
-      return { ok: false, error: "Can't attach this document until step 5 (file the return) is marked done." };
+    if (unlockStep?.status !== "DONE") {
+      return { ok: false, error: `Can't attach this document until step ${unlockStep?.sequence ?? "?"} is marked done.` };
     }
   }
 
@@ -162,11 +165,11 @@ export async function saveDocumentForStep(params: {
     }
   }
 
-  // D67 (brief #5k §4) — steps 6, 7 and 10's own document is one-for-one,
-  // the same "Replace" pattern D46 gave step 2's certificate scan: a new
-  // upload against this step+slot soft-deletes whatever was there before
-  // rather than accumulating alongside it.
-  if (FILE_GROUP_SELF_COMPLETING_STEP_CODES.includes(step.stepCode)) {
+  // D67/D71/D75 — every self-completing doc step's own document is
+  // one-for-one, the same "Replace" pattern D46 gave step 2's certificate
+  // scan: a new upload against this step+slot soft-deletes whatever was
+  // there before rather than accumulating alongside it.
+  if (SELF_COMPLETING_DOC_STEP_CODES.includes(step.stepCode)) {
     const siblings = await prisma.document.findMany({
       where: { workflowStepId: step.id, docSlotCode: params.docSlotCode, id: { not: created.id }, deletedAt: null },
     });
@@ -180,7 +183,7 @@ export async function saveDocumentForStep(params: {
   }
 
   if (step.stepCode === "RECEIVE_2307") await recomputeReceive2307Status(filing.id);
-  if (FILE_GROUP_SELF_COMPLETING_STEP_CODES.includes(step.stepCode)) await recomputeFileGroupDocStepStatus(step.id);
+  if (SELF_COMPLETING_DOC_STEP_CODES.includes(step.stepCode)) await recomputeFileGroupDocStepStatus(step.id);
   revalidatePath(`/clients/${client.id}/filings/${filing.id}`);
 
   return { ok: true, documentId: created.id, duplicateWarning };
@@ -237,12 +240,13 @@ export async function deleteDocument(documentId: string, reason: string): Promis
 
   if (before.filingId) {
     if (before.workflowStep?.stepCode === "RECEIVE_2307") await recomputeReceive2307Status(before.filingId);
-    // D67 (brief #5k §4.4) — removing the only file behind step 6, 7 or
-    // 10 reverts that step to PENDING; no UI calls this for those steps
-    // yet (their generic doc slots only support Add/Replace today, no
-    // Remove — confirmed by grep), but the rule is enforced here so it
-    // holds regardless of what eventually calls it.
-    if (before.workflowStep && FILE_GROUP_SELF_COMPLETING_STEP_CODES.includes(before.workflowStep.stepCode)) {
+    // D67/D71/D75 — removing the only file behind a self-completing doc
+    // step reverts it (to PENDING for 6/7/9, or back to WAITING_EXTERNAL
+    // for 10/14 — see recomputeFileGroupDocStepStatus); no UI calls this
+    // for these steps yet (their generic doc slots only support
+    // Add/Replace today, no Remove — confirmed by grep), but the rule is
+    // enforced here so it holds regardless of what eventually calls it.
+    if (before.workflowStep && SELF_COMPLETING_DOC_STEP_CODES.includes(before.workflowStep.stepCode)) {
       await recomputeFileGroupDocStepStatus(before.workflowStep.id);
     }
     revalidatePath(`/clients/${before.clientId}/filings/${before.filingId}`);

@@ -23,6 +23,13 @@ import { StatusBadge } from "@/components/status-badge";
  * (a skip is a decision she made, not a step still outstanding), with a
  * "N skipped" suffix whenever any step in the group is skipped, so a skip
  * never reads as if it silently vanished from the count.
+ *
+ * D76 (brief #5m §3.4) — `outstandingLabel` can be non-null even while
+ * `isComplete` is true: Pay's "Nothing to pay — overpayment ₱X" line
+ * shows alongside the green Done pill once steps 8/9 both resolve to NA.
+ * Every other group's `outstandingLabel` is always null once complete (by
+ * construction in lib/workflow/groups.ts), so this is a safe
+ * generalisation, not a special case wired in here.
  */
 export function WorkflowGroupCard({
   name,
@@ -61,11 +68,8 @@ export function WorkflowGroupCard({
             {doneCount} of {totalCount}
             {skippedCount > 0 && ` · ${skippedCount} skipped`}
           </span>
-          {isComplete ? (
-            <StatusBadge tone="done">Done</StatusBadge>
-          ) : (
-            outstandingLabel && <span className="text-xs text-amber">{outstandingLabel}</span>
-          )}
+          {isComplete && <StatusBadge tone="done">Done</StatusBadge>}
+          {outstandingLabel && <span className="text-xs text-amber">{outstandingLabel}</span>}
           <span className="ml-auto text-xs text-faint underline">{isOpen ? "Collapse" : "Expand"}</span>
         </button>
         {!isComplete && (

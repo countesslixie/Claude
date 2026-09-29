@@ -18,6 +18,7 @@ describe("GET /api/filings/[id]/package", () => {
   afterAll(async () => {
     if (createdClientIds.length === 0) return;
     await prisma.document.deleteMany({ where: { clientId: { in: createdClientIds } } });
+    await prisma.quarterlySales.deleteMany({ where: { clientId: { in: createdClientIds } } });
     await prisma.workflowStep.deleteMany({ where: { filing: { clientId: { in: createdClientIds } } } });
     await prisma.filing.deleteMany({ where: { clientId: { in: createdClientIds } } });
     await prisma.client.deleteMany({ where: { id: { in: createdClientIds } } });
@@ -45,6 +46,15 @@ describe("GET /api/filings/[id]/package", () => {
     await generateFilingsForClientYear(client.id, 2026);
     const filing = await prisma.filing.findUniqueOrThrow({
       where: { clientId_taxableYear_period: { clientId: client.id, taxableYear: 2026, period: "Q2" } },
+    });
+
+    // D76 (brief #5m §3.4) -- a zero-sales client's steps 8/9 auto-NA the
+    // moment FILE_RETURN is marked Done, which would drop SAVE_PROOF_PAYMENT
+    // out of the manifest's "empty required slots" section entirely (an
+    // NA step needs nothing). Seeded a real payable Q2 figure so this test
+    // still exercises "attached vs. empty," not "not applicable."
+    await prisma.quarterlySales.create({
+      data: { clientId: client.id, taxableYear: 2026, quarter: "Q2", grossSalesCents: 500_000_00, finalizedAt: new Date() },
     });
 
     // Brief #5k §4 (D67) -- SAVE_FORM_COPY is now locked until step 5

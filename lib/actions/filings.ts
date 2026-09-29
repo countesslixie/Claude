@@ -4,11 +4,16 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getActorId } from "@/lib/actor";
 import { logActivity } from "@/lib/activityLog";
-import { pesosToCents } from "@/lib/money";
+import { pesosToCents, centsToPesos } from "@/lib/money";
 import { generateFilingsForClientYear } from "@/lib/workflow/filingGeneration";
-import { recomputeReceive2307Status, reopenPreparedFiling } from "@/lib/actions/workflowSteps";
+import { recomputeReceive2307Status, reopenPreparedFiling, markStepDone } from "@/lib/actions/workflowSteps";
+import { payGroupBlockReason } from "@/lib/workflow/groups";
 import { otherCreditsSchema } from "@/lib/validation/otherCredits";
+import { paymentSchema } from "@/lib/validation/payment";
 import { ALL_PERIODS } from "@/lib/tax/periods";
+import { manilaDateInputToJsDate } from "@/lib/dates";
+import { isPaymentLocked } from "@/lib/filingComputation";
+import type { Period } from "@/lib/tax/types";
 
 export type GenerateFilingsResult =
   | { ok: true; createdCount: number; skippedCount: number; outsideCount: number }
@@ -206,4 +211,112 @@ export async function updateFilingOtherCredits(
 
   revalidatePath(`/clients/${filing.clientId}/filings/${filingId}`);
   return { saved: true, values };
+}
+
+export type SavePaymentFormState = {
+  error?: string;
+  fieldErrors?: Record<string, string[]>;
+  values?: Record<string, string>;
+  saved?: boolean;
+};
+
+/**
+ * D75 (brief #5m §3.2) — step 8 (MAKE_PAYMENT): amount paid, date of
+ * payment, and the bank/channel paid through, saved to the filing's own
+ * long-standing payment fields (amountPaidCents/paymentDate/
+ * paymentChannel — SPEC.md already named these; nothing writes them from
+ * inside the app until now). Marks step 8 Done via the ordinary
+ * markStepDone (so the File-done gate — payGroupBlockReason — and the
+ * election hard-blocker both still apply, the same reasoning every other
+ * step's own action already follows).
+ *
+ * Editable afterwards (an Edit/Save/Cancel round-trip, same pattern as
+ * D40/D55) until isPaymentLocked (lib/filingComputation.ts) says the next
+ * filing of the same taxable year has already filed with this figure
+ * baked into its own item 56/58.
+ *
+ * A saved change — the first save, or any later edit that actually
+ * changes the amount/date/channel — reopens every later, still-unfiled
+ * filing of the same taxable year that already has step 3
+ * (PREPARE_RETURN) Done (reopenPreparedFiling itself no-ops otherwise),
+ * since item 56/58 on each of them is read live off
+ * Filing.amountPaidCents for every earlier filed period
+ * (priorPeriodPaymentsCentsThrough) — unlike item 61's inheritance chain,
+ * there is no "chain break": every later filing's own item 56/58 always
+ * depends on this filing's own actual paid amount, so every later
+ * unfiled filing is reopened, not just up to some break point.
+ */
+export async function savePayment(
+  filingId: string,
+  _prevState: SavePaymentFormState,
+  formData: FormData,
+): Promise<SavePaymentFormState> {
+  const values = {
+    amountPaid: String(formData.get("amountPaid") ?? ""),
+    paymentDate: String(formData.get("paymentDate") ?? ""),
+    paymentChannel: String(formData.get("paymentChannel") ?? ""),
+  };
+  const parsed = paymentSchema.safeParse(values);
+  if (!parsed.success) {
+    return { fieldErrors: parsed.error.flatten().fieldErrors, values };
+  }
+
+  const filing = await prisma.filing.findUnique({
+    where: { id: filingId },
+    include: {
+      workflowSteps: {
+        where: { stepCode: { in: ["MAKE_PAYMENT", "FILE_RETURN", "SAVE_SUBMISSION_SS", "SAVE_FORM_COPY"] } },
+      },
+    },
+  });
+  if (!filing) return { error: "Filing not found.", values };
+
+  const step = filing.workflowSteps.find((s) => s.stepCode === "MAKE_PAYMENT");
+  if (!step) return { error: "This filing has no Make payment step.", values };
+
+  // D75 (brief #5m §3.1) — refused here, not just by the UI hiding the
+  // card, so it can't be bypassed by calling this action directly.
+  const fileBlockReason = payGroupBlockReason(filing.workflowSteps);
+  if (fileBlockReason) return { error: fileBlockReason, values };
+
+  if (await isPaymentLocked(filing.clientId, filing.taxableYear, filing.period as Period)) {
+    return { error: "This return's payment is locked — the next return has already been filed with this figure.", values };
+  }
+
+  const amountPaidCents = pesosToCents(parsed.data.amountPaid);
+  const paymentDate = manilaDateInputToJsDate(parsed.data.paymentDate);
+  const paymentChannel = parsed.data.paymentChannel;
+  const changed =
+    filing.amountPaidCents !== amountPaidCents ||
+    filing.paymentDate?.getTime() !== paymentDate.getTime() ||
+    filing.paymentChannel !== paymentChannel;
+
+  const actorId = await getActorId();
+  const updated = await prisma.filing.update({
+    where: { id: filingId },
+    data: { amountPaidCents, paymentDate, paymentChannel, actorId },
+  });
+
+  await logActivity({ entityType: "Filing", entityId: filingId, action: "UPDATE", before: filing, after: updated, actorId });
+
+  if (step.status !== "DONE") {
+    const result = await markStepDone(step.id);
+    if (!result.ok) return { error: result.error, values };
+  }
+
+  if (changed) {
+    const yearFilings = await prisma.filing.findMany({
+      where: { clientId: filing.clientId, taxableYear: filing.taxableYear, deletedAt: null, filedOutsideApp: false },
+    });
+    const ordered = ALL_PERIODS.map((p) => yearFilings.find((f) => f.period === p)).filter(
+      (f): f is NonNullable<typeof f> => f != null,
+    );
+    const startIndex = ordered.findIndex((f) => f.id === filingId);
+    for (let i = startIndex + 1; i < ordered.length; i++) {
+      await reopenPreparedFiling(ordered[i].id);
+    }
+  }
+
+  revalidatePath(`/clients/${filing.clientId}/filings/${filingId}`);
+  return { saved: true, values: { ...values, amountPaid: centsToPesos(amountPaidCents) } };
 }

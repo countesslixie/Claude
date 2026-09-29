@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { markStepInProgress, markStepDone } from "@/lib/actions/workflowSteps";
 import { stepBlockReason, type AttachedDocument, type DocSlotLike } from "@/lib/workflow/docSlots";
+import type { NextActionMode } from "@/lib/workflow/groups";
 
 /**
  * §4.2 — the filing page's primary job: "what do I do next," in words,
@@ -21,6 +22,17 @@ import { stepBlockReason, type AttachedDocument, type DocSlotLike } from "@/lib/
  * either (this banner was a third place the same sentence showed up,
  * alongside the group header and the per-step card). It still disables
  * "Mark done" and explains why via that button's `title` tooltip.
+ *
+ * D77 (brief #5m §4, her decision) — this control must never offer a
+ * control the step's own card doesn't have. She found it offering Mark
+ * done on step 1 (which has none — it completes itself) and offering
+ * both Start and Mark done on step 8 (which needs three fields filled in
+ * first, not a bare click). `mode` (lib/workflow/groups.ts's
+ * nextActionModeForStepCode) picks the right shape for every step:
+ * "goToStep" — a single link to the step's own card, no buttons at all;
+ * "markDoneOnly" — the same Mark done button as before, no Start;
+ * "full" — Start + Mark done, unchanged (the only mode this control used
+ * to offer, for every step).
  */
 export function NextActionControl({
   stepId,
@@ -28,15 +40,15 @@ export function NextActionControl({
   requiredDocSlots,
   documents,
   dependencyBlockedReason = null,
-  hideStart = false,
+  mode = "full",
 }: {
   stepId: string;
   status: string;
   requiredDocSlots: DocSlotLike[];
   documents: AttachedDocument[];
   dependencyBlockedReason?: string | null;
-  /** Brief #5d §7 — step 4 (ADVISE_CLIENT) has no Start control; only Mark done remains. */
-  hideStart?: boolean;
+  /** D77 — which controls this step's own card actually offers. Defaults to "full" (Start + Mark done), the shape every step used before this decision. */
+  mode?: NextActionMode;
 }) {
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
@@ -49,12 +61,22 @@ export function NextActionControl({
     });
   }
 
+  if (mode === "goToStep") {
+    return (
+      <div className="flex flex-col gap-1">
+        <a href="#checklist" className="text-xs text-ink-secondary underline hover:text-ink">
+          Go to step
+        </a>
+      </div>
+    );
+  }
+
   const blockReason = stepBlockReason(requiredDocSlots, documents, dependencyBlockedReason);
 
   return (
     <div className="flex flex-col gap-1">
       <div className="flex flex-wrap items-center gap-1.5">
-        {status === "PENDING" && !hideStart && (
+        {status === "PENDING" && mode === "full" && (
           <Button size="sm" disabled={isPending} onClick={() => run(() => markStepInProgress(stepId))}>
             Start
           </Button>

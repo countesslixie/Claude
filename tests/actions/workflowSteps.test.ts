@@ -27,6 +27,10 @@ describe("workflow step actions", () => {
     if (createdClientIds.length === 0) return;
     await prisma.document.deleteMany({ where: { clientId: { in: createdClientIds } } });
     await prisma.form2307.deleteMany({ where: { clientId: { in: createdClientIds } } });
+    // D75 (brief #5m §3) -- seedPayableQ2Sales (this file's own new
+    // helper) creates QuarterlySales rows, which the previous cleanup
+    // never needed to touch.
+    await prisma.quarterlySales.deleteMany({ where: { clientId: { in: createdClientIds } } });
     await prisma.workflowStep.deleteMany({ where: { filing: { clientId: { in: createdClientIds } } } });
     await prisma.filing.deleteMany({ where: { clientId: { in: createdClientIds } } });
     await prisma.client.deleteMany({ where: { id: { in: createdClientIds } } });
@@ -59,6 +63,48 @@ describe("workflow step actions", () => {
   }
 
   /**
+   * D76 (brief #5m §3.4) -- a client with NO declared sales at all
+   * computes zero tax payable, which now auto-NA's steps 8/9 the moment
+   * FILE_RETURN is marked Done. Most of the Pay-group tests below are
+   * about a PAYABLE return, so they seed a real Q2 gross figure first
+   * (safely above the ₱250,000 deduction) to land in the ordinary
+   * PENDING path instead.
+   */
+  async function seedPayableQ2Sales(clientId: string) {
+    // ₱500,000 -- safely above the ₱250,000 deduction, so tax payable is
+    // genuinely > 0 (100_000_00 alone, ₱100,000, computes to exactly ₱0
+    // payable after the deduction -- still "nothing to pay").
+    await prisma.quarterlySales.create({
+      data: { clientId, taxableYear: 2026, quarter: "Q2", grossSalesCents: 500_000_00, finalizedAt: new Date() },
+    });
+  }
+
+  /**
+   * D75 (brief #5m §3.1) -- Pay (steps 8, 9) opens only once ALL of File
+   * (steps 5, 6, 7) is Done, not just step 5. Marks step 5 done and
+   * uploads steps 6/7's own documents (self-completing, D67) so callers
+   * can then reach step 8/9 in tests that aren't themselves about File.
+   */
+  async function fileTheReturn(filingId: string) {
+    const fileReturnStep = await prisma.workflowStep.findFirstOrThrow({
+      where: { filingId, stepCode: "FILE_RETURN" },
+    });
+    await markStepDone(fileReturnStep.id);
+    for (const [stepCode, slotCode] of [
+      ["SAVE_SUBMISSION_SS", "submission_screenshot"],
+      ["SAVE_FORM_COPY", "filed_form"],
+    ] as const) {
+      const step = await prisma.workflowStep.findFirstOrThrow({ where: { filingId, stepCode } });
+      const fd = new FormData();
+      fd.set("file", new File(["bytes"], `${stepCode}.pdf`, { type: "application/pdf" }));
+      fd.set("workflowStepId", step.id);
+      fd.set("docSlotCode", slotCode);
+      fd.set("documentDate", "2026-08-15");
+      await uploadDocument(fd);
+    }
+  }
+
+  /**
    * D27 (reconciled from laughing-darwin's commit 7bfbd5d) — the
    * corrected blocking rule: markStepDone is blocked while a required doc
    * slot is empty, and succeeds once filled. Q2 is used here (not Q1) so
@@ -66,12 +112,18 @@ describe("workflow step actions", () => {
    * exception.
    */
   it("markStepDone is blocked while a required doc slot is empty, succeeds once filled", async () => {
-    const { filing } = await makeClientWithQ2Filing("p3-step-done");
-    // Brief #5k §4 (D67) -- SAVE_PROOF_PAYMENT (Pay group), not
-    // SAVE_FORM_COPY (File group, now locked until step 5/FILE_RETURN is
-    // Done and self-completing on upload -- see the dedicated File-group
-    // tests below). This test is about the generic doc-slot blocking rule
-    // (D27) itself.
+    const { client, filing } = await makeClientWithQ2Filing("p3-step-done");
+    await seedPayableQ2Sales(client.id);
+    // D75 (brief #5m §3) -- SAVE_PROOF_PAYMENT (Pay group) now also needs
+    // File done and step 8 (MAKE_PAYMENT) done before it even unlocks.
+    // This test is about the generic doc-slot blocking rule (D27) itself,
+    // once reachable.
+    await fileTheReturn(filing.id);
+    const makePaymentStep = await prisma.workflowStep.findFirstOrThrow({
+      where: { filingId: filing.id, stepCode: "MAKE_PAYMENT" },
+    });
+    expect((await markStepDone(makePaymentStep.id)).ok).toBe(true);
+
     const step = await prisma.workflowStep.findFirstOrThrow({
       where: { filingId: filing.id, stepCode: "SAVE_PROOF_PAYMENT" },
     });
@@ -144,16 +196,42 @@ describe("workflow step actions", () => {
     const updatedFiling = await prisma.filing.findUniqueOrThrow({ where: { id: filing.id } });
     expect(updatedFiling.status).toBe("WAITING_BIR");
 
+    // D72 (brief #5m §2) -- no Log follow-up on any BIR wait, including
+    // step 10; refused here, not just missing from the UI.
     const followUp = await logFollowUp(trrcStep.id);
-    expect(followUp.ok).toBe(true);
+    expect(followUp.ok).toBe(false);
     const updatedStep = await prisma.workflowStep.findUniqueOrThrow({ where: { id: trrcStep.id } });
-    expect(updatedStep.followUpCount).toBe(1);
+    expect(updatedStep.followUpCount).toBe(0);
+  });
+
+  describe("D72 (brief #5m §2): Log follow-up is refused on every BIR wait", () => {
+    it("refuses RECEIVE_TRRC, SAWT_ACK and SAWT_VALIDATION even when genuinely WAITING_EXTERNAL", async () => {
+      const { filing } = await makeClientWithQ2Filing("p5m-no-followup-bir");
+      for (const stepCode of ["RECEIVE_TRRC", "SAWT_ACK", "SAWT_VALIDATION"]) {
+        const step = await prisma.workflowStep.findFirstOrThrow({ where: { filingId: filing.id, stepCode } });
+        await prisma.workflowStep.update({ where: { id: step.id }, data: { status: "WAITING_EXTERNAL", waitingSince: new Date() } });
+        const result = await logFollowUp(step.id);
+        expect(result.ok).toBe(false);
+      }
+    });
+
+    it("a Client wait (e.g. RECORD_SALES) is unaffected -- Log follow-up still works there", async () => {
+      const { filing } = await makeClientWithQ2Filing("p5m-followup-client-ok");
+      const step = await prisma.workflowStep.findFirstOrThrow({ where: { filingId: filing.id, stepCode: "RECORD_SALES" } });
+      expect(step.status).toBe("WAITING_EXTERNAL");
+      const result = await logFollowUp(step.id);
+      expect(result.ok).toBe(true);
+    });
   });
 
   it("skipStep requires a non-empty reason — no silent skips (SPEC.md 7.2)", async () => {
     const { filing } = await makeClientWithQ2Filing("p3-step-skip");
+    // D75 (brief #5m §3) -- MAKE_PAYMENT can no longer be skipped at all
+    // (see the dedicated Pay-group test below); EAFS_SUBMIT is still an
+    // ordinary skippable step, so it's used here for the generic
+    // reason-required rule.
     const step = await prisma.workflowStep.findFirstOrThrow({
-      where: { filingId: filing.id, stepCode: "MAKE_PAYMENT" },
+      where: { filingId: filing.id, stepCode: "EAFS_SUBMIT" },
     });
 
     const blocked = await skipStep(step.id, "");
@@ -255,11 +333,18 @@ describe("workflow step actions", () => {
       // both before PREPARE_RETURN (step 3) can be marked done, same as
       // Prepare's own group-level "Mark done". PREPARE_RETURN must in turn
       // precede ADVISE_CLIENT (brief #5e §1).
-      for (const stepCode of ["RECORD_SALES", "RECEIVE_2307", "PREPARE_RETURN", "ADVISE_CLIENT", "FILE_RETURN", "MAKE_PAYMENT"]) {
+      for (const stepCode of ["RECORD_SALES", "RECEIVE_2307", "PREPARE_RETURN", "ADVISE_CLIENT"]) {
         const step = await prisma.workflowStep.findFirstOrThrow({ where: { filingId: filing.id, stepCode } });
         const result = await markStepDone(step.id);
         expect(result.ok).toBe(true);
       }
+      // D75 (brief #5m §3) -- MAKE_PAYMENT now also needs File (5, 6, 7)
+      // Done first.
+      await fileTheReturn(filing.id);
+      const makePaymentStep = await prisma.workflowStep.findFirstOrThrow({
+        where: { filingId: filing.id, stepCode: "MAKE_PAYMENT" },
+      });
+      expect((await markStepDone(makePaymentStep.id)).ok).toBe(true);
 
       // EAFS_SUBMIT's confirmation is the one documented exception:
       // optional, never demanded, never blocking.
@@ -269,7 +354,7 @@ describe("workflow step actions", () => {
       expect((await markStepDone(eafs.id)).ok).toBe(true);
     });
 
-    it("step 13 waiting blocks step 14; step 14 unblocks once step 13 is DONE", async () => {
+    it("D71 (brief #5m §2): step 14 is locked until step 13 is Done, then waits on BIR automatically and completes on upload -- the 13->14 dependency now enforced by the lock itself", async () => {
       const { client, filing } = await makeClientWithQ2Filing("p3-sawt-dependency");
       await prisma.form2307.create({
         data: {
@@ -295,35 +380,25 @@ describe("workflow step actions", () => {
       const validationStep = await prisma.workflowStep.findFirstOrThrow({
         where: { filingId: filing.id, stepCode: "SAWT_VALIDATION" },
       });
+      expect(validationStep.status).toBe("PENDING");
 
-      // Attach validation's own document so the ONLY thing standing in the
-      // way is the step 13 -> 14 dependency itself.
+      // Locked while step 13 isn't Done -- the upload itself is refused,
+      // not just markStepDone (D71, the same shape D67 gave steps 6/7).
       const formData = new FormData();
       formData.set("file", new File(["validation-bytes"], "validation.pdf", { type: "application/pdf" }));
       formData.set("workflowStepId", validationStep.id);
       formData.set("docSlotCode", "validation_email");
       formData.set("documentDate", "2026-08-15");
-      await uploadDocument(formData);
+      const stillLocked = await uploadDocument(formData);
+      expect(stillLocked.ok).toBe(false);
+      expect(stillLocked.error).toMatch(/step 13/i);
 
-      await markStepWaitingExternal(ackStep.id); // step 13 waiting, not done
-      const stillBlocked = await markStepDone(validationStep.id);
-      expect(stillBlocked.ok).toBe(false);
+      await markStepWaitingExternal(ackStep.id); // step 13 waiting, not done -- still locked
+      const stillLockedWhileWaiting = await uploadDocument(formData);
+      expect(stillLockedWhileWaiting.ok).toBe(false);
 
-      // Step 10 (RECEIVE_TRRC) waiting blocks nothing downstream -- filing
-      // the return (which now auto-starts step 10 waiting on BIR, D68) has
-      // no effect on step 14's outcome.
-      const fileReturnStep = await prisma.workflowStep.findFirstOrThrow({
-        where: { filingId: filing.id, stepCode: "FILE_RETURN" },
-      });
-      await markStepDone(fileReturnStep.id);
-      const trrcStep = await prisma.workflowStep.findFirstOrThrow({
-        where: { filingId: filing.id, stepCode: "RECEIVE_TRRC" },
-      });
-      expect(trrcStep.status).toBe("WAITING_EXTERNAL");
-      const stillBlockedAfterTrrcWaiting = await markStepDone(validationStep.id);
-      expect(stillBlockedAfterTrrcWaiting.ok).toBe(false);
-
-      // Now resolve step 13 -- step 14 should unblock.
+      // Resolve step 13 -- step 14 should auto-transition to
+      // WAITING_EXTERNAL by itself, no manual Mark waiting involved.
       const ackFormData = new FormData();
       ackFormData.set("file", new File(["ack"], "ack.pdf", { type: "application/pdf" }));
       ackFormData.set("workflowStepId", ackStep.id);
@@ -332,6 +407,91 @@ describe("workflow step actions", () => {
       await uploadDocument(ackFormData);
       const ackDone = await markStepDone(ackStep.id);
       expect(ackDone.ok).toBe(true);
+
+      const nowWaiting = await prisma.workflowStep.findUniqueOrThrow({ where: { id: validationStep.id } });
+      expect(nowWaiting.status).toBe("WAITING_EXTERNAL");
+      expect(nowWaiting.waitingSince).not.toBeNull();
+
+      // Step 10 (RECEIVE_TRRC) waiting blocks nothing downstream -- filing
+      // the return (which now auto-starts step 10 waiting on BIR, D68) has
+      // no effect on step 14.
+      await fileTheReturn(filing.id);
+      const trrcStep = await prisma.workflowStep.findUniqueOrThrow({ where: { id: (await prisma.workflowStep.findFirstOrThrow({ where: { filingId: filing.id, stepCode: "RECEIVE_TRRC" } })).id } });
+      expect(trrcStep.status).toBe("WAITING_EXTERNAL");
+
+      const nowAllowed = await uploadDocument(formData);
+      expect(nowAllowed.ok).toBe(true);
+      const done = await prisma.workflowStep.findUniqueOrThrow({ where: { id: validationStep.id } });
+      expect(done.status).toBe("DONE");
+    });
+
+    it("D29 (unaffected by D70/D71): the 13->14 dependency check inside markStepDone itself still refuses a direct call while step 13 isn't Done", async () => {
+      // Exercises the legacy stepCode-based check directly (not reachable
+      // via the normal UI any more, since step 14 is self-completing) --
+      // proving it's genuinely unaffected by the group restructuring, per
+      // the brief's own instruction.
+      const { client, filing } = await makeClientWithQ2Filing("p3-sawt-dependency-direct");
+      // SAWT_ACK/SAWT_VALIDATION are NA (not PENDING) for a client with no
+      // certificates -- a real one is needed so the dependency check
+      // itself (not the NA short-circuit) is what's under test.
+      await prisma.form2307.create({
+        data: {
+          clientId: client.id,
+          taxableYear: 2026,
+          payorName: "Direct Dependency Test Payor",
+          payorTin: "222333444",
+          periodFrom: new Date("2026-04-01T00:00:00.000Z"),
+          periodTo: new Date("2026-06-30T00:00:00.000Z"),
+          quarterCovered: 2,
+          atcCode: "WI010",
+          incomePaymentCents: 10_000_00,
+          taxWithheldCents: 500_00,
+          withholdingRateBps: 500,
+          status: "RECORDED",
+        },
+      });
+      await recomputeRequiresSawt(client.id, 2026, "Q2");
+      const ackStep = await prisma.workflowStep.findFirstOrThrow({
+        where: { filingId: filing.id, stepCode: "SAWT_ACK" },
+      });
+      const validationStep = await prisma.workflowStep.findFirstOrThrow({
+        where: { filingId: filing.id, stepCode: "SAWT_VALIDATION" },
+      });
+      // Force step 14 into a state markStepDone would otherwise accept,
+      // bypassing D71's own lock, to isolate the D29 check specifically.
+      await prisma.workflowStep.update({ where: { id: validationStep.id }, data: { status: "WAITING_EXTERNAL" } });
+      const formData = new FormData();
+      formData.set("file", new File(["validation-bytes"], "validation.pdf", { type: "application/pdf" }));
+      formData.set("workflowStepId", validationStep.id);
+      formData.set("docSlotCode", "validation_email");
+      formData.set("documentDate", "2026-08-15");
+      await prisma.document.create({
+        data: {
+          clientId: filing.clientId,
+          filingId: filing.id,
+          workflowStepId: validationStep.id,
+          docSlotCode: "validation_email",
+          category: "VALIDATION_EMAIL",
+          originalFilename: "validation.pdf",
+          storedPath: "test/validation.pdf",
+          mimeType: "application/pdf",
+          sizeBytes: 10,
+          sha256: "0".repeat(64),
+          documentDate: new Date("2026-08-15T00:00:00.000Z"),
+        },
+      });
+
+      const stillBlocked = await markStepDone(validationStep.id);
+      expect(stillBlocked.ok).toBe(false);
+      expect(stillBlocked.error).toMatch(/acknowledgement/i);
+
+      const ackFormData = new FormData();
+      ackFormData.set("file", new File(["ack"], "ack.pdf", { type: "application/pdf" }));
+      ackFormData.set("workflowStepId", ackStep.id);
+      ackFormData.set("docSlotCode", "acknowledgement");
+      ackFormData.set("documentDate", "2026-08-15");
+      await uploadDocument(ackFormData);
+      await markStepDone(ackStep.id);
 
       const nowAllowed = await markStepDone(validationStep.id);
       expect(nowAllowed.ok).toBe(true);
@@ -482,21 +642,14 @@ describe("workflow step actions", () => {
     });
 
     it("marking the last unresolved step in a group resolves the group (Pay: 2 steps)", async () => {
-      const { filing } = await makeClientWithQ2Filing("p5i-group-per-step-pay");
+      const { client, filing } = await makeClientWithQ2Filing("p5i-group-per-step-pay");
+      await seedPayableQ2Sales(client.id);
+      // D75 (brief #5m §3) -- Pay now opens only once File is Done.
+      await fileTheReturn(filing.id);
 
       const makePaymentStep = await prisma.workflowStep.findFirstOrThrow({
         where: { filingId: filing.id, stepCode: "MAKE_PAYMENT" },
       });
-      const proofStep = await prisma.workflowStep.findFirstOrThrow({
-        where: { filingId: filing.id, stepCode: "SAVE_PROOF_PAYMENT" },
-      });
-      const formData = new FormData();
-      formData.set("file", new File(["proof-bytes"], "proof.pdf", { type: "application/pdf" }));
-      formData.set("workflowStepId", proofStep.id);
-      formData.set("docSlotCode", "proof");
-      formData.set("documentDate", "2026-08-15");
-      await uploadDocument(formData);
-
       expect((await markStepDone(makePaymentStep.id)).ok).toBe(true);
 
       const pay = WORKFLOW_GROUPS.find((g) => g.code === "PAY")!;
@@ -506,9 +659,17 @@ describe("workflow step actions", () => {
       ];
       expect(summarizeGroup(pay, stepsBeforeLast).isComplete).toBe(false);
 
-      // The last unresolved step in the group -- no group-level action
-      // exists any more, only this per-step call.
-      expect((await markStepDone(proofStep.id)).ok).toBe(true);
+      // The last unresolved step in the group -- self-completes on
+      // upload (D75), no group-level action and no manual Mark done.
+      const proofStep = await prisma.workflowStep.findFirstOrThrow({
+        where: { filingId: filing.id, stepCode: "SAVE_PROOF_PAYMENT" },
+      });
+      const formData = new FormData();
+      formData.set("file", new File(["proof-bytes"], "proof.pdf", { type: "application/pdf" }));
+      formData.set("workflowStepId", proofStep.id);
+      formData.set("docSlotCode", "proof");
+      formData.set("documentDate", "2026-08-15");
+      expect((await uploadDocument(formData)).ok).toBe(true);
 
       const steps = await prisma.workflowStep.findMany({
         where: { filingId: filing.id, stepCode: { in: ["MAKE_PAYMENT", "SAVE_PROOF_PAYMENT"] } },
@@ -519,30 +680,6 @@ describe("workflow step actions", () => {
         steps.map((s) => ({ stepCode: s.stepCode, status: s.status })),
       );
       expect(summary.isComplete).toBe(true);
-    });
-
-    it("§2 -- completing Pay while File is still open raises no warning: they're independent (still true with no group action)", async () => {
-      const { filing } = await makeClientWithQ2Filing("p5i-group-independent");
-
-      const makePaymentStep = await prisma.workflowStep.findFirstOrThrow({
-        where: { filingId: filing.id, stepCode: "MAKE_PAYMENT" },
-      });
-      const proofStep = await prisma.workflowStep.findFirstOrThrow({
-        where: { filingId: filing.id, stepCode: "SAVE_PROOF_PAYMENT" },
-      });
-      const formData = new FormData();
-      formData.set("file", new File(["proof-bytes"], "proof.pdf", { type: "application/pdf" }));
-      formData.set("workflowStepId", proofStep.id);
-      formData.set("docSlotCode", "proof");
-      formData.set("documentDate", "2026-08-15");
-      await uploadDocument(formData);
-      await markStepDone(makePaymentStep.id);
-      await markStepDone(proofStep.id);
-
-      const fileSteps = await prisma.workflowStep.findMany({
-        where: { filingId: filing.id, stepCode: { in: ["FILE_RETURN", "SAVE_SUBMISSION_SS", "SAVE_FORM_COPY", "RECEIVE_TRRC"] } },
-      });
-      expect(fileSteps.every((s) => s.status === "PENDING")).toBe(true);
     });
 
     it("Prepare resolves once steps 1-4 are each individually resolved, with step 2 skipped", async () => {
@@ -631,15 +768,17 @@ describe("workflow step actions", () => {
 
     it("unskipStep restores any other skippable step to PENDING", async () => {
       const { filing } = await makeClientWithQ2Filing("p5i-unskip-other-step");
-      const paymentStep = await prisma.workflowStep.findFirstOrThrow({
-        where: { filingId: filing.id, stepCode: "MAKE_PAYMENT" },
+      // D75 (brief #5m §3) -- MAKE_PAYMENT can no longer be skipped at
+      // all; EAFS_SUBMIT is still an ordinary skippable step.
+      const eafsStep = await prisma.workflowStep.findFirstOrThrow({
+        where: { filingId: filing.id, stepCode: "EAFS_SUBMIT" },
       });
-      await skipStep(paymentStep.id, "Client remitted directly.");
+      await skipStep(eafsStep.id, "Not required this quarter.");
 
-      const result = await unskipStep(paymentStep.id);
+      const result = await unskipStep(eafsStep.id);
       expect(result.ok).toBe(true);
 
-      const updated = await prisma.workflowStep.findUniqueOrThrow({ where: { id: paymentStep.id } });
+      const updated = await prisma.workflowStep.findUniqueOrThrow({ where: { id: eafsStep.id } });
       expect(updated.status).toBe("PENDING");
       expect(updated.skippedReason).toBeNull();
     });
@@ -856,24 +995,25 @@ describe("workflow step actions", () => {
     });
 
     it("Step 16's package-readiness check still finds documents attached to steps 7/9/10 via this new path", async () => {
-      const { filing } = await makeClientWithQ2Filing("p5k-package-readiness");
-      const fileReturnStep = await prisma.workflowStep.findFirstOrThrow({
-        where: { filingId: filing.id, stepCode: "FILE_RETURN" },
-      });
-      await markStepDone(fileReturnStep.id);
+      const { client, filing } = await makeClientWithQ2Filing("p5k-package-readiness");
+      await seedPayableQ2Sales(client.id);
+      // D75 (brief #5m §3) -- SAVE_PROOF_PAYMENT (step 9) now also needs
+      // File (5, 6, 7) AND step 8 (MAKE_PAYMENT) Done before it unlocks.
+      await fileTheReturn(filing.id);
 
-      for (const [stepCode, slotCode] of [
-        ["SAVE_FORM_COPY", "filed_form"],
-        ["RECEIVE_TRRC", "trrc"],
-      ] as const) {
-        const step = await prisma.workflowStep.findFirstOrThrow({ where: { filingId: filing.id, stepCode } });
-        const formData = new FormData();
-        formData.set("file", new File(["bytes"], "file.pdf", { type: "application/pdf" }));
-        formData.set("workflowStepId", step.id);
-        formData.set("docSlotCode", slotCode);
-        formData.set("documentDate", "2026-08-15");
-        await uploadDocument(formData);
-      }
+      const trrcStep = await prisma.workflowStep.findFirstOrThrow({ where: { filingId: filing.id, stepCode: "RECEIVE_TRRC" } });
+      const trrcUpload = new FormData();
+      trrcUpload.set("file", new File(["bytes"], "trrc.pdf", { type: "application/pdf" }));
+      trrcUpload.set("workflowStepId", trrcStep.id);
+      trrcUpload.set("docSlotCode", "trrc");
+      trrcUpload.set("documentDate", "2026-08-15");
+      await uploadDocument(trrcUpload);
+
+      const makePaymentStep = await prisma.workflowStep.findFirstOrThrow({
+        where: { filingId: filing.id, stepCode: "MAKE_PAYMENT" },
+      });
+      await markStepDone(makePaymentStep.id);
+
       const proofStep = await prisma.workflowStep.findFirstOrThrow({
         where: { filingId: filing.id, stepCode: "SAVE_PROOF_PAYMENT" },
       });
@@ -999,11 +1139,11 @@ describe("workflow step actions", () => {
     });
 
     it("D29 regression: waiting at step 10 (auto-started once step 5 is Done) still blocks nothing in Pay", async () => {
-      const { filing } = await makeClientWithQ2Filing("p5l-trrc-waiting-doesnt-block-pay");
-      const fileReturnStep = await prisma.workflowStep.findFirstOrThrow({
-        where: { filingId: filing.id, stepCode: "FILE_RETURN" },
-      });
-      await markStepDone(fileReturnStep.id);
+      const { client, filing } = await makeClientWithQ2Filing("p5l-trrc-waiting-doesnt-block-pay");
+      await seedPayableQ2Sales(client.id);
+      // D75 (brief #5m §3) -- Pay opens only once ALL of File (5, 6, 7)
+      // is Done, not just step 5.
+      await fileTheReturn(filing.id);
       const trrcStep = await prisma.workflowStep.findFirstOrThrow({
         where: { filingId: filing.id, stepCode: "RECEIVE_TRRC" },
       });
@@ -1012,6 +1152,8 @@ describe("workflow step actions", () => {
       const makePaymentStep = await prisma.workflowStep.findFirstOrThrow({
         where: { filingId: filing.id, stepCode: "MAKE_PAYMENT" },
       });
+      expect((await markStepDone(makePaymentStep.id)).ok).toBe(true);
+
       const proofStep = await prisma.workflowStep.findFirstOrThrow({
         where: { filingId: filing.id, stepCode: "SAVE_PROOF_PAYMENT" },
       });
@@ -1020,10 +1162,7 @@ describe("workflow step actions", () => {
       proofUpload.set("workflowStepId", proofStep.id);
       proofUpload.set("docSlotCode", "proof");
       proofUpload.set("documentDate", "2026-08-15");
-      await uploadDocument(proofUpload);
-
-      expect((await markStepDone(makePaymentStep.id)).ok).toBe(true);
-      expect((await markStepDone(proofStep.id)).ok).toBe(true);
+      expect((await uploadDocument(proofUpload)).ok).toBe(true);
 
       const pay = WORKFLOW_GROUPS.find((g) => g.code === "PAY")!;
       const steps = await prisma.workflowStep.findMany({

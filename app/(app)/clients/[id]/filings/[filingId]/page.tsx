@@ -1,12 +1,18 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { assembleAndComputeFiling, hasSalesRecordedForPeriod, effectiveOtherCreditsFor } from "@/lib/filingComputation";
+import {
+  assembleAndComputeFiling,
+  hasSalesRecordedForPeriod,
+  effectiveOtherCreditsFor,
+  isPaymentLocked,
+} from "@/lib/filingComputation";
 import {
   setAllCertificatesReceived,
   acknowledgeAmendmentAlert,
   dismissCompletenessNote,
   updateFilingOtherCredits,
+  savePayment,
 } from "@/lib/actions/filings";
 import { addCertificate } from "@/lib/actions/form2307";
 import { listActivePayors, createPayorInline, fillPayorDetail } from "@/lib/actions/payors";
@@ -21,6 +27,7 @@ import { WorkflowGroupCard } from "@/components/workflow-group-card";
 import { RecordSalesStepCard } from "@/components/record-sales-step-card";
 import { Receive2307StepCard, type CertificateRow } from "@/components/receive-2307-step-card";
 import { FileGroupDocStepCard } from "@/components/file-group-doc-step-card";
+import { MakePaymentStepCard } from "@/components/make-payment-step-card";
 import { NextActionControl } from "@/components/next-action-control";
 import { ComputationSheetPanel } from "@/components/computation-sheet-panel";
 import { OtherCreditsForm } from "@/components/other-credits-form";
@@ -34,7 +41,7 @@ import {
   summarizeGroup,
   prepareGroupBlockReason,
   adviseClientBlockReason,
-  FILE_GROUP_NO_START_NO_SKIP,
+  nextActionModeForStepCode,
   type GroupStepInput,
 } from "@/lib/workflow/groups";
 import { parseDocSlots, type DocSlotDef, type WorkflowStepStatus } from "@/lib/workflow/types";
@@ -94,6 +101,29 @@ export default async function FilingDetailPage({
   // own step 5 (FILE_RETURN) is DONE: the income quarter and step 2's
   // certificate list both lock at that point.
   const isFilingLocked = filing.workflowSteps.some((s) => s.stepCode === "FILE_RETURN" && s.status === "DONE");
+
+  // D75 (brief #5m §3.1) — Pay (steps 8, 9) opens only once File (5, 6,
+  // 7) is Done. D75 §3.3 — step 9 unlocks once step 8 (MAKE_PAYMENT) is
+  // Done specifically.
+  const isFileGroupDone = ["FILE_RETURN", "SAVE_SUBMISSION_SS", "SAVE_FORM_COPY"].every(
+    (code) => filing.workflowSteps.find((s) => s.stepCode === code)?.status === "DONE",
+  );
+  const makePaymentStep = filing.workflowSteps.find((s) => s.stepCode === "MAKE_PAYMENT");
+  const isStep8Done = makePaymentStep?.status === "DONE";
+  // D71 (brief #5m §2) — step 14 (SAWT_VALIDATION) unlocks once step 13
+  // (SAWT_ACK) is Done, the same shape D67 gave steps 6/7 off step 5.
+  const isSawtAckDone = filing.workflowSteps.find((s) => s.stepCode === "SAWT_ACK")?.status === "DONE";
+  const boundSavePayment = savePayment.bind(null, filing.id);
+  const paymentLocked = await isPaymentLocked(filing.clientId, filing.taxableYear, filing.period);
+  const previousChannels = (
+    await prisma.filing.findMany({
+      where: { clientId: filing.clientId, paymentChannel: { not: null } },
+      select: { paymentChannel: true },
+      distinct: ["paymentChannel"],
+    })
+  )
+    .map((f) => f.paymentChannel as string)
+    .sort();
 
   // Brief #4b — step 2's certificate rows, entered under this filing.
   // Brief #4d — ordered by payor rather than dateReceived (removed).
@@ -167,7 +197,6 @@ export default async function FilingDetailPage({
       status: s.status,
       isWaitingState: s.isWaitingState,
       waitingOnLabel: s.waitingOnLabel,
-      followUpCount: s.followUpCount,
       skippedReason: s.skippedReason,
       requiredDocSlots: parseDocSlots(s.requiredDocSlots),
       documents: s.documents.map((d) => ({
@@ -278,6 +307,23 @@ export default async function FilingDetailPage({
       : `Tax payable ${centsToPesos(sheet.taxPayableCents, { withSymbol: true })}`;
 
   const incomeHref = `/clients/${id}/income?filingId=${filing.id}`;
+
+  // D76 (brief #5m §3.4) — Pay's own "Nothing to pay" header line, shown
+  // alongside the green Done pill once steps 8/9 both resolve to NA
+  // (lib/actions/workflowSteps.ts's markStepDone sets this the instant
+  // step 5 is marked Done — see D76's own comment there). This needs the
+  // filing's own computed amount, which lib/workflow/groups.ts's
+  // summarizeGroup never reads (it stays pure/step-status-only), so it's
+  // built here instead and passed to the Pay group's own WorkflowGroupCard
+  // as an override.
+  const payStep8Status = filing.workflowSteps.find((s) => s.stepCode === "MAKE_PAYMENT")?.status;
+  const payStep9Status = filing.workflowSteps.find((s) => s.stepCode === "SAVE_PROOF_PAYMENT")?.status;
+  const payNothingToPayLabel =
+    payStep8Status === "NA" && payStep9Status === "NA"
+      ? sheet.isOverpayment
+        ? `Nothing to pay — overpayment ${centsToPesos(sheet.overpaymentCents, { withSymbol: true })}`
+        : "Nothing to pay"
+      : null;
 
   // Brief #5d — the sheet's shape now depends on formType (1701Q/1701A get
   // the new item-numbered result, MIXED_INCOME's 1701 keeps the old
@@ -500,11 +546,7 @@ export default async function FilingDetailPage({
                 requiredDocSlots={nextStep.requiredDocSlots}
                 documents={nextStep.documents}
                 dependencyBlockedReason={DEPENDENCY_REASON_BY_STEP_CODE[nextStep.stepCode] ?? null}
-                hideStart={
-                  nextStep.stepCode === "ADVISE_CLIENT" ||
-                  nextStep.stepCode === "PREPARE_RETURN" ||
-                  FILE_GROUP_NO_START_NO_SKIP.includes(nextStep.stepCode)
-                }
+                mode={nextActionModeForStepCode(nextStep.stepCode)}
               />
             </div>
           ) : (
@@ -633,7 +675,7 @@ export default async function FilingDetailPage({
                 skippedCount={summary.skippedCount}
                 isComplete={summary.isComplete}
                 unresolvedSummary={summary.unresolvedSummary}
-                outstandingLabel={summary.outstandingLabel}
+                outstandingLabel={def.code === "PAY" ? (payNothingToPayLabel ?? summary.outstandingLabel) : summary.outstandingLabel}
                 defaultOpen={def.code === activeGroupCode}
               >
                 {steps.map((step) => {
@@ -675,14 +717,66 @@ export default async function FilingDetailPage({
                       />
                     );
                   }
-                  // Brief #5k §4 (D67) — steps 6, 7 and 10 are self-completing
-                  // once step 5 is Done, the same reasoning steps 1/2 already
-                  // get their own bespoke cards for.
+                  // D67/D71/D75 — steps 6, 7 (File), 10, 14 (BIR
+                  // Confirmations) are self-completing once their own
+                  // gating step is Done, the same reasoning steps 1/2
+                  // already get their own bespoke cards for.
                   if (
                     step.stepCode === "SAVE_SUBMISSION_SS" ||
                     step.stepCode === "SAVE_FORM_COPY" ||
-                    step.stepCode === "RECEIVE_TRRC"
+                    step.stepCode === "RECEIVE_TRRC" ||
+                    step.stepCode === "SAWT_VALIDATION"
                   ) {
+                    const slot = step.requiredDocSlots[0];
+                    const isUnlocked = step.stepCode === "SAWT_VALIDATION" ? isSawtAckDone : isFilingLocked;
+                    const lockedMessage =
+                      step.stepCode === "SAWT_VALIDATION" ? "Available once step 13 is done." : "Available once step 5 is done.";
+                    return (
+                      <FileGroupDocStepCard
+                        key={step.id}
+                        stepId={step.id}
+                        sequence={step.sequence}
+                        title={step.title}
+                        status={step.status}
+                        isUnlocked={isUnlocked}
+                        lockedMessage={lockedMessage}
+                        slotCode={slot.slotCode}
+                        slotLabel={slot.label}
+                        documents={step.documents}
+                        waitingOnLabel={step.waitingOnLabel}
+                        agingDaysWaiting={step.agingDaysWaiting}
+                        agingTone={step.agingTone}
+                      />
+                    );
+                  }
+                  // D75 (brief #5m §3.2) — step 8 (MAKE_PAYMENT): its own
+                  // bespoke card, amount/date/channel fields + Mark done,
+                  // locked until File is Done.
+                  if (step.stepCode === "MAKE_PAYMENT") {
+                    return (
+                      <MakePaymentStepCard
+                        key={step.id}
+                        stepId={step.id}
+                        sequence={step.sequence}
+                        title={step.title}
+                        status={step.status}
+                        isUnlocked={isFileGroupDone}
+                        locked={paymentLocked}
+                        action={boundSavePayment}
+                        defaultAmountCents={sheet.isOverpayment ? 0 : sheet.taxPayableCents}
+                        savedAmountCents={filing.amountPaidCents}
+                        savedPaymentDate={toManilaDateInputValue(filing.paymentDate)}
+                        savedPaymentChannel={filing.paymentChannel}
+                        previousChannels={previousChannels}
+                      />
+                    );
+                  }
+                  // D75 (brief #5m §3.3) — step 9 (SAVE_PROOF_PAYMENT):
+                  // the same self-completing upload card as 6/7/10/14,
+                  // gated on step 8 instead — it never enters
+                  // WAITING_EXTERNAL on its own (Pay's own header line
+                  // says "waiting on proof of payment" instead).
+                  if (step.stepCode === "SAVE_PROOF_PAYMENT") {
                     const slot = step.requiredDocSlots[0];
                     return (
                       <FileGroupDocStepCard
@@ -691,12 +785,12 @@ export default async function FilingDetailPage({
                         sequence={step.sequence}
                         title={step.title}
                         status={step.status}
-                        isStep5Done={isFilingLocked}
+                        isUnlocked={isStep8Done}
+                        lockedMessage="Available once step 8 is done."
                         slotCode={slot.slotCode}
                         slotLabel={slot.label}
                         documents={step.documents}
                         waitingOnLabel={step.waitingOnLabel}
-                        followUpCount={step.followUpCount}
                         agingDaysWaiting={step.agingDaysWaiting}
                         agingTone={step.agingTone}
                       />

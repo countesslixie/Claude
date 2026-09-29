@@ -10,7 +10,6 @@ import {
   markStepWaitingExternal,
   skipStep,
   unskipStep,
-  logFollowUp,
 } from "@/lib/actions/workflowSteps";
 import { uploadDocument } from "@/lib/actions/documents";
 import { stepBlockReason } from "@/lib/workflow/docSlots";
@@ -52,7 +51,6 @@ export interface StepCardData {
   status: string;
   isWaitingState: boolean;
   waitingOnLabel: string | null;
-  followUpCount: number;
   skippedReason: string | null;
   requiredDocSlots: StepCardSlot[];
   documents: StepCardDoc[];
@@ -144,25 +142,41 @@ export function WorkflowStepCard({
   // button's `title` tooltip (see below).
   const blockReason = stepBlockReason(step.requiredDocSlots, step.documents, dependencyBlockedReason);
 
+  // D72 (brief #5m §2) — a step waiting on BIR (currently only step 13,
+  // SAWT_ACK, on this generic card — steps 10/14 use the bespoke
+  // FileGroupDocStepCard) shows ONE pill, "Waiting on BIR · Nd", never
+  // the grey "waiting on" text plus a separate aging pill plus a separate
+  // status pill all at once. No green: amber while waiting, red once
+  // past twice expectedResponseDays.
+  const isWaitingOnBir = step.status === "WAITING_EXTERNAL" && step.waitingOnLabel === "BIR";
+
   return (
     <div className="rounded-lg border border-line p-3">
       <div className="flex items-start justify-between gap-2">
         <div>
           <p className="text-sm font-medium text-ink">
             {step.sequence}. {step.title}
-            {step.status === "WAITING_EXTERNAL" && step.waitingOnLabel && (
+            {step.status === "WAITING_EXTERNAL" && step.waitingOnLabel && !isWaitingOnBir && (
               <span className="ml-1 text-xs font-normal text-faint">waiting on {step.waitingOnLabel}</span>
             )}
           </p>
           {step.description && <p className="text-xs text-faint">{step.description}</p>}
         </div>
         <div className="flex items-center gap-1.5">
-          {step.agingTone && (
-            <StatusBadge tone={AGING_TONE[step.agingTone]}>{step.agingDaysWaiting}d</StatusBadge>
+          {isWaitingOnBir ? (
+            <StatusBadge tone={step.agingTone === "red" ? "overdue" : "waiting"}>
+              Waiting on BIR{step.agingDaysWaiting != null ? ` · ${step.agingDaysWaiting}d` : ""}
+            </StatusBadge>
+          ) : (
+            <>
+              {step.agingTone && (
+                <StatusBadge tone={AGING_TONE[step.agingTone]}>{step.agingDaysWaiting}d</StatusBadge>
+              )}
+              <StatusBadge tone={STEP_STATUS_TONE[step.status] ?? "pending"}>
+                {stepStatusLabel(step.status as WorkflowStepStatus)}
+              </StatusBadge>
+            </>
           )}
-          <StatusBadge tone={STEP_STATUS_TONE[step.status] ?? "pending"}>
-            {stepStatusLabel(step.status as WorkflowStepStatus)}
-          </StatusBadge>
         </div>
       </div>
 
@@ -317,11 +331,6 @@ export function WorkflowStepCard({
           {controlsMode === "full" && step.isWaitingState && step.status !== "WAITING_EXTERNAL" && (
             <Button size="sm" variant="secondary" disabled={isPending} onClick={() => run(() => markStepWaitingExternal(step.id))}>
               Mark waiting
-            </Button>
-          )}
-          {controlsMode === "full" && step.status === "WAITING_EXTERNAL" && (
-            <Button size="sm" variant="secondary" disabled={isPending} onClick={() => run(() => logFollowUp(step.id))}>
-              Log follow-up ({step.followUpCount})
             </Button>
           )}
           <Button

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { StatusBadge, type StatusTone } from "@/components/status-badge";
 import { ClickableRow, ActionCell } from "@/components/clickable-row";
 import { formatManilaDate, currentTaxableYearManila, manilaCalendarDay } from "@/lib/dates";
-import { currentStepCode } from "@/lib/workflow/status";
+import { currentStepCodeByGroupOrder, BIR_WAIT_STEP_CODES } from "@/lib/workflow/groups";
 import { deriveStepAging, type AgingTone } from "@/lib/workflow/aging";
 import { stepDueDate } from "@/lib/workflow/dueDate";
 import { missingRequiredSlots } from "@/lib/workflow/docSlots";
@@ -46,46 +46,82 @@ export default async function DashboardPage() {
   const missingDocs: Array<{ filing: (typeof activeFilings)[number]; step: Row["step"]; missing: string[] }> = [];
 
   for (const filing of activeFilings) {
-    const code = currentStepCode(filing.workflowSteps);
-    const step = filing.workflowSteps.find((s) => s.stepCode === code);
-    if (!step) continue;
+    // D74 (brief #5m §2) — "Needs my action" / "Waiting on client" pick
+    // their one representative step by GROUP order, the same rule the
+    // board uses (lib/workflow/groups.ts's currentGroupCode), not by raw
+    // step number. Before this fix, a filing whose only open work was a
+    // BIR wait far EARLIER in raw sequence (step 10) than an unresolved
+    // step in an earlier GROUP (e.g. step 11) would pick step 10 here —
+    // wrong, since group order says the earlier group's own step 11 is
+    // what she needs to act on first.
+    const code = currentStepCodeByGroupOrder(filing.workflowSteps);
+    const step = code ? filing.workflowSteps.find((s) => s.stepCode === code) : undefined;
 
-    // Each step shows ITS OWN due date, never the filing's adjustedDueDate
-    // by default — RECEIVE_2307 uses certificatesExpectedBy, a waiting
-    // step uses its own expected-response date (the same clock the aging
-    // badge below measures against), FILE_RETURN uses adjustedDueDate
-    // (it genuinely is the statutory deadline), everything else uses
-    // internalFilingTarget. See lib/workflow/dueDate.ts.
-    const dueDate = stepDueDate({
-      stepCode: step.stepCode,
-      status: step.status,
-      waitingSince: step.waitingSince,
-      expectedResponseDays: step.expectedResponseDays,
-      certificatesExpectedBy: filing.certificatesExpectedBy,
-      internalFilingTarget: filing.internalFilingTarget,
-      adjustedDueDate: filing.adjustedDueDate,
-    });
-
-    if (step.status === "WAITING_EXTERNAL") {
-      const aging = deriveStepAging({
+    if (step) {
+      // Each step shows ITS OWN due date, never the filing's adjustedDueDate
+      // by default — RECEIVE_2307 uses certificatesExpectedBy, a waiting
+      // step uses its own expected-response date (the same clock the aging
+      // badge below measures against), FILE_RETURN uses adjustedDueDate
+      // (it genuinely is the statutory deadline), everything else uses
+      // internalFilingTarget. See lib/workflow/dueDate.ts.
+      const dueDate = stepDueDate({
         stepCode: step.stepCode,
         status: step.status,
         waitingSince: step.waitingSince,
         expectedResponseDays: step.expectedResponseDays,
         certificatesExpectedBy: filing.certificatesExpectedBy,
-        now,
+        internalFilingTarget: filing.internalFilingTarget,
+        adjustedDueDate: filing.adjustedDueDate,
       });
-      const row: Row = { filing, step, aging, dueDate };
-      if (step.waitingOnLabel === "BIR") waitingBir.push(row);
-      else if (step.waitingOnLabel === "Client") waitingClient.push(row);
-    } else if (step.status === "PENDING" || step.status === "IN_PROGRESS") {
-      needsAction.push({ filing, step, aging: null, dueDate });
+
+      if (step.status === "WAITING_EXTERNAL" && step.waitingOnLabel === "Client") {
+        const aging = deriveStepAging({
+          stepCode: step.stepCode,
+          status: step.status,
+          waitingSince: step.waitingSince,
+          expectedResponseDays: step.expectedResponseDays,
+          certificatesExpectedBy: filing.certificatesExpectedBy,
+          now,
+        });
+        waitingClient.push({ filing, step, aging, dueDate });
+      } else if (step.status === "PENDING" || step.status === "IN_PROGRESS") {
+        needsAction.push({ filing, step, aging: null, dueDate });
+      }
+
+      const slots = parseDocSlots(step.requiredDocSlots);
+      const missing = missingRequiredSlots(slots, step.documents);
+      if (missing.length > 0) {
+        missingDocs.push({ filing, step, missing: missing.map((s) => s.label) });
+      }
     }
 
-    const slots = parseDocSlots(step.requiredDocSlots);
-    const missing = missingRequiredSlots(slots, step.documents);
-    if (missing.length > 0) {
-      missingDocs.push({ filing, step, missing: missing.map((s) => s.label) });
+    // D74 — "Waiting on BIR" lists every step 10/13/14 currently
+    // WAITING_EXTERNAL on this filing, independent of the representative
+    // step picked above: a filing can show here for step 10 waiting AND
+    // separately in "Needs my action" for an earlier group's own next
+    // step (her own explicit intent, not a bug — the same filing needing
+    // two different things at once).
+    for (const birStep of filing.workflowSteps.filter(
+      (s) => BIR_WAIT_STEP_CODES.includes(s.stepCode) && s.status === "WAITING_EXTERNAL",
+    )) {
+      const aging = deriveStepAging({
+        stepCode: birStep.stepCode,
+        status: birStep.status,
+        waitingSince: birStep.waitingSince,
+        expectedResponseDays: birStep.expectedResponseDays,
+        certificatesExpectedBy: filing.certificatesExpectedBy,
+        now,
+      });
+      const dueDate = stepDueDate({
+        stepCode: birStep.stepCode,
+        status: birStep.status,
+        waitingSince: birStep.waitingSince,
+        expectedResponseDays: birStep.expectedResponseDays,
+        certificatesExpectedBy: filing.certificatesExpectedBy,
+        internalFilingTarget: filing.internalFilingTarget,
+        adjustedDueDate: filing.adjustedDueDate,
+      });
+      waitingBir.push({ filing, step: birStep, aging, dueDate });
     }
   }
 
@@ -145,8 +181,13 @@ export default async function DashboardPage() {
     dueDate: r.dueDate,
   }));
 
+  // D72 (brief #5m §2) — no Log follow-up on any BIR wait, here or
+  // anywhere else: she can't follow up with BIR on steps 10, 13 or 14.
+  // `id` is per (filing, step) — D74 can list more than one BIR-waiting
+  // step for the same filing at once, so filing.id alone is no longer a
+  // unique row key.
   const waitingBirRows: FilingTableRow[] = waitingBir.map((r) => ({
-    id: r.filing.id,
+    id: `${r.filing.id}-${r.step.stepCode}`,
     href: rowHref(r.filing.id, r.filing.clientId),
     clientName: r.filing.client.registeredName,
     taxableYear: r.filing.taxableYear,
@@ -154,13 +195,6 @@ export default async function DashboardPage() {
     stepTitle: r.step.title,
     dueDate: r.dueDate,
     aging: r.aging,
-    action: (
-      <form action={logFollowUpAction.bind(null, r.step.id)}>
-        <Button type="submit" size="sm" variant="secondary">
-          Log follow-up
-        </Button>
-      </form>
-    ),
   }));
 
   const waitingClientRows: FilingTableRow[] = waitingClient.map((r) => ({

@@ -20,6 +20,7 @@ describe("uploadDocument", () => {
   afterAll(async () => {
     if (createdClientIds.length === 0) return;
     await prisma.document.deleteMany({ where: { clientId: { in: createdClientIds } } });
+    await prisma.quarterlySales.deleteMany({ where: { clientId: { in: createdClientIds } } });
     await prisma.workflowStep.deleteMany({ where: { filing: { clientId: { in: createdClientIds } } } });
     await prisma.filing.deleteMany({ where: { clientId: { in: createdClientIds } } });
     await prisma.client.deleteMany({ where: { id: { in: createdClientIds } } });
@@ -48,6 +49,37 @@ describe("uploadDocument", () => {
     const filing = await prisma.filing.findUniqueOrThrow({
       where: { clientId_taxableYear_period: { clientId: client.id, taxableYear: 2026, period: "Q2" } },
     });
+
+    // D75 (brief #5m §3) -- SAVE_PROOF_PAYMENT is now locked until File
+    // (steps 5, 6, 7) and step 8 (MAKE_PAYMENT) are all Done. Resolved
+    // here so this test can stay about the upload path itself, not the
+    // new Pay-group lock (covered separately in workflowSteps.test.ts).
+    // D76 -- a real Q2 sales figure keeps this a genuine "payable" return,
+    // so steps 8/9 stay PENDING rather than auto-NA'ing (nothing to pay).
+    await prisma.quarterlySales.create({
+      data: { clientId: client.id, taxableYear: 2026, quarter: "Q2", grossSalesCents: 500_000_00, finalizedAt: new Date() },
+    });
+    const fileReturnStep = await prisma.workflowStep.findFirstOrThrow({
+      where: { filingId: filing.id, stepCode: "FILE_RETURN" },
+    });
+    await markStepDone(fileReturnStep.id);
+    for (const [stepCode, slotCode] of [
+      ["SAVE_SUBMISSION_SS", "submission_screenshot"],
+      ["SAVE_FORM_COPY", "filed_form"],
+    ] as const) {
+      const s = await prisma.workflowStep.findFirstOrThrow({ where: { filingId: filing.id, stepCode } });
+      const fd = new FormData();
+      fd.set("file", new File(["bytes"], `${stepCode}.pdf`, { type: "application/pdf" }));
+      fd.set("workflowStepId", s.id);
+      fd.set("docSlotCode", slotCode);
+      fd.set("documentDate", "2026-08-15");
+      await uploadDocument(fd);
+    }
+    const makePaymentStep = await prisma.workflowStep.findFirstOrThrow({
+      where: { filingId: filing.id, stepCode: "MAKE_PAYMENT" },
+    });
+    await markStepDone(makePaymentStep.id);
+
     const step = await prisma.workflowStep.findFirstOrThrow({
       where: { filingId: filing.id, stepCode: "SAVE_PROOF_PAYMENT" },
     });
@@ -76,29 +108,27 @@ describe("uploadDocument", () => {
     );
     expect(storedFile.toString()).toBe(fileContent);
 
-    // Second upload, identical content, different slot -> warns, doesn't block.
-    // Brief #5k §4 (D67) -- SAVE_SUBMISSION_SS is now locked until step 5
-    // (FILE_RETURN) is Done, so that's resolved first; this test is about
-    // the duplicate-hash warning, not the new File-group lock.
-    const fileReturnStep = await prisma.workflowStep.findFirstOrThrow({
-      where: { filingId: filing.id, stepCode: "FILE_RETURN" },
-    });
-    await markStepDone(fileReturnStep.id);
-
+    // Second upload, identical content, different slot -> warns, doesn't
+    // block. EAFS_SUBMIT's slot is never locked/self-completing (D75's new
+    // Pay-group lock and D67's File-group lock don't apply to it), so this
+    // stays purely about the duplicate-hash warning.
     const step2 = await prisma.workflowStep.findFirstOrThrow({
-      where: { filingId: filing.id, stepCode: "SAVE_SUBMISSION_SS" },
+      where: { filingId: filing.id, stepCode: "EAFS_SUBMIT" },
     });
     const duplicateFormData = new FormData();
     duplicateFormData.set("file", new File([fileContent], "proof-again.pdf", { type: "application/pdf" }));
     duplicateFormData.set("workflowStepId", step2.id);
-    duplicateFormData.set("docSlotCode", "submission_screenshot");
+    duplicateFormData.set("docSlotCode", "eafs_confirmation");
     duplicateFormData.set("documentDate", "2026-08-12");
 
     const duplicateResult = await uploadDocument(duplicateFormData);
     expect(duplicateResult.ok).toBe(true); // never blocked
     expect(duplicateResult.duplicateWarning).toContain("proof.pdf");
 
+    // submission_screenshot + filed_form (unlocking File) + proof + the
+    // eafs_confirmation duplicate = 4; both the proof and its duplicate
+    // are still counted, never silently overwritten.
     const totalDocs = await prisma.document.count({ where: { clientId: client.id, deletedAt: null } });
-    expect(totalDocs).toBe(2); // both saved, not silently overwritten
+    expect(totalDocs).toBe(4);
   });
 });

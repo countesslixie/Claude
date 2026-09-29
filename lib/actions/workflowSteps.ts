@@ -12,9 +12,14 @@ import { parseDocSlots } from "@/lib/workflow/types";
 import {
   prepareGroupBlockReason,
   adviseClientBlockReason,
-  FILE_GROUP_NO_START_NO_SKIP,
+  payGroupBlockReason,
+  NO_START_NO_SKIP_STEP_CODES,
+  BIR_CONFIRMATIONS_UNLOCK_STEP_CODE,
+  BIR_WAIT_STEP_CODES,
 } from "@/lib/workflow/groups";
 import { buildLiveAdviceMessageForFiling } from "@/lib/workflow/adviceMessage";
+import { assembleAndComputeFiling } from "@/lib/filingComputation";
+import type { Period } from "@/lib/tax/types";
 
 export type StepActionResult = { ok: boolean; error?: string };
 
@@ -87,11 +92,16 @@ export async function markStepDone(stepId: string): Promise<StepActionResult> {
   // Brief #5e §1 — step 4 (ADVISE_CLIENT) requires step 3 (PREPARE_RETURN)
   // to be Done first, enforced here so it can't be bypassed by calling
   // this action directly (the same reasoning as step 3's own check above).
-  // markGroupDone below calls this per-step in ascending sequence order,
-  // so it naturally resolves step 3 before attempting step 4 and never
-  // bypasses this rule.
   if (step.stepCode === "ADVISE_CLIENT") {
     const reason = adviseClientBlockReason(step.filing.workflowSteps);
+    if (reason) return { ok: false, error: reason };
+  }
+
+  // D75 (brief #5m §3.1) — step 8 (MAKE_PAYMENT) requires File (steps 5,
+  // 6, 7) to be Done first, enforced here so it can't be bypassed by
+  // calling this action directly.
+  if (step.stepCode === "MAKE_PAYMENT") {
+    const reason = payGroupBlockReason(step.filing.workflowSteps);
     if (reason) return { ok: false, error: reason };
   }
 
@@ -145,30 +155,68 @@ export async function markStepDone(stepId: string): Promise<StepActionResult> {
   await recomputeFilingStatus(step.filingId, actorId);
   if (step.stepCode === "PREPARE_RETURN") await ensureComputationSheetSaved(step.filingId);
 
-  // D68 (brief #5l §1, her decision) — a TRRC is always owed once the
-  // return is filed. Waiting for her to click a manual "Mark waiting"
-  // meant the BIR aging clock never started until she remembered to do
-  // that herself, so a late TRRC could sit silently instead of reaching
-  // the dashboard's red list. Step 10 (RECEIVE_TRRC) can only be PENDING
-  // at this point — D67 already locks it until step 5 is Done, so it
-  // can't have been touched yet — making this a one-way transition that's
-  // never re-triggered by a later no-op call to this same function.
+  // D68 (brief #5l §1, her decision, extended to step 14 by D71/brief
+  // #5m §2) — a TRRC is always owed once the return is filed, and a
+  // validation email is always owed once the acknowledgement is in.
+  // Waiting for her to click a manual "Mark waiting" meant the BIR aging
+  // clock never started until she remembered to do that herself, so a
+  // late document could sit silently instead of reaching the dashboard's
+  // red list. RECEIVE_TRRC/SAWT_VALIDATION can only be PENDING at this
+  // point — D67/D71 already lock them until their own gating step is
+  // Done, so neither can have been touched yet — making this a one-way
+  // transition that's never re-triggered by a later no-op call to this
+  // same function.
+  for (const [gatedStepCode, gatingStepCode] of Object.entries(BIR_CONFIRMATIONS_UNLOCK_STEP_CODE)) {
+    if (step.stepCode !== gatingStepCode) continue;
+    const gatedStep = step.filing.workflowSteps.find((s) => s.stepCode === gatedStepCode);
+    if (!gatedStep || gatedStep.status !== "PENDING") continue;
+    const gatedUpdated = await prisma.workflowStep.update({
+      where: { id: gatedStep.id },
+      data: { status: "WAITING_EXTERNAL", waitingSince: now, actorId },
+    });
+    await logActivity({
+      entityType: "WorkflowStep",
+      entityId: gatedStep.id,
+      action: "UPDATE",
+      before: gatedStep,
+      after: gatedUpdated,
+      actorId,
+      note: `Step ${gatedUpdated.sequence} started waiting on BIR automatically.`,
+    });
+    await recomputeFilingStatus(step.filingId, actorId);
+  }
+
+  // D76 (brief #5m §3.4, her decision) — "nothing to pay" makes steps 8
+  // and 9 (MAKE_PAYMENT, SAVE_PROOF_PAYMENT) NA automatically, at the
+  // instant step 5 (FILE_RETURN) is marked Done — no clicks needed. This
+  // is meant to key off the frozen computationSnapshot (it's set "when
+  // the snapshot freezes"), but the production markStepDone path has
+  // never actually written that field (confirmed by grep — only
+  // prisma/seed.ts does, a pre-existing gap this brief did not create and
+  // was not asked to close); a live recomputation at this exact moment is
+  // the equivalent read. An overpayment or exactly ₱0 payable means
+  // nothing is ever owed for this return, so both steps skip straight to
+  // Not applicable rather than sitting PENDING with nothing to do.
   if (step.stepCode === "FILE_RETURN") {
-    const trrcStep = step.filing.workflowSteps.find((s) => s.stepCode === "RECEIVE_TRRC");
-    if (trrcStep && trrcStep.status === "PENDING") {
-      const trrcUpdated = await prisma.workflowStep.update({
-        where: { id: trrcStep.id },
-        data: { status: "WAITING_EXTERNAL", waitingSince: now, actorId },
-      });
-      await logActivity({
-        entityType: "WorkflowStep",
-        entityId: trrcStep.id,
-        action: "UPDATE",
-        before: trrcStep,
-        after: trrcUpdated,
-        actorId,
-        note: "Step 10 started waiting on BIR automatically — the return was filed.",
-      });
+    const sheet = await assembleAndComputeFiling(step.filing.clientId, step.filing.taxableYear, step.filing.period as Period);
+    if (sheet.isOverpayment || sheet.taxPayableCents === 0) {
+      for (const payStepCode of ["MAKE_PAYMENT", "SAVE_PROOF_PAYMENT"]) {
+        const payStep = step.filing.workflowSteps.find((s) => s.stepCode === payStepCode);
+        if (!payStep || payStep.status !== "PENDING") continue;
+        const payUpdated = await prisma.workflowStep.update({
+          where: { id: payStep.id },
+          data: { status: "NA", actorId },
+        });
+        await logActivity({
+          entityType: "WorkflowStep",
+          entityId: payStep.id,
+          action: "UPDATE",
+          before: payStep,
+          after: payUpdated,
+          actorId,
+          note: "Nothing to pay on this return — marked not applicable automatically.",
+        });
+      }
       await recomputeFilingStatus(step.filingId, actorId);
     }
   }
@@ -417,27 +465,29 @@ export async function recomputeReceive2307Status(filingId: string): Promise<void
 }
 
 /**
- * D67 (brief #5k §4) — steps 6, 7 and 10 (SAVE_SUBMISSION_SS,
- * SAVE_FORM_COPY, RECEIVE_TRRC) are self-completing the same way step 2
- * is (D46): each carries exactly one required doc slot, and attaching
- * its document marks the step DONE directly, with no separate "Mark
- * done" left to click. Called after every upload/removal against one of
- * these three steps (lib/actions/documents.ts's saveDocumentForStep /
- * deleteDocument). Reverts to PENDING if the document is removed (or
- * replaced away without a replacement) and none remains — a step whose
- * only file just vanished isn't done, the same PENDING state it started
- * in (§4.4). **Brief #5l §1 (D68) exception: RECEIVE_TRRC (step 10)
- * reverts to WAITING_EXTERNAL instead, never PENDING** — a TRRC is still
- * owed once the return is filed, so losing the file just means it hasn't
- * arrived (again); waitingSince is reset to step 5's (FILE_RETURN) own
+ * D67/D71/D75 — every self-completing doc step (SAVE_SUBMISSION_SS,
+ * SAVE_FORM_COPY, SAVE_PROOF_PAYMENT, RECEIVE_TRRC, SAWT_VALIDATION) is
+ * self-completing the same way step 2 is (D46): each carries exactly one
+ * required doc slot, and attaching its document marks the step DONE
+ * directly, with no separate "Mark done" left to click. Called after
+ * every upload/removal against one of these steps
+ * (lib/actions/documents.ts's saveDocumentForStep / deleteDocument).
+ * Reverts to PENDING if the document is removed (or replaced away without
+ * a replacement) and none remains — a step whose only file just vanished
+ * isn't done, the same PENDING state it started in (§4.4). **D68/D71
+ * exception: RECEIVE_TRRC and SAWT_VALIDATION revert to WAITING_EXTERNAL
+ * instead, never PENDING** (BIR_CONFIRMATIONS_UNLOCK_STEP_CODE names which
+ * steps this applies to) — a TRRC or a validation email is still owed
+ * once its own gating step is Done, so losing the file just means it
+ * hasn't arrived (again); waitingSince is reset to the gating step's own
  * `completedAt` on this same filing — a reliable existing record of when
- * the return was actually filed, not "now," so the aging clock measures
- * from filing, not from whenever the file happened to be removed. The
- * election hard-blocker (D27) still applies to the completing branch,
- * mirroring recomputeReceive2307Status's own check: an unconfirmed Q1
- * election leaves the step un-done regardless of what's attached, since
- * these three steps bypass markStepDone's own check entirely by
- * completing themselves here instead.
+ * that happened, not "now," so the aging clock measures from the actual
+ * event, not from whenever the file happened to be removed. The election
+ * hard-blocker (D27) still applies to the completing branch, mirroring
+ * recomputeReceive2307Status's own check: an unconfirmed Q1 election
+ * leaves the step un-done regardless of what's attached, since these
+ * steps bypass markStepDone's own check entirely by completing
+ * themselves here instead.
  */
 export async function recomputeFileGroupDocStepStatus(stepId: string): Promise<void> {
   const step = await prisma.workflowStep.findUnique({
@@ -474,16 +524,17 @@ export async function recomputeFileGroupDocStepStatus(stepId: string): Promise<v
     revalidatePath("/filings");
   } else if (!hasDoc && step.status === "DONE") {
     let updated;
-    if (step.stepCode === "RECEIVE_TRRC") {
-      const fileReturnStep = await prisma.workflowStep.findFirst({
-        where: { filingId: step.filingId, stepCode: "FILE_RETURN" },
+    const unlockStepCode = BIR_CONFIRMATIONS_UNLOCK_STEP_CODE[step.stepCode];
+    if (unlockStepCode) {
+      const unlockStep = await prisma.workflowStep.findFirst({
+        where: { filingId: step.filingId, stepCode: unlockStepCode },
       });
       updated = await prisma.workflowStep.update({
         where: { id: step.id },
         data: {
           status: "WAITING_EXTERNAL",
           completedAt: null,
-          waitingSince: fileReturnStep?.completedAt ?? new Date(),
+          waitingSince: unlockStep?.completedAt ?? new Date(),
           actorId,
         },
       });
@@ -504,11 +555,11 @@ export async function markStepInProgress(stepId: string): Promise<StepActionResu
   const step = await prisma.workflowStep.findUnique({ where: { id: stepId }, include: { filing: true } });
   if (!step) return { ok: false, error: "Step not found." };
 
-  // D65 (brief #5k §2) — steps 5-7/10 have no Start, enforced here so it
-  // can't be bypassed by calling this action directly (the same
-  // reasoning as step 3's own PREPARE_RETURN checks elsewhere in this
-  // file).
-  if (FILE_GROUP_NO_START_NO_SKIP.includes(step.stepCode)) {
+  // D65/D75 (briefs #5k §2, #5m §3) — steps 5-7/10 (File/BIR
+  // Confirmations) and 8-9 (Pay) have no Start, enforced here so it can't
+  // be bypassed by calling this action directly (the same reasoning as
+  // step 3's own PREPARE_RETURN checks elsewhere in this file).
+  if (NO_START_NO_SKIP_STEP_CODES.includes(step.stepCode)) {
     return { ok: false, error: "This step has no separate 'in progress' state — it's marked done directly." };
   }
 
@@ -532,16 +583,17 @@ export async function markStepWaitingExternal(stepId: string): Promise<StepActio
   const step = await prisma.workflowStep.findUnique({ where: { id: stepId }, include: { filing: true } });
   if (!step) return { ok: false, error: "Step not found." };
 
-  // D68 (brief #5l §1) — step 10 (RECEIVE_TRRC) no longer has a manual
-  // Mark waiting: it enters WAITING_EXTERNAL by itself the moment step 5
-  // is marked Done (markStepDone's own FILE_RETURN branch above), so
-  // there's nothing left for a manual click to do. Refused here, not
-  // just by removing the button, so it can't be bypassed by calling this
-  // action directly.
-  if (step.stepCode === "RECEIVE_TRRC") {
+  // D68/D71 (briefs #5l §1, #5m §2) — steps 10 (RECEIVE_TRRC) and 14
+  // (SAWT_VALIDATION) no longer have a manual Mark waiting: each enters
+  // WAITING_EXTERNAL by itself the moment its own gating step is Done
+  // (markStepDone's own loop over BIR_CONFIRMATIONS_UNLOCK_STEP_CODE
+  // above), so there's nothing left for a manual click to do. Refused
+  // here, not just by removing the button, so it can't be bypassed by
+  // calling this action directly.
+  if (step.stepCode === "RECEIVE_TRRC" || step.stepCode === "SAWT_VALIDATION") {
     return {
       ok: false,
-      error: "Step 10 starts waiting on BIR automatically once step 5 (file the return) is done — there's no manual Mark waiting any more.",
+      error: `Step ${step.sequence} starts waiting on BIR automatically once its own earlier step is done — there's no manual Mark waiting any more.`,
     };
   }
 
@@ -576,11 +628,12 @@ export async function skipStep(stepId: string, reason: string): Promise<StepActi
     return { ok: false, error: "Step 3 (prepare the return) can't be skipped — only marked done." };
   }
 
-  // D65 (brief #5k §2) — steps 5, 6, 7 and 10 (File group) can't be
-  // skipped either, the bookkeeper's decision: File is a fixed sequence
-  // of documents she always needs, not one with a step that might not
-  // apply. Enforced here, not just by the UI removing the Skip control.
-  if (FILE_GROUP_NO_START_NO_SKIP.includes(step.stepCode)) {
+  // D65/D75 (briefs #5k §2, #5m §3) — steps 5, 6, 7, 10 (File/BIR
+  // Confirmations) and 8, 9 (Pay) can't be skipped either, the
+  // bookkeeper's decision: each is a fixed sequence of documents/actions
+  // she always needs, not one with a step that might not apply. Enforced
+  // here, not just by the UI removing the Skip control.
+  if (NO_START_NO_SKIP_STEP_CODES.includes(step.stepCode)) {
     return { ok: false, error: "This step can't be skipped — only marked done." };
   }
 
@@ -608,6 +661,15 @@ export async function skipStep(stepId: string, reason: string): Promise<StepActi
 export async function logFollowUp(stepId: string): Promise<StepActionResult> {
   const step = await prisma.workflowStep.findUnique({ where: { id: stepId }, include: { filing: true } });
   if (!step) return { ok: false, error: "Step not found." };
+
+  // D72 (brief #5m §2, her decision) — no Log follow-up on any BIR wait
+  // (steps 10, 13, 14): she can't follow up with BIR on any of these. The
+  // button is gone from every card that shows one of these steps; refused
+  // here too so it can't be bypassed by calling this action directly.
+  if (BIR_WAIT_STEP_CODES.includes(step.stepCode)) {
+    return { ok: false, error: "There's no follow-up to log with BIR — this step just waits." };
+  }
+
   if (step.status !== "WAITING_EXTERNAL") return { ok: false, error: "This step isn't currently waiting." };
 
   const actorId = await getActorId();

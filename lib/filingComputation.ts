@@ -388,6 +388,30 @@ export async function hasSalesRecordedForPeriod(
 }
 
 /**
+ * D75 (brief #5m §3.2) — step 8's (MAKE_PAYMENT) amount/date/channel stay
+ * editable after Mark done until the NEXT filing of the same taxable year
+ * has its own step 5 (FILE_RETURN) Done — at that point this filing's
+ * paid amount has already been read into that later return's own item
+ * 56/58 (lib/filingComputation.ts's priorPeriodPaymentsCentsThrough), so
+ * changing it here would retroactively disagree with a return already
+ * filed. No next filing yet (e.g. this is the year's last period) means
+ * never locked by this rule.
+ */
+export async function isPaymentLocked(clientId: string, taxableYear: number, period: Period): Promise<boolean> {
+  const yearFilings = await prisma.filing.findMany({
+    where: { clientId, taxableYear, deletedAt: null, filedOutsideApp: false },
+    include: { workflowSteps: { where: { stepCode: "FILE_RETURN" } } },
+  });
+  const ordered = ALL_PERIODS.map((p) => yearFilings.find((f) => f.period === p)).filter(
+    (f): f is NonNullable<typeof f> => f != null,
+  );
+  const idx = ordered.findIndex((f) => f.period === period);
+  if (idx === -1) return false;
+  const nextFiling = ordered[idx + 1];
+  return nextFiling?.workflowSteps[0]?.status === "DONE";
+}
+
+/**
  * The integrity rule (SPEC.md 5): a frozen Filing's computationSnapshot
  * is never silently rewritten. When a transaction dated on or before a
  * frozen filing's period end is created or edited, this raises an
