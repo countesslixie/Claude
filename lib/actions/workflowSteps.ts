@@ -20,6 +20,7 @@ import {
   groupForStepCode,
   stepLockReason,
 } from "@/lib/workflow/groups";
+import { loadFilingOrderBlockReason } from "@/lib/workflow/filingOrderData";
 import { buildESubmissionEmail } from "@/lib/workflow/eSubmissionEmail";
 import { buildLiveAdviceMessageForFiling } from "@/lib/workflow/adviceMessage";
 import { Prisma } from "@prisma/client";
@@ -36,7 +37,7 @@ async function recomputeFilingStatus(filingId: string, actorId: string): Promise
   const filing = await prisma.filing.findUniqueOrThrow({ where: { id: filingId } });
   const steps = await prisma.workflowStep.findMany({ where: { filingId } });
   const status = deriveFilingStatus({
-    steps: steps.map((s) => ({ status: s.status, waitingOnLabel: s.waitingOnLabel })),
+    steps: steps.map((s) => ({ stepCode: s.stepCode, status: s.status, waitingOnLabel: s.waitingOnLabel })),
     adjustedDueDate: filing.adjustedDueDate,
     now: new Date(),
   });
@@ -97,6 +98,15 @@ export async function markStepDone(stepId: string): Promise<StepActionResult> {
     if (step.status === "NA") return { ok: false, error: "This step doesn't apply — there's no Form 2307 on this filing." };
     const lock = stepLockReason(step.stepCode, step.filing.workflowSteps);
     if (lock) return { ok: false, error: lock };
+  }
+
+  // D95 (brief #5q, her decision) — quarters are filed in order. Step 5 is
+  // refused while any earlier return of this client-year is unfiled; checked
+  // before anything is written (including D83's snapshot transaction below),
+  // so it holds when the action is called directly.
+  if (step.stepCode === "FILE_RETURN") {
+    const reason = await loadFilingOrderBlockReason(step.filing);
+    if (reason) return { ok: false, error: reason };
   }
 
   // Brief #4c fix — the group-level block (brief #4b's prepareGroupBlockReason)
@@ -649,6 +659,13 @@ export async function markStepInProgress(stepId: string): Promise<StepActionResu
     return { ok: false, error: "This step has no separate 'in progress' state — it's marked done directly." };
   }
 
+  // D98 (brief #5q) — steps 1 and 4 have no Start on their cards (D33, D51);
+  // refused here so it can't be bypassed by calling this action directly.
+  // (Step 1's income save drives it through markStepDone, not through here.)
+  if (step.stepCode === "RECORD_SALES" || step.stepCode === "ADVISE_CLIENT") {
+    return { ok: false, error: `Step ${step.sequence} can't be started separately — it's marked done directly.` };
+  }
+
   const actorId = await getActorId();
   const updated = await prisma.workflowStep.update({
     where: { id: stepId },
@@ -712,6 +729,15 @@ export async function skipStep(stepId: string, reason: string): Promise<StepActi
   // action directly.
   if (step.stepCode === "PREPARE_RETURN") {
     return { ok: false, error: "Step 3 (prepare the return) can't be skipped — only marked done." };
+  }
+
+  // D98 (brief #5q) — steps 1 and 4 can't be skipped either: neither card has
+  // a Skip button, and now the action refuses too, the way D54 does for step 3.
+  if (step.stepCode === "RECORD_SALES") {
+    return { ok: false, error: "Step 1 (quarterly sales) can't be skipped — it's completed by saving the quarter's sales." };
+  }
+  if (step.stepCode === "ADVISE_CLIENT") {
+    return { ok: false, error: "Step 4 (advise the client) can't be skipped — only marked done." };
   }
 
   // D65/D75 (briefs #5k §2, #5m §3) — steps 5, 6, 7, 10 (File/BIR

@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { uploadDocument } from "@/lib/actions/documents";
 import { markStepDone } from "@/lib/actions/workflowSteps";
 import { generateFilingsForClientYear } from "@/lib/workflow/filingGeneration";
+import { markEarlierQuartersFiled } from "../helpers/filedEarlier";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
@@ -46,6 +47,7 @@ describe("uploadDocument", () => {
     createdClientIds.push(client.id);
 
     await generateFilingsForClientYear(client.id, 2026);
+    await markEarlierQuartersFiled(client.id, 2026, "Q2");
     const filing = await prisma.filing.findUniqueOrThrow({
       where: { clientId_taxableYear_period: { clientId: client.id, taxableYear: 2026, period: "Q2" } },
     });

@@ -3,6 +3,9 @@ import { execSync } from "node:child_process";
 import { rmSync } from "node:fs";
 import path from "node:path";
 import { PrismaClient } from "@prisma/client";
+import { nextActionForFiling } from "@/lib/workflow/groups";
+import { filingOrderBlockReason, type FilingOrderContext } from "@/lib/workflow/filingOrder";
+import { renameSawtSteps, backfillFilingStatuses } from "@/prisma/backfills";
 
 /**
  * Brief #5n Part 5 (D82) — the seed builds eight labelled scenarios through
@@ -157,5 +160,72 @@ describe("seed scenarios (D82)", () => {
     expect(docs.length).toBeGreaterThan(0);
     expect(docs.every((d) => d.originalFilename.startsWith("SAMPLE_"))).toBe(true);
     expect(docs.every((d) => /^[0-9a-f]{64}$/.test(d.sha256))).toBe(true);
+  });
+
+  // ---- brief #5q ------------------------------------------------------------
+
+  it("D97: every sample filing's status pill agrees with Next — Waiting on BIR exactly when nothing of hers is left", async () => {
+    const filings = await db.filing.findMany({ include: { workflowSteps: true } });
+    expect(filings.length).toBeGreaterThan(0);
+    for (const f of filings) {
+      if (f.status === "COMPLETE" || f.status === "BLOCKED") continue;
+      const next = nextActionForFiling(f.workflowSteps);
+      expect(f.status === "WAITING_BIR", `${f.clientId} ${f.period}`).toBe(next.kind === "birWait");
+    }
+  });
+
+  it("D97: D and F read In progress with their TRRC still waiting; E and G read Waiting on BIR", async () => {
+    for (const [code, expected] of [
+      ["mendoza-c", "IN_PROGRESS"],
+      ["ocampo-f", "IN_PROGRESS"],
+      ["garcia-r", "WAITING_BIR"],
+      ["tolentino-g", "WAITING_BIR"],
+    ] as const) {
+      const f = await filingWithSteps(code, "Q3");
+      expect(f.status, code).toBe(expected);
+    }
+    expect(statusOf(await filingWithSteps("mendoza-c", "Q3"), "RECEIVE_TRRC")).toBe("WAITING_EXTERNAL");
+    expect(statusOf(await filingWithSteps("ocampo-f", "Q3"), "RECEIVE_TRRC")).toBe("WAITING_EXTERNAL");
+  });
+
+  it("D97 backfill: a row still reading Waiting on BIR while her work remains is corrected, and a second run changes nothing", async () => {
+    const f = await filingWithSteps("mendoza-c", "Q3");
+    await db.filing.update({ where: { id: f.id }, data: { status: "WAITING_BIR" } });
+    await backfillFilingStatuses(db);
+    expect((await db.filing.findUniqueOrThrow({ where: { id: f.id } })).status).toBe("IN_PROGRESS");
+    await backfillFilingStatuses(db);
+    expect((await db.filing.findUniqueOrThrow({ where: { id: f.id } })).status).toBe("IN_PROGRESS");
+  });
+
+  it("D96: steps 13 and 14 carry the SAWT names; the backfill renames old titles and is safe to run twice", async () => {
+    const g = await filingWithSteps("tolentino-g", "Q3");
+    expect(g.workflowSteps.find((x) => x.stepCode === "SAWT_ACK")!.title).toBe("Save SAWT acknowledgement email");
+    expect(g.workflowSteps.find((x) => x.stepCode === "SAWT_VALIDATION")!.title).toBe("Save SAWT validation email");
+    await db.workflowStep.updateMany({ where: { stepCode: "SAWT_ACK" }, data: { title: "Receive & save acknowledgement email" } });
+    await db.workflowStep.updateMany({ where: { stepCode: "SAWT_VALIDATION" }, data: { title: "Save eAFS validation email" } });
+    await renameSawtSteps(db);
+    await renameSawtSteps(db);
+    expect(await db.workflowStep.count({ where: { stepCode: "SAWT_ACK", title: { not: "Save SAWT acknowledgement email" } } })).toBe(0);
+    expect(await db.workflowStep.count({ where: { stepCode: "SAWT_VALIDATION", title: { not: "Save SAWT validation email" } } })).toBe(0);
+  });
+
+  it("D95: no sample scenario files out of order; B's Annual is held by Q3, A's Q3 and E's Q3 are not held", async () => {
+    const filings = await db.filing.findMany({ include: { workflowSteps: true, client: { include: { startingFigures: true } } } });
+    const ctxFor = (f: (typeof filings)[number]): FilingOrderContext => ({
+      taxableYear: f.taxableYear,
+      period: f.period,
+      siblings: filings
+        .filter((x) => x.clientId === f.clientId && x.taxableYear === f.taxableYear)
+        .map((x) => ({ period: x.period, filedOutsideApp: x.filedOutsideApp, fileReturnStatus: x.workflowSteps.find((s) => s.stepCode === "FILE_RETURN")?.status ?? null })),
+      latestOutsideReturn: f.client.startingFigures.find((sf) => sf.taxableYear === f.taxableYear)?.latestOutsideReturn ?? "NONE",
+    });
+    for (const f of filings) {
+      if (f.workflowSteps.find((s) => s.stepCode === "FILE_RETURN")?.status !== "DONE") continue;
+      expect(filingOrderBlockReason(ctxFor(f)), `${f.client.code} ${f.period} is filed but an earlier return isn't`).toBeNull();
+    }
+    const at = (code: string, period: string) => filings.find((f) => f.client.code === code && f.period === period)!;
+    expect(filingOrderBlockReason(ctxFor(at("pangilinan-a", "ANNUAL")))).toBe("File Q3 2026 first.");
+    expect(filingOrderBlockReason(ctxFor(at("villamor-e", "Q3")))).toBeNull();
+    expect(filingOrderBlockReason(ctxFor(at("garcia-r", "Q3")))).toBeNull();
   });
 });

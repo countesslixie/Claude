@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { Button } from "@/components/ui/button";
+import { form2307StatusLabel } from "@/lib/workflow/status";
 import { StatusBadge } from "@/components/status-badge";
 import { centsToPesos, bpsToPercentLabel } from "@/lib/money";
 import { currentTaxableYearManila } from "@/lib/dates";
@@ -111,7 +112,7 @@ export default async function Form2307RegisterPage({
                 <td className="text-right tabular-nums">{centsToPesos(c.taxWithheldCents, { withSymbol: true })}</td>
                 <td>{bpsToPercentLabel(c.withholdingRateBps)}</td>
                 <td>
-                  <StatusBadge tone={STATUS_TONE[c.status] ?? "pending"}>{c.status}</StatusBadge>
+                  <StatusBadge tone={STATUS_TONE[c.status] ?? "pending"}>{form2307StatusLabel(c.status)}</StatusBadge>
                 </td>
                 <td>
                   {c.claimedOnFiling ? (

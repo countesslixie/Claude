@@ -1,5 +1,6 @@
 import { manilaCalendarDay } from "@/lib/dates";
 import type { FilingStatus, WorkflowStepStatus } from "./types";
+import { nextActionForFiling } from "./groups";
 
 /**
  * Filing status derivation (SPEC.md 7.2) — status is DERIVED from its
@@ -16,12 +17,17 @@ import type { FilingStatus, WorkflowStepStatus } from "./types";
  *   - past adjustedDueDate and not complete -> BLOCKED (takes priority
  *     over "waiting on X" below: being overdue is the more urgent signal
  *     for a bookkeeper regardless of what it's specifically waiting on)
- *   - any WAITING_EXTERNAL on a BIR step -> WAITING_BIR
+ *   - any WAITING_EXTERNAL on a BIR step -> WAITING_BIR, but only when
+ *     nothing of hers is left (D97, brief #5q): "Waiting on BIR" is exactly
+ *     nextActionForFiling's BIR-wait result, so the pill agrees with Next by
+ *     construction. While her own work remains it reads IN_PROGRESS (no
+ *     client variant, her decision).
  *   - any WAITING_EXTERNAL on a client step -> WAITING_CLIENT
  *   - otherwise IN_PROGRESS if anything has started, else NOT_STARTED
  */
 
 export interface StepForStatus {
+  stepCode: string;
   status: WorkflowStepStatus;
   waitingOnLabel: string | null;
 }
@@ -46,7 +52,7 @@ export function deriveFilingStatus(input: {
   if (isPastDue) return "BLOCKED";
 
   const waitingOnBir = steps.some((s) => s.status === "WAITING_EXTERNAL" && s.waitingOnLabel === "BIR");
-  if (waitingOnBir) return "WAITING_BIR";
+  if (waitingOnBir) return nextActionForFiling(steps).kind === "birWait" ? "WAITING_BIR" : "IN_PROGRESS";
 
   const waitingOnClient = steps.some((s) => s.status === "WAITING_EXTERNAL" && s.waitingOnLabel === "Client");
   if (waitingOnClient) return "WAITING_CLIENT";
@@ -122,6 +128,34 @@ export const ALL_STEP_STATUSES: WorkflowStepStatus[] = Object.keys(STEP_STATUS_L
 
 export function stepStatusLabel(status: WorkflowStepStatus): string {
   return STEP_STATUS_LABELS[status];
+}
+
+/**
+ * D99 (brief #5q) — Form2307's own status enum (a separate enum from the two
+ * above) in plain sentence case, for the Form 2307 register. A
+ * Record keyed by the enum's values so a new value can't compile unlabelled.
+ */
+export type Form2307StatusValue =
+  | "RECEIVED"
+  | "RECORDED"
+  | "CLAIMED_ON_RETURN"
+  | "INCLUDED_IN_SAWT"
+  | "ACKNOWLEDGED"
+  | "VALIDATED";
+
+const FORM_2307_STATUS_LABELS: Record<Form2307StatusValue, string> = {
+  RECEIVED: "Received",
+  RECORDED: "Recorded",
+  CLAIMED_ON_RETURN: "Claimed on return",
+  INCLUDED_IN_SAWT: "Included in SAWT",
+  ACKNOWLEDGED: "Acknowledged",
+  VALIDATED: "Validated",
+};
+
+export const ALL_FORM_2307_STATUSES = Object.keys(FORM_2307_STATUS_LABELS) as Form2307StatusValue[];
+
+export function form2307StatusLabel(status: Form2307StatusValue): string {
+  return FORM_2307_STATUS_LABELS[status];
 }
 
 /**

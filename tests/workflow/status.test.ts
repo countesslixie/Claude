@@ -8,15 +8,24 @@ import {
   stepStatusLabel,
   ALL_FILING_STATUSES,
   ALL_STEP_STATUSES,
+  form2307StatusLabel,
+  ALL_FORM_2307_STATUSES,
 } from "@/lib/workflow/status";
 import type { StepForStatus } from "@/lib/workflow/status";
+import { nextActionForFiling, WORKFLOW_GROUPS } from "@/lib/workflow/groups";
 
 const DUE = new Date("2026-08-17T00:00:00.000Z");
 const BEFORE_DUE = new Date("2026-08-01T00:00:00.000Z");
 const AFTER_DUE = new Date("2026-09-01T00:00:00.000Z");
 
-function step(status: StepForStatus["status"], waitingOnLabel: string | null = null): StepForStatus {
-  return { status, waitingOnLabel };
+// D97: deriveFilingStatus asks nextActionForFiling, so steps carry real step codes. A step
+// waiting on BIR is the TRRC unless a code is given; anything else is step 1's code.
+function step(
+  status: StepForStatus["status"],
+  waitingOnLabel: string | null = null,
+  stepCode: string = waitingOnLabel === "BIR" ? "RECEIVE_TRRC" : waitingOnLabel === "Client" ? "RECEIVE_2307" : "RECORD_SALES",
+): StepForStatus {
+  return { stepCode, status, waitingOnLabel };
 }
 
 describe("deriveFilingStatus", () => {
@@ -82,9 +91,9 @@ describe("deriveFilingStatus", () => {
     expect(deriveFilingStatus({ steps, adjustedDueDate: DUE, now: BEFORE_DUE })).toBe("WAITING_CLIENT");
   });
 
-  it("BIR waiting takes priority over client waiting when both are present", () => {
+  it("D97: BIR waiting while her own work is still open (a client wait is hers to chase) -> IN_PROGRESS, not WAITING_BIR", () => {
     const steps = [step("WAITING_EXTERNAL", "BIR"), step("WAITING_EXTERNAL", "Client")];
-    expect(deriveFilingStatus({ steps, adjustedDueDate: DUE, now: BEFORE_DUE })).toBe("WAITING_BIR");
+    expect(deriveFilingStatus({ steps, adjustedDueDate: DUE, now: BEFORE_DUE })).toBe("IN_PROGRESS");
   });
 });
 
@@ -206,5 +215,49 @@ describe("stepStatusLabel (brief #5i §5)", () => {
       expect(label, `status ${status} rendered its own raw code`).not.toBe(status);
       expect(label.length).toBeGreaterThan(0);
     }
+  });
+});
+
+/** D97 (brief #5q) — "Waiting on BIR" only when nothing of hers is left. */
+describe("deriveFilingStatus — Waiting on BIR agrees with Next (D97)", () => {
+  const ALL = WORKFLOW_GROUPS.flatMap((g) => g.stepCodes);
+  const build = (over: Partial<Record<string, StepForStatus["status"]>>): StepForStatus[] =>
+    ALL.map((stepCode) => ({
+      stepCode,
+      status: over[stepCode] ?? "PENDING",
+      waitingOnLabel: over[stepCode] === "WAITING_EXTERNAL" ? "BIR" : null,
+    }));
+  const FILED: Partial<Record<string, StepForStatus["status"]>> = {
+    RECORD_SALES: "DONE", RECEIVE_2307: "DONE", PREPARE_RETURN: "DONE", ADVISE_CLIENT: "DONE",
+    FILE_RETURN: "DONE", SAVE_SUBMISSION_SS: "DONE", SAVE_FORM_COPY: "DONE", MAKE_PAYMENT: "DONE", SAVE_PROOF_PAYMENT: "DONE",
+    RECEIVE_TRRC: "WAITING_EXTERNAL",
+  };
+  const derive = (steps: StepForStatus[]) => deriveFilingStatus({ steps, adjustedDueDate: DUE, now: BEFORE_DUE });
+
+  it("BIR waiting plus her own work open (eAFS steps to do) -> In progress", () => {
+    const steps = build(FILED);
+    expect(nextActionForFiling(steps).kind).toBe("work");
+    expect(derive(steps)).toBe("IN_PROGRESS");
+    expect(filingStatusLabel(derive(steps), 0)).toBe("In progress");
+  });
+
+  it("BIR waiting and nothing of hers open -> Waiting on BIR", () => {
+    const steps = build({ ...FILED, ALPHALIST_ENTRY: "NA", EMAIL_DAT: "NA", SAWT_ACK: "NA", SAWT_VALIDATION: "NA", EAFS_SUBMIT: "NA" });
+    expect(nextActionForFiling(steps).kind).toBe("birWait");
+    expect(derive(steps)).toBe("WAITING_BIR");
+  });
+
+  it("past due is still Blocked, whatever the wait", () => {
+    expect(deriveFilingStatus({ steps: build(FILED), adjustedDueDate: DUE, now: AFTER_DUE })).toBe("BLOCKED");
+  });
+});
+
+/** D99 (brief #5q) — the Form 2307 register's own status enum, in plain words. */
+describe("form2307StatusLabel (D99)", () => {
+  it("labels every value in sentence case, none raw", () => {
+    expect(ALL_FORM_2307_STATUSES).toHaveLength(6);
+    expect(ALL_FORM_2307_STATUSES.map(form2307StatusLabel)).toEqual([
+      "Received", "Recorded", "Claimed on return", "Included in SAWT", "Acknowledged", "Validated",
+    ]);
   });
 });

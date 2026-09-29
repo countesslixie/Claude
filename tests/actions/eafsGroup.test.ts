@@ -226,15 +226,18 @@ describe("the eAFS group", () => {
     expect((await markStepDone((await step(filing.id, "EAFS_SUBMIT")).id)).ok).toBe(false);
   });
 
-  it("steps 10 and 14 are renamed in the template and on filings, and the eAFS validation short name is used", async () => {
+  it("steps 10 and 14 are renamed in the template and on filings, and the SAWT validation short name is used (D96)", async () => {
     const t10 = await prisma.workflowStepTemplate.findUniqueOrThrow({ where: { stepCode: "RECEIVE_TRRC" } });
     const t14 = await prisma.workflowStepTemplate.findUniqueOrThrow({ where: { stepCode: "SAWT_VALIDATION" } });
     expect(t10.title).toBe("Save TRRC email");
-    expect(t14.title).toBe("Save eAFS validation email");
+    expect(t14.title).toBe("Save SAWT validation email");
+    const t13 = await prisma.workflowStepTemplate.findUniqueOrThrow({ where: { stepCode: "SAWT_ACK" } });
+    expect(t13.title).toBe("Save SAWT acknowledgement email");
     const { filing } = await setup();
     expect((await step(filing.id, "RECEIVE_TRRC")).title).toBe("Save TRRC email");
-    expect((await step(filing.id, "SAWT_VALIDATION")).title).toBe("Save eAFS validation email");
+    expect((await step(filing.id, "SAWT_VALIDATION")).title).toBe("Save SAWT validation email");
+    expect((await step(filing.id, "SAWT_ACK")).title).toBe("Save SAWT acknowledgement email");
     const { BIR_WAIT_SHORT_NAME } = await import("@/lib/workflow/aging");
-    expect(BIR_WAIT_SHORT_NAME.SAWT_VALIDATION).toBe("eAFS validation");
+    expect(BIR_WAIT_SHORT_NAME.SAWT_VALIDATION).toBe("SAWT validation");
   });
 });

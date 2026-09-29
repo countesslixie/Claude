@@ -6,6 +6,7 @@ import { generateFilingsForClientYear, recomputeRequiresSawt } from "@/lib/workf
 import { uploadDocument } from "@/lib/actions/documents";
 import { markStepDone } from "@/lib/actions/workflowSteps";
 import { parseDocSlots } from "@/lib/workflow/types";
+import { markEarlierQuartersFiled } from "../helpers/filedEarlier";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
@@ -52,6 +53,7 @@ describe("end-to-end: driving a filing from step 1 to step 16", () => {
     createdClientIds.push(client.id);
 
     await generateFilingsForClientYear(client.id, 2026);
+    await markEarlierQuartersFiled(client.id, 2026, "Q2");
     const filing = await prisma.filing.findUniqueOrThrow({
       where: { clientId_taxableYear_period: { clientId: client.id, taxableYear: 2026, period: "Q2" } },
     });

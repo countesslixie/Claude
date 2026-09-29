@@ -518,7 +518,7 @@ export async function seedScenarios(prisma: PrismaClient, actorId: string): Prom
     withholdingBps: 500,
     engagedSince: "2026-01-18",
     notes:
-      "Sample G: Q3 — everything of hers is done including eAFS; TRRC waiting about 8 days (red) and eAFS validation waiting. The card sits in BIR Confirmations.",
+      "Sample G: Q3 — everything of hers is done including eAFS; TRRC waiting about 8 days (red) and SAWT validation waiting. The card sits in BIR Confirmations.",
   });
   await startingFigures(tolentino.id, "Q2", {
     cumulativeIncome: "300,000.00",

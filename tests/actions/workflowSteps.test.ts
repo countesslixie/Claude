@@ -16,6 +16,7 @@ import { summarizeGroup, WORKFLOW_GROUPS, FILE_GROUP_NO_START_NO_SKIP, type Grou
 import { checkSendClientPackageReadiness } from "@/lib/workflow/docSlots";
 import { computeFilingCompleteness } from "@/lib/workflow/completeness";
 import { parseDocSlots } from "@/lib/workflow/types";
+import { markEarlierQuartersFiled } from "../helpers/filedEarlier";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
@@ -56,6 +57,7 @@ describe("workflow step actions", () => {
     });
     createdClientIds.push(client.id);
     await generateFilingsForClientYear(client.id, 2026);
+    await markEarlierQuartersFiled(client.id, 2026, "Q2");
     const filing = await prisma.filing.findUniqueOrThrow({
       where: { clientId_taxableYear_period: { clientId: client.id, taxableYear: 2026, period: "Q2" } },
     });
@@ -173,12 +175,13 @@ describe("workflow step actions", () => {
     expect(result.error).toContain("step 7");
   });
 
-  it("D68: marking FILE_RETURN done moves step 10 to WAITING_EXTERNAL automatically, flipping the filing status to WAITING_BIR", async () => {
+  it("D68: marking FILE_RETURN done moves step 10 to WAITING_EXTERNAL automatically, and the filing status reflects it (D97)", async () => {
     // Q3 (adjusted due Nov 16, 2026) — not yet past due relative to "now"
     // when this suite runs, unlike Q2 (due Aug 17), so BLOCKED doesn't
     // pre-empt WAITING_BIR here (BLOCKED correctly takes priority when a
     // filing genuinely is overdue — see lib/workflow/status.ts).
     const { client } = await makeClientWithQ2Filing("p3-step-waitbir");
+    await markEarlierQuartersFiled(client.id, 2026, "Q3"); // D95 -- Q1 and Q2 filed first
     const filing = await prisma.filing.findUniqueOrThrow({
       where: { clientId_taxableYear_period: { clientId: client.id, taxableYear: 2026, period: "Q3" } },
     });
@@ -210,7 +213,9 @@ describe("workflow step actions", () => {
     expect(updatedFormCopy.status).toBe("PENDING");
 
     const updatedFiling = await prisma.filing.findUniqueOrThrow({ where: { id: filing.id } });
-    expect(updatedFiling.status).toBe("WAITING_BIR");
+    // D97: steps 1-4 are still open in this test, so her own work remains and the pill reads
+    // In progress; "Waiting on BIR" is only for when nothing of hers is left (see status.test.ts).
+    expect(updatedFiling.status).toBe("IN_PROGRESS");
 
     // D72 (brief #5m §2) -- no Log follow-up on any BIR wait, including
     // step 10; refused here, not just missing from the UI.

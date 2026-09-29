@@ -22,7 +22,6 @@ const BUILT = [
 
 const LATER = [
   { title: "Workflow step template", phase: "Phase 3" },
-  { title: "Chart of accounts", phase: "Phase 4" },
   { title: "Backup", phase: "Phase 4" },
 ];
 

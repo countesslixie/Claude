@@ -237,13 +237,13 @@ describe("summarizeGroup", () => {
     expect(summary.outstandingLabel).toBe("waiting on TRRC, 12d");
   });
 
-  it("D70/D71 -- BIR Confirmations' outstanding label reads 'waiting on eAFS validation, <N>d' for step 14 waiting", () => {
+  it("D70/D71 -- BIR Confirmations' outstanding label reads 'waiting on SAWT validation, <N>d' for step 14 waiting", () => {
     const steps: GroupStepInput[] = [
       { stepCode: "RECEIVE_TRRC", status: "DONE" },
       { stepCode: "SAWT_VALIDATION", status: "WAITING_EXTERNAL", waitingOnLabel: "BIR", agingDaysWaiting: 3 },
     ];
     const summary = summarizeGroup(birConfirmations, steps);
-    expect(summary.outstandingLabel).toBe("waiting on eAFS validation, 3d");
+    expect(summary.outstandingLabel).toBe("waiting on SAWT validation, 3d");
   });
 
   it("D70/D71 -- both steps 10 and 14 waiting at once combine with a single 'waiting on'", () => {
@@ -252,7 +252,7 @@ describe("summarizeGroup", () => {
       { stepCode: "SAWT_VALIDATION", status: "WAITING_EXTERNAL", waitingOnLabel: "BIR", agingDaysWaiting: 2 },
     ];
     const summary = summarizeGroup(birConfirmations, steps);
-    expect(summary.outstandingLabel).toBe("waiting on TRRC, 0d · eAFS validation, 2d");
+    expect(summary.outstandingLabel).toBe("waiting on TRRC, 0d · SAWT validation, 2d");
   });
 
   it("D73 -- BIR Confirmations shows no text while neither step has started waiting (both still locked/PENDING)", () => {

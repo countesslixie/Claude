@@ -4,7 +4,7 @@ import path from "node:path";
 import { rm } from "node:fs/promises";
 import { prisma } from "@/lib/prisma";
 import { saveQuarterlySales } from "@/lib/actions/quarterlySales";
-import { updateFilingOtherCredits, savePayment } from "@/lib/actions/filings";
+import { savePayment } from "@/lib/actions/filings";
 import { uploadDocument } from "@/lib/actions/documents";
 import { markStepDone, skipStep } from "@/lib/actions/workflowSteps";
 import { generateFilingsForClientYear } from "@/lib/workflow/filingGeneration";
@@ -13,6 +13,7 @@ import { ensureComputationSheetSaved } from "@/lib/documents/computationSheet";
 import { buildLiveAdviceMessageForFiling } from "@/lib/workflow/adviceMessage";
 import { changedItems } from "@/lib/tax/amendment";
 import type { FilingComputationResult } from "@/lib/tax/types";
+import { markEarlierQuartersFiled } from "../helpers/filedEarlier";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
@@ -96,7 +97,10 @@ describe("frozen filed returns (D83)", () => {
     const c = await makeClient();
     await sales(c.id, "Q1", "300000");
     await sales(c.id, "Q2", "300000");
-    const q2 = await fileReturn(c.id, "Q2"); // filed out of order on purpose: Q1 is still open
+    // D95 -- Q2 can only be filed once Q1 is filed. Q1 is marked filed (outside the app) with
+    // its sales still editable, so an edit to it after Q2 is filed is still possible to test.
+    await prisma.filing.update({ where: { id: (await filingOf(c.id, "Q1")).id }, data: { filedOutsideApp: true } });
+    const q2 = await fileReturn(c.id, "Q2");
     const frozen = parse(q2);
     await sales(c.id, "Q1", "500000"); // +200,000 -> item 50 (and 51, 53, 54) move on a live Q2
     const after = await prisma.filing.findUniqueOrThrow({ where: { id: q2.id } });
@@ -110,14 +114,17 @@ describe("frozen filed returns (D83)", () => {
     expect(alerts[0].deltaCents).toBe(1_600_000); // 8% of 200,000
   });
 
-  it("item 61 changed on an earlier, still-open return alerts a later filed one", async () => {
+  it("item 61 changed on an earlier return alerts a later filed one (the recheck every such action runs)", async () => {
     const c = await makeClient();
     await sales(c.id, "Q1", "300000");
     await sales(c.id, "Q2", "300000");
+    await markEarlierQuartersFiled(c.id, 2026, "Q2"); // D95 -- Q1 is filed before Q2
     const q2 = await fileReturn(c.id, "Q2");
     const q1 = await filingOf(c.id, "Q1");
-    const res = await updateFilingOtherCredits(q1.id, {}, fd({ otherCredits: "1000", otherCreditsDescription: "Test credit" }));
-    expect(res.saved, res.error).toBe(true);
+    // The screen locks Q1's item 61 once it is filed (D55), so this drives the recheck directly,
+    // exactly as updateFilingOtherCredits calls it.
+    await prisma.filing.update({ where: { id: q1.id }, data: { otherCreditsCents: 100_000, otherCreditsDescription: "Test credit" } });
+    expect(await checkAndRecordAmendments(c.id, 2026, null, "Item 61 on Q1 2026 changed.")).toBe(1);
     const alerts = await prisma.amendmentAlert.findMany({ where: { filingId: q2.id } });
     expect(alerts).toHaveLength(1);
     const items = changedItems(parse(q2), JSON.parse(alerts[0].recomputedJson as string));

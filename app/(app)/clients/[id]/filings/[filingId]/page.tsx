@@ -29,6 +29,8 @@ import { Receive2307StepCard, type CertificateRow } from "@/components/receive-2
 import { FileGroupDocStepCard } from "@/components/file-group-doc-step-card";
 import { EmailDatStepCard } from "@/components/email-dat-step-card";
 import { MakePaymentStepCard } from "@/components/make-payment-step-card";
+import { loadFilingOrderContext } from "@/lib/workflow/filingOrderData";
+import { filingOrderBlockReason, firstUnfiledEarlierPeriod } from "@/lib/workflow/filingOrder";
 import { NextActionControl } from "@/components/next-action-control";
 import { FilingStickyBar } from "@/components/filing-sticky-bar";
 import { ComputationSheetPanel } from "@/components/computation-sheet-panel";
@@ -253,7 +255,16 @@ export default async function FilingDetailPage({
   // D84 (brief #5o) — "Next" is her next piece of work, by group order, skipping
   // locked steps and steps waiting on BIR; the banner and the slim bar share it
   // (and the dashboard's "Needs my action" uses the same helper).
-  const nextAction = nextActionForFiling(filing.workflowSteps);
+  // D95 (brief #5q) — the filing-order guard: step 5 is locked while an earlier
+  // return of this client-year is unfiled. Next still names step 5, with the
+  // reason and a link to the earlier filing.
+  const filingOrderContext = await loadFilingOrderContext(filing);
+  const filingOrderReason = filingOrderBlockReason(filingOrderContext);
+  const earlierUnfiledPeriod = firstUnfiledEarlierPeriod(filingOrderContext);
+  const earlierUnfiledFilingId = earlierUnfiledPeriod
+    ? (filingOrderContext.siblings.find((s) => s.period === earlierUnfiledPeriod)?.id ?? null)
+    : null;
+  const nextAction = nextActionForFiling(filing.workflowSteps, filingOrderReason);
   const nextStep = nextAction.kind === "work" ? allSteps.find((s) => s.stepCode === nextAction.stepCode) : undefined;
   const birWaitText =
     nextAction.kind === "birWait"
@@ -289,6 +300,7 @@ export default async function FilingDetailPage({
     SAWT_VALIDATION: validationDependencyReason,
     PREPARE_RETURN: prepareBlockReason,
     ADVISE_CLIENT: adviseBlockReason,
+    FILE_RETURN: filingOrderReason,
   };
 
 
@@ -555,6 +567,22 @@ export default async function FilingDetailPage({
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm font-medium text-ink">
                 Next: Step {nextStep.sequence} of {allSteps.length} — {nextStep.title}
+                {nextStep.stepCode === "FILE_RETURN" && filingOrderReason && (
+                  <span className="ml-2 font-normal text-faint">
+                    {filingOrderReason}
+                    {earlierUnfiledFilingId && (
+                      <>
+                        {" "}
+                        <Link
+                          href={`/clients/${filing.clientId}/filings/${earlierUnfiledFilingId}`}
+                          className="underline"
+                        >
+                          Open {earlierUnfiledPeriod === "ANNUAL" ? "Annual" : earlierUnfiledPeriod}
+                        </Link>
+                      </>
+                    )}
+                  </span>
+                )}
               </p>
               <NextActionControl
                 stepId={nextStep.id}

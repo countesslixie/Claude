@@ -403,9 +403,16 @@ export const EAFS_UNLOCK_STEP_CODE: Record<string, string> = {
  * knows every gate in the workflow (steps 3/4, 6/7/10, 8/9, the eAFS chain,
  * 14, and 16's package readiness), used by nextActionForFiling below.
  */
-export function stepLockReason(stepCode: string, steps: { stepCode: string; status: WorkflowStepStatus }[]): string | null {
+export function stepLockReason(
+  stepCode: string,
+  steps: { stepCode: string; status: WorkflowStepStatus }[],
+  /** D95 (brief #5q) — from filingOrderBlockReason (lib/workflow/filingOrder.ts): why this return can't be filed yet because an earlier one isn't. Null/omitted when nothing earlier is open. */
+  filingOrderReason: string | null = null,
+): string | null {
   const statusOf = (code: string) => steps.find((s) => s.stepCode === code)?.status;
   switch (stepCode) {
+    case "FILE_RETURN":
+      return filingOrderReason;
     case "PREPARE_RETURN":
       return prepareGroupBlockReason(steps);
     case "ADVISE_CLIENT":
@@ -456,7 +463,11 @@ export type NextAction =
   | { kind: "birWait"; stepCodes: string[] }
   | { kind: "complete" };
 
-export function nextActionForFiling(steps: { stepCode: string; status: WorkflowStepStatus }[]): NextAction {
+export function nextActionForFiling(
+  steps: { stepCode: string; status: WorkflowStepStatus }[],
+  /** D95 (brief #5q) — the filing-order guard's reason for step 5, if any; step 5 is then locked like any other gated step. */
+  filingOrderReason: string | null = null,
+): NextAction {
   const unresolved: string[] = [];
   for (const group of WORKFLOW_GROUPS) {
     for (const stepCode of group.stepCodes) {
@@ -466,7 +477,7 @@ export function nextActionForFiling(steps: { stepCode: string; status: WorkflowS
   }
   const isBirWait = (code: string) =>
     BIR_WAIT_STEP_CODES.includes(code) && steps.find((s) => s.stepCode === code)?.status === "WAITING_EXTERNAL";
-  const work = unresolved.find((code) => !isBirWait(code) && !stepLockReason(code, steps));
+  const work = unresolved.find((code) => !isBirWait(code) && !stepLockReason(code, steps, filingOrderReason));
   if (work) return { kind: "work", stepCode: work };
   const waits = unresolved.filter(isBirWait);
   if (waits.length > 0) return { kind: "birWait", stepCodes: waits };
@@ -560,7 +571,7 @@ function fileGroupOutstandingLabel(groupSteps: GroupStepInput[]): string | null 
  */
 const BIR_CONFIRMATIONS_SHORT_NAMES: Record<string, string> = {
   RECEIVE_TRRC: BIR_WAIT_SHORT_NAME.RECEIVE_TRRC,
-  SAWT_VALIDATION: BIR_WAIT_SHORT_NAME.SAWT_VALIDATION, // D92: "eAFS validation"
+  SAWT_VALIDATION: BIR_WAIT_SHORT_NAME.SAWT_VALIDATION, // D96: "SAWT validation"
 };
 
 function birConfirmationsOutstandingLabel(groupSteps: GroupStepInput[]): string | null {

@@ -840,7 +840,7 @@ Step 15 joined the conditional steps (with 11–14): no certificate claimed on t
 Template, existing rows (seed backfill, same pattern as D66's rename of step 5), and every place the old title appeared: the group card, the package-readiness message (`docSlots.ts`), tests.
 
 **D92 — Step 14 renamed "Save eAFS validation email"; the short names become "eAFS validation"** *(2026-09-29, brief #5o §4, her decision)*
-**❌ SUPERSEDED 2026-09-29 by D96** (agreed with her after brief #5o, **not yet built**): step 14 goes back to a SAWT name, "Save SAWT validation email", and the short names return to "SAWT validation". What the tree still shows today is D92's wording.
+**❌ SUPERSEDED 2026-09-29 by D96** (agreed with her after brief #5o; built 2026-09-30, brief #5q): step 14 goes back to a SAWT name, "Save SAWT validation email", and the short names return to "SAWT validation".
 Template, rows and the readiness message, as D90. `BIR_WAIT_SHORT_NAME` (`lib/workflow/aging.ts`) is the one place the short names live: BIR Confirmations' header reads "waiting on eAFS validation, Nd"; the board tag reads "eAFS validation · Nd" (D79); the Next banner and bar use it too.
 
 **D91 — An all-NA group doesn't expand to an empty box** *(2026-09-29, brief #5o §5)*
@@ -859,11 +859,27 @@ Chosen: **no Expand is offered** (rather than a "steps don't apply" line). A gro
 
 **D95 — Filing order: step 5 will be refused until every earlier quarter of the same year is filed** *(2026-09-29, her decision)*
 
-Quarters filed outside the app (named by the starting figures, D56) count as filed. *Why:* brief #5o's own test filed Q2 while Q1 was still open and the app allowed it — she would never do that deliberately, and the guard is cheap (it also closes the only reachable way D83's alert can fire today). **AGREED, NOT BUILT — to build in the next code brief.** As of this writing nothing in `markStepDone` checks earlier quarters (confirmed against the tree).
+Quarters filed outside the app (named by the starting figures, D56) count as filed. *Why:* brief #5o's own test filed Q2 while Q1 was still open and the app allowed it — she would never do that deliberately, and the guard is cheap (it also closes the only reachable way D83's alert can fire today). 
+
+**✅ BUILT 2026-09-30, brief #5q.** *Rule as built:* Q2 needs Q1; Q3 needs Q1 and Q2; the Annual needs Q1, Q2 and Q3. An earlier return is "filed" when its own step 5 is Done, or its row has `filedOutsideApp: true`, or it has no row and the starting figures' `latestOutsideReturn` names it (D56). An earlier return with no row *and* no starting-figures cover is refused. *Where:* `lib/workflow/filingOrder.ts` (pure) and `filingOrderData.ts` (reads the siblings); `markStepDone`'s FILE_RETURN path checks it before anything is written, including D83's snapshot transaction, so it holds when the action is called directly; `stepLockReason(…, filingOrderReason)` disables the card's Mark done with the message as a hover tooltip (D41, no standing text). *Message:* "File Q1 2026 first." / "File Q1 and Q2 2026 first.". *Next (D84):* a filing held back only by the guard still shows Next = step 5, with the reason and an "Open Q1" link to the earlier filing beside it; the slim bar names step 5 with its Go to step link. *Missing-row case:* it can't arise in normal use (all four periods are generated together); it would take a soft-deleted filing, or starting figures changed after generation without regenerating. Refusing is the safe answer there.
 
 **D96 — Steps 13 and 14 renamed "Save SAWT acknowledgement email" and "Save SAWT validation email"** *(2026-09-29, her decision; supersedes D92's name and the step 13 name she first gave in the same conversation)*
 
-Step 13 becomes "Save SAWT acknowledgement email" (today's template title: "Receive & save acknowledgement email"); step 14 goes back to a SAWT name — "Save SAWT validation email" — from D92's "Save eAFS validation email". The short names follow: the eAFS header keeps "SAWT acknowledgement"; BIR Confirmations' header, the board tag (D79) and the Next banner/bar change from "eAFS validation" back to "SAWT validation" (`BIR_WAIT_SHORT_NAME` in `lib/workflow/aging.ts` is the one place). Like D66/D90, it needs the template, existing rows (seed backfill) and every place the old title appears. **AGREED, NOT BUILT — to build in the next code brief.** D92 is marked superseded above.
+Step 13 becomes "Save SAWT acknowledgement email" (today's template title: "Receive & save acknowledgement email"); step 14 goes back to a SAWT name — "Save SAWT validation email" — from D92's "Save eAFS validation email". The short names follow: the eAFS header keeps "SAWT acknowledgement"; BIR Confirmations' header, the board tag (D79) and the Next banner/bar change from "eAFS validation" back to "SAWT validation" (`BIR_WAIT_SHORT_NAME` in `lib/workflow/aging.ts` is the one place). Like D66/D90, it needs the template, existing rows (seed backfill) and every place the old title appears. D92 is marked superseded above.
+
+**✅ BUILT 2026-09-30, brief #5q.** Template titles, `BIR_WAIT_SHORT_NAME`, the package-readiness message in `docSlots.ts`, and a seed backfill (`renameSawtSteps` in `prisma/backfills.ts`: `workflowStep.updateMany` on the exact old titles, idempotent). "eAFS" stays wherever it means eAFS (the group, step 15, D87's email subject).
+
+**D97 — The status pill says "In progress" while her own work remains; "Waiting on BIR" only when nothing of hers is left** *(2026-09-30, brief #5q, her decision; agrees with D84's Next)*
+
+Before this, any filing with a TRRC or SAWT wait showed "Waiting on BIR" even with steps 11–15 still hers (scenario D). Now `deriveFilingStatus` (`lib/workflow/status.ts`) returns Waiting on BIR only when `nextActionForFiling` returns its BIR-wait result, so the pill agrees with Next by construction; otherwise it reads In progress (no "Waiting on client" variant — her choice). Other states and their precedence are unchanged, including Blocked for past-due. The small BIR tag on the board card ("TRRC · 2d") is unchanged — it is what shows the wait now. `Filing.status` is stored, not derived on read: every step action recomputes it, and the seed backfills existing rows (`backfillFilingStatuses`, only rows currently reading Waiting on BIR, idempotent). Every reader (board card and its status filter, filing page summary strip, client page table) shows the stored value through `filingStatusLabel`, so none needed a code change.
+
+**D98 — Steps 1 and 4 can't be skipped or started, server side** *(2026-09-30, brief #5q)*
+
+Neither card has Skip or Start (D33, D51), but `skipStep` did not refuse them. It now refuses `RECORD_SALES` and `ADVISE_CLIENT` the way D54 does `PREPARE_RETURN`, and `markStepInProgress` refuses both. `markStepDone` and the waiting logic for step 1 are untouched — the income save drives step 1 through them.
+
+**D99 — The Form 2307 register shows plain status labels** *(2026-09-30, brief #5q; extends D63)*
+
+`form2307StatusLabel` (`lib/workflow/status.ts`, beside `filingStatusLabel`/`stepStatusLabel`): Received, Recorded, Claimed on return, Included in SAWT, Acknowledged, Validated. The register at `/clients/[id]/form-2307` was the only place that rendered the raw enum (confirmed by grep).
 
 ---
 

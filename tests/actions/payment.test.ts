@@ -8,6 +8,7 @@ import { markStepDone, skipStep, markStepInProgress } from "@/lib/actions/workfl
 import { generateFilingsForClientYear } from "@/lib/workflow/filingGeneration";
 import { isPaymentLocked, assembleAndComputeFiling } from "@/lib/filingComputation";
 import { toManilaDateInputValue } from "@/lib/dates";
+import { markEarlierQuartersFiled } from "../helpers/filedEarlier";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
@@ -68,6 +69,9 @@ describe("savePayment (D75)", () => {
   }
 
   async function fileTheReturn(filingId: string) {
+    // D95 -- earlier quarters of the same year must be filed first.
+    const own = await prisma.filing.findUniqueOrThrow({ where: { id: filingId } });
+    await markEarlierQuartersFiled(own.clientId, own.taxableYear, own.period);
     const fileReturnStep = await prisma.workflowStep.findFirstOrThrow({ where: { filingId, stepCode: "FILE_RETURN" } });
     await markStepDone(fileReturnStep.id);
     for (const [stepCode, slotCode] of [
@@ -200,52 +204,46 @@ describe("savePayment (D75)", () => {
 
   it("saving or editing reopens a later prepared, unfiled filing -- never a filed one", async () => {
     const client = await makeClient("pay-reopens-later");
+    // Filed in order: Q1, then Q2. Q3 is prepared but not filed.
     await seedPayableSales(client.id, "Q1", 500_000);
     const q1Filing = await prisma.filing.findUniqueOrThrow({
       where: { clientId_taxableYear_period: { clientId: client.id, taxableYear: 2026, period: "Q1" } },
     });
     await fileTheReturn(q1Filing.id);
 
-    await seedPayableSales(client.id, "Q2", 500_000);
-    const q2Filing = await prisma.filing.findUniqueOrThrow({
-      where: { clientId_taxableYear_period: { clientId: client.id, taxableYear: 2026, period: "Q2" } },
-    });
-    await skipStep(
-      (await prisma.workflowStep.findFirstOrThrow({ where: { filingId: q2Filing.id, stepCode: "RECEIVE_2307" } })).id,
-      "No 2307s expected.",
-    );
-    // RECORD_SALES normally self-completes from saveQuarterlySales; the
-    // sales row above was written directly via prisma instead, so its
-    // step is finalized by hand here to reach step 3.
-    await prisma.workflowStep.updateMany({ where: { filingId: q2Filing.id, stepCode: "RECORD_SALES" }, data: { status: "DONE" } });
-    await markStepDone(
-      (await prisma.workflowStep.findFirstOrThrow({ where: { filingId: q2Filing.id, stepCode: "PREPARE_RETURN" } })).id,
-    );
+    async function prepare(period: "Q2" | "Q3") {
+      await seedPayableSales(client.id, period, 500_000);
+      const f = await prisma.filing.findUniqueOrThrow({
+        where: { clientId_taxableYear_period: { clientId: client.id, taxableYear: 2026, period } },
+      });
+      await skipStep(
+        (await prisma.workflowStep.findFirstOrThrow({ where: { filingId: f.id, stepCode: "RECEIVE_2307" } })).id,
+        "No 2307s expected.",
+      );
+      // RECORD_SALES normally self-completes from saveQuarterlySales; the
+      // sales row above was written directly via prisma instead, so its
+      // step is finalized by hand here to reach step 3.
+      await prisma.workflowStep.updateMany({ where: { filingId: f.id, stepCode: "RECORD_SALES" }, data: { status: "DONE" } });
+      await markStepDone(
+        (await prisma.workflowStep.findFirstOrThrow({ where: { filingId: f.id, stepCode: "PREPARE_RETURN" } })).id,
+      );
+      return f;
+    }
 
-    await seedPayableSales(client.id, "Q3", 500_000);
-    const q3Filing = await prisma.filing.findUniqueOrThrow({
-      where: { clientId_taxableYear_period: { clientId: client.id, taxableYear: 2026, period: "Q3" } },
-    });
-    await skipStep(
-      (await prisma.workflowStep.findFirstOrThrow({ where: { filingId: q3Filing.id, stepCode: "RECEIVE_2307" } })).id,
-      "No 2307s expected.",
-    );
-    await prisma.workflowStep.updateMany({ where: { filingId: q3Filing.id, stepCode: "RECORD_SALES" }, data: { status: "DONE" } });
-    await markStepDone(
-      (await prisma.workflowStep.findFirstOrThrow({ where: { filingId: q3Filing.id, stepCode: "PREPARE_RETURN" } })).id,
-    );
-    await fileTheReturn(q3Filing.id);
-    await savePayment(q3Filing.id, {}, paymentFormData("10000"));
+    const q2Filing = await prepare("Q2");
+    await fileTheReturn(q2Filing.id);
+    await savePayment(q2Filing.id, {}, paymentFormData("10000"));
+    const q3Filing = await prepare("Q3");
 
-    // Q1 is filed -- editing Q1's own payment must never touch it, but
-    // saving Q1's payment DOES reopen Q2 (prepared, unfiled).
-    await savePayment(q1Filing.id, {}, paymentFormData("14,000.00"));
-
-    const q2Step3 = await prisma.workflowStep.findFirstOrThrow({ where: { filingId: q2Filing.id, stepCode: "PREPARE_RETURN" } });
-    expect(q2Step3.status).toBe("PENDING"); // reopened
+    // Q2 is filed -- editing Q2's own payment must never touch Q2, but
+    // saving it DOES reopen Q3 (prepared, unfiled).
+    await savePayment(q2Filing.id, {}, paymentFormData("14,000.00"));
 
     const q3Step3 = await prisma.workflowStep.findFirstOrThrow({ where: { filingId: q3Filing.id, stepCode: "PREPARE_RETURN" } });
-    expect(q3Step3.status).toBe("DONE"); // Q3 is filed -- never touched
+    expect(q3Step3.status).toBe("PENDING"); // reopened
+
+    const q2Step3 = await prisma.workflowStep.findFirstOrThrow({ where: { filingId: q2Filing.id, stepCode: "PREPARE_RETURN" } });
+    expect(q2Step3.status).toBe("DONE"); // Q2 is filed -- never touched
   });
 
   it("editing locks once the next filing has filed", async () => {

@@ -8,6 +8,7 @@ import { markStepDone } from "@/lib/actions/workflowSteps";
 import { uploadDocument, deleteDocument } from "@/lib/actions/documents";
 import { generateFilingsForClientYear } from "@/lib/workflow/filingGeneration";
 import { createPayorInline } from "@/lib/actions/payors";
+import { markEarlierQuartersFiled } from "../helpers/filedEarlier";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
@@ -51,6 +52,7 @@ describe("step 2 — certificate entry (addCertificate/deleteCertificate)", () =
     });
     createdClientIds.push(client.id);
     await generateFilingsForClientYear(client.id, 2026);
+    await markEarlierQuartersFiled(client.id, 2026, "Q2");
     const filing = await prisma.filing.findUniqueOrThrow({
       where: { clientId_taxableYear_period: { clientId: client.id, taxableYear: 2026, period: "Q2" } },
     });

@@ -46,7 +46,7 @@ The sixteen steps sit in six groups (D70) — a fixed lookup in `lib/workflow/gr
 | 2 | Receive Form 2307 from client | Prepare | Add certificate; "all received" checkbox; Skip (with reason) only while there are no rows | Always | Derived: "all received" ticked and every certificate has its scan (D35) | No (waits on Client, 5d) | Never (it can be Skipped, D60) |
 | 3 | Prepare computation + 1701Q/1701A | Prepare | Mark done only (D54) | Steps 1 Done and 2 Done/Skipped | Mark done (also files the computation sheet HTML) | No | Never |
 | 4 | Advise client of tax payable | Prepare | Mark done only | Step 3 Done (D51) | Mark done (saves the message as sent) | No | Never |
-| 5 | File return via eBIRForms | File | Mark done only (D65) | Always (on Q1 the 8% election must be confirmed first) | Mark done — freezes the computation and sets `filedAt` (D83) | — (it starts step 10's wait) | Never |
+| 5 | File return via eBIRForms | File | Mark done only (D65) | Always, except: every earlier return of the year must be filed first (D95 — "File Q1 2026 first."); on Q1 the 8% election must be confirmed first | Mark done — freezes the computation and sets `filedAt` (D83) | — (it starts step 10's wait) | Never |
 | 6 | Save submission-page screenshot | File | Upload box only (D67) | Step 5 Done | Self, on upload | No | Never |
 | 7 | Download and save filed form | File | Upload box only | Step 5 Done | Self, on upload | No | Never |
 | 8 | Make payment | Pay | Amount / date / paid-through form (D75); no Start, no Skip | Steps 5, 6, 7 all Done | The form's save marks it Done | No | Nothing to pay: overpayment or exactly ₱0 (D76) |
@@ -54,12 +54,12 @@ The sixteen steps sit in six groups (D70) — a fixed lookup in `lib/workflow/gr
 | 10 | Save TRRC email (D90) | BIR Confirmations | Upload box only | Step 5 Done | Self, on upload | **Yes**, from step 5 Done (D68); 3d | Never |
 | 11 | Alphalist data entry + validation | eAFS | Two upload boxes (report, DAT); no Start/Mark done/Skip (D86) | Steps 5–7 Done and Pay Done or NA (D85) | Self, when **both** files are present | No | No Form 2307 on the filing (D93) |
 | 12 | Email DAT file to BIR eSubmission | eAFS | Mark done only, with the email draft (D87) | Step 11 Done | Mark done (saves the draft) | No | No Form 2307 |
-| 13 | Receive & save acknowledgement email | eAFS | Upload box only (D88) | Step 12 Done | Self, on upload | **Yes**, from step 12 Done (3d) | No Form 2307 |
-| 14 | Save eAFS validation email (D92) | BIR Confirmations | Upload box only (D71) | Step 13 Done | Self, on upload | **Yes**, from step 13 Done (10d) | No Form 2307 |
+| 13 | Save SAWT acknowledgement email (D96) | eAFS | Upload box only (D88) | Step 12 Done | Self, on upload | **Yes**, from step 12 Done (3d) | No Form 2307 |
+| 14 | Save SAWT validation email (D96) | BIR Confirmations | Upload box only (D71) | Step 13 Done | Self, on upload | **Yes**, from step 13 Done (10d) | No Form 2307 |
 | 15 | Complete and submit eAFS | eAFS | Mark done only; no slot (D89) | Steps 5–7 Done and Pay Done or NA (D85) | Mark done | No | No Form 2307 |
 | 16 | Email package to client | Client package | Start, Mark done, Skip; package download and email draft | The filed form, proof of payment, TRRC and step 14's email all saved or NA | Mark done | No | Never |
 
-*Titles of steps 13 and 14 will change to "Save SAWT acknowledgement email" / "Save SAWT validation email" (D96, agreed, not built).* This table is the single copy; PROJECT_MASTER.md refers to it.
+*Steps 13 and 14 were renamed by D96 (built, brief #5q). Steps 1 and 4 can't be skipped or started, server side (D98). The status pill reads "In progress" while her own work remains, and "Waiting on BIR" only when nothing of hers is left (D97).* This table is the single copy; PROJECT_MASTER.md refers to it.
 
 ### Prepare (steps 1–4)
 Income is the client's declared figure per quarter, entered as per-payor rows on `/clients/[id]/income` (D26/D33); draft vs. final, Edit/Cancel, a final quarter reverts to open if re-saved as a draft (D40). A certificate contributes credit only, never income (D26); it needs its scan to be saved, payor TIN/address/ATC required, ATC chosen from a maintained picker (D43–D46); a saved-payors list feeds steps 1 and 2 with no foreign key (D44/D48). Step 2's Add/Remove are hidden while "all received" is ticked (D47). Step 3 shows the credits box (item 55 read-only, item 61 editable, D55) above the computation sheet (D49 whole-peso, form-line). Step 4's message comes in three versions and is saved as sent (D51). A skipped step stays visible in place with an Undo skip (D60). Prepare closes itself once all four resolve.
@@ -168,7 +168,6 @@ Annual filings for A, B, D, E, F, G, H exist, Not started, due April 2027 — th
 
 ## Not built
 
-- **D95's filing-order guard** (step 5 refused until every earlier quarter of the year is filed; outside-the-app quarters count as filed) and **D96's renames of steps 13 and 14** — both agreed, to build in the next code brief.
 - **Carry-over of a client's own Annual overpayment into next year's starting figures** (D55) — first matters at the 2026→2027 boundary.
 - **The document archive browse view** — client → year, with a whole-year zip. The only genuinely new build in the backlog, and it serves what she named as the most important thing the app does.
 - **A calendar view.**
@@ -213,7 +212,7 @@ Annual filings for A, B, D, E, F, G, H exist, Not started, due April 2027 — th
 
 ## Next, in order
 
-1. **Next code brief:** D95 (filing-order guard) and D96 (steps 13 and 14 renamed "Save SAWT acknowledgement email" / "Save SAWT validation email"). Then walk the Client package group (step 16), the last group not yet walked.
+1. **Walk the Client package group (step 16)**, the last group not yet walked. (D95 and D96 were built by brief #5q, along with D97–D99.)
 2. **Before November:** back up `data/app.db`, `storage/` and `.env`, and decide how. Warn her that old test uploads in `storage/` may include real client documents.
 3. **Go-live setup for real clients:** add client → tax year → starting figures → generate filings (D78 enforces the order). The Q3 1701Q is due **November 16, 2026** (the statutory Nov 15 is a Sunday). The Excel files stay the master until she switches.
 4. **Confirm ATC codes and the eSubmission address.**

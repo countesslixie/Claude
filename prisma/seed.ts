@@ -26,6 +26,7 @@
  */
 
 import { PrismaClient } from "@prisma/client";
+import { renameSawtSteps, backfillFilingStatuses } from "./backfills";
 
 const prisma = new PrismaClient();
 
@@ -308,7 +309,7 @@ const WORKFLOW_STEP_TEMPLATE: Array<{
   {
     stepCode: "SAWT_ACK",
     sequence: 13,
-    title: "Receive & save acknowledgement email",
+    title: "Save SAWT acknowledgement email", // D96 (brief #5q) — was "Receive & save acknowledgement email"
     category: "SAWT",
     isConditional: true,
     conditionExpression: "requiresSawt == true",
@@ -322,7 +323,7 @@ const WORKFLOW_STEP_TEMPLATE: Array<{
   {
     stepCode: "SAWT_VALIDATION",
     sequence: 14,
-    title: "Save eAFS validation email", // D92 (brief #5o) — was "Receive & save validation email"
+    title: "Save SAWT validation email", // D96 (brief #5q) — was "Save eAFS validation email" (D92)
     category: "SAWT",
     isConditional: true,
     conditionExpression: "requiresSawt == true",
@@ -415,8 +416,9 @@ async function seedWorkflowStepTemplate() {
   });
   await prisma.workflowStep.updateMany({
     where: { stepCode: "SAWT_VALIDATION", title: "Receive & save validation email" },
-    data: { title: "Save eAFS validation email" },
+    data: { title: "Save SAWT validation email" },
   });
+  await renameSawtSteps(prisma); // D96 (brief #5q)
   await prisma.workflowStep.updateMany({
     where: { stepCode: "EAFS_SUBMIT" },
     data: { requiredDocSlots: "[]", isConditional: true, conditionExpression: "requiresSawt == true" },
@@ -463,6 +465,7 @@ async function main() {
   await seedHolidays(user.id);
   await seedAtcCodes();
   await seedWorkflowStepTemplate();
+  await backfillFilingStatuses(prisma); // D97 (brief #5q)
   stubNextCache();
   const { seedScenarios } = await import("./seedScenarios");
   await seedScenarios(prisma, user.id);
