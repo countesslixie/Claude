@@ -5,6 +5,7 @@ import { StatusBadge, type StatusTone } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { uploadDocument } from "@/lib/actions/documents";
+import { birWaitTone } from "@/lib/workflow/aging";
 import { stepStatusLabel } from "@/lib/workflow/status";
 import { fileTooLargeMessage } from "@/lib/upload";
 import type { WorkflowStepStatus } from "@/lib/workflow/types";
@@ -125,7 +126,7 @@ export function FileGroupDocStepCard({
         </p>
         <div className="flex items-center gap-1.5">
           {isWaitingOnBir ? (
-            <StatusBadge tone={agingTone === "red" ? "overdue" : "waiting"}>
+            <StatusBadge tone={birWaitTone(agingTone)}>
               Waiting on BIR{agingDaysWaiting != null ? ` · ${agingDaysWaiting}d` : ""}
             </StatusBadge>
           ) : (

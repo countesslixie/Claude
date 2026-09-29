@@ -51,3 +51,51 @@ export function deriveStepAging(input: {
 
   return { daysWaiting, tone };
 }
+
+/**
+ * D72 — the one place the "Waiting on BIR" colour rule lives: amber while
+ * waiting, red once past twice expectedResponseDays, never green. The step
+ * pill (both step cards) and the board's BIR-wait tag (D79) both call this.
+ */
+export function birWaitTone(agingTone: AgingTone | null | undefined): "waiting" | "overdue" {
+  return agingTone === "red" ? "overdue" : "waiting";
+}
+
+/** D79 — the two waits that can carry a board tag, in display order, with their tag wording. */
+const BIR_WAIT_TAG_LABELS: ReadonlyArray<{ stepCode: string; label: string }> = [
+  { stepCode: "RECEIVE_TRRC", label: "TRRC" },
+  { stepCode: "SAWT_VALIDATION", label: "SAWT validation" },
+];
+
+export interface BirWaitTag {
+  stepCode: string;
+  text: string;
+  tone: "waiting" | "overdue";
+}
+
+/**
+ * D79 — tags for a board card sitting outside BIR Confirmations: one per
+ * step 10 / step 14 that is WAITING_EXTERNAL right now, "TRRC · 2d" /
+ * "SAWT validation · 8d". Days and colour come from deriveStepAging, the
+ * same function the step pill uses.
+ */
+export function birWaitTags(
+  steps: Array<{
+    stepCode: string;
+    status: WorkflowStepStatus;
+    waitingSince: Date | null;
+    expectedResponseDays: number | null;
+  }>,
+  certificatesExpectedBy: Date | null,
+  now: Date,
+): BirWaitTag[] {
+  const tags: BirWaitTag[] = [];
+  for (const { stepCode, label } of BIR_WAIT_TAG_LABELS) {
+    const step = steps.find((s) => s.stepCode === stepCode);
+    if (!step) continue;
+    const aging = deriveStepAging({ ...step, certificatesExpectedBy, now });
+    if (!aging) continue;
+    tags.push({ stepCode, text: `${label} · ${aging.daysWaiting}d`, tone: birWaitTone(aging.tone) });
+  }
+  return tags;
+}

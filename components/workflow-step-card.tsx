@@ -13,6 +13,7 @@ import {
 } from "@/lib/actions/workflowSteps";
 import { uploadDocument } from "@/lib/actions/documents";
 import { stepBlockReason } from "@/lib/workflow/docSlots";
+import { birWaitTone } from "@/lib/workflow/aging";
 import { stepStatusLabel } from "@/lib/workflow/status";
 import { fileTooLargeMessage } from "@/lib/upload";
 import type { WorkflowStepStatus } from "@/lib/workflow/types";
@@ -164,7 +165,7 @@ export function WorkflowStepCard({
         </div>
         <div className="flex items-center gap-1.5">
           {isWaitingOnBir ? (
-            <StatusBadge tone={step.agingTone === "red" ? "overdue" : "waiting"}>
+            <StatusBadge tone={birWaitTone(step.agingTone)}>
               Waiting on BIR{step.agingDaysWaiting != null ? ` · ${step.agingDaysWaiting}d` : ""}
             </StatusBadge>
           ) : (

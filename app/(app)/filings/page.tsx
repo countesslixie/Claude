@@ -7,7 +7,7 @@ import { StatusBadge, type StatusTone } from "@/components/status-badge";
 import { formatManilaDate } from "@/lib/dates";
 import { countSkippedSteps, filingStatusLabel } from "@/lib/workflow/status";
 import { WORKFLOW_GROUPS, currentGroupCode, summarizeGroup } from "@/lib/workflow/groups";
-import { deriveStepAging } from "@/lib/workflow/aging";
+import { deriveStepAging, birWaitTags, type BirWaitTag } from "@/lib/workflow/aging";
 import type { FilingStatus, WorkflowStepStatus } from "@/lib/workflow/types";
 
 const FILING_STATUS_TONE: Record<string, StatusTone> = {
@@ -90,7 +90,10 @@ export default async function FilingsBoardPage({
           })),
         ).outstandingLabel
       : null;
-    return { ...f, groupCode, outstandingLabel };
+    // D79 — a card outside BIR Confirmations still shows any BIR wait it's carrying;
+    // one inside that column already says so.
+    const birTags = groupCode === "BIR_CONFIRMATIONS" ? [] : birWaitTags(f.workflowSteps, f.certificatesExpectedBy, now);
+    return { ...f, groupCode, outstandingLabel, birTags };
   });
 
   const columns = WORKFLOW_GROUPS.map((g) => ({
@@ -193,6 +196,7 @@ function BoardColumn({
     client: { registeredName: string };
     workflowSteps: Array<{ status: WorkflowStepStatus }>;
     outstandingLabel: string | null;
+    birTags: BirWaitTag[];
   }>;
 }) {
   return (
@@ -216,6 +220,15 @@ function BoardColumn({
                 <span className="text-xs text-faint">{formatManilaDate(f.adjustedDueDate)}</span>
               </div>
               {f.outstandingLabel && <p className="mt-1 text-xs text-amber">{f.outstandingLabel}</p>}
+              {f.birTags.length > 0 && (
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {f.birTags.map((t) => (
+                    <StatusBadge key={t.stepCode} tone={t.tone}>
+                      {t.text}
+                    </StatusBadge>
+                  ))}
+                </div>
+              )}
             </div>
           </Link>
         ))}
