@@ -2,7 +2,7 @@
 
 *Append new decisions. Mark superseded ones rather than deleting them.*
 *Dates during the build are approximate — most work happened across August 2026.*
-*Last reconciled: 2026-09-28 — brief #5j (D60-D63), covering brief #5i, on top of brief #5h (D49-D59, briefs #5d-#5g), brief #5c, brief #5b (D48), brief #5a (D43-D47) and the documentation pass (brief #4f) through briefs #4c-#4e.*
+*Last reconciled: 2026-09-29 — brief #5m (D70-D77), six groups replacing D32's five, BIR Confirmations built, and the Pay group built (closing D55's item 56/58 gap) — on top of brief #5l (D68-D69), brief #5k (D64-D67), brief #5j (D60-D63), brief #5i, brief #5h (D49-D59, briefs #5d-#5g), brief #5c, brief #5b (D48), brief #5a (D43-D47) and the documentation pass (brief #4f) through briefs #4c-#4e.*
 
 ---
 
@@ -177,6 +177,7 @@ The receipts confirmation, the certificate cutoff control and the computation sh
 **D32 — The sixteen steps are wrapped in five groups: Prepare, File, Pay, SAWT, Close** *(2026-09-20)*
 
 **⚠️ The one-click "Mark done" per group is gone, superseded 2026-09-28 by D62 (brief #5i), her decision.** A group no longer has a "Mark done" of its own at all — every step finishes on its own per-step control, and the group header only ever reports Pending or Done. Everything else below — the five groups, their membership, the non-contiguous File group, and the board's layout — is untouched and still current.
+**⚠️ The table of five groups is superseded 2026-09-29 by D70 (brief #5m §1), her decision.** There are now SIX groups — steps 10 (RECEIVE_TRRC) and 14 (SAWT_VALIDATION) move out of File and SAWT respectively into a new BIR Confirmations group. See D70. What survives from this entry: step numbers are still not renumbered to match group order (the reasoning below for why still holds, just with a sixth group now sharing in it), and the "she waits, nothing downstream depends on it" reasoning for the TRRC's own placement is exactly what motivated giving it (and step 14) their own group rather than leaving this table's five untouched.
 
 *The groups:*
 
@@ -195,6 +196,7 @@ The receipts confirmation, the certificate cutoff control and the computation sh
 *Step numbers are NOT renumbered to make groups contiguous, and that is deliberate.* Group 2 (File: steps 5, 6, 7, 10) is not contiguous — group 3 (Pay: steps 8, 9) sits between step 7 and step 10 numerically, because the TRRC arrives after payment in practice. Renumbering the TRRC to sit earlier (e.g. as step 8) would place it ahead of payment in the list and imply the bookkeeper waits for BIR's confirmation before paying — she does not. **Step numbers record the order things happen; groups record what things belong to.** These are two different facts about a step and collapsing them into one number would lose one of the two.
 
 *Consequence, worth stating plainly:* group 2 (File) will routinely still be open — waiting on the TRRC — after group 3 (Pay) is fully done. This is normal work, not out-of-order completion, and raises no warning anywhere in the app. On the board, a card sits in its earliest incomplete *group* (group order, not raw step sequence), carrying that group's waiting state (e.g. "File — waiting on BIR, 12d") so a filing awaiting only the TRRC doesn't read as unfiled.
+**⚠️ Narrowed 2026-09-29 by D75 (brief #5m §3.1), her decision.** The TRRC moved to its own group (D70) before this could keep meaning "File" — what survives is the general shape (a later-group step can finish before an earlier-group one, and vice versa, with no warning). What's now DIFFERENT: Pay itself is no longer independent of File the way it once was — D75 makes Pay wait for ALL of File (5, 6, 7) to be Done before it even opens, so "Pay finishing before File" is no longer possible at all; what remains true is Pay finishing before BIR Confirmations (the TRRC's new home), which behaves exactly as this paragraph originally described.
 
 *Grouping reuses the seeded `category` field for three of five groups (File = `FILING`, Pay = `PAYMENT`, SAWT = `SAWT`), but not literally as the group.* Step 4 (`ADVISE_CLIENT`, category `CLIENT_COMM`) joins Prepare; step 16 (`SEND_CLIENT_PACKAGE`, also `CLIENT_COMM`) joins Close instead — reusing `category` outright would have put both in the same group despite belonging to different points in the cycle. Group membership is therefore its own fixed lookup table (`lib/workflow/groups.ts`), not a repurposing of `category`; `category` itself is untouched everywhere else it's read (seed, `WorkflowStep.category`, the step card).
 
@@ -613,7 +615,133 @@ She doesn't use eFPS. `WorkflowStepTemplate`'s seed row for `FILE_RETURN` drops 
 Since `summarizeGroup` is the one function both the filing page's own group card (`app/(app)/clients/[id]/filings/[filingId]/page.tsx`) and the board card (`app/(app)/filings/page.tsx`) call for this text (confirmed by reading both call sites), fixing it here fixes both automatically; no separate board-side change was needed. **Verified live, before and after:** a filing with step 5 not yet Done showed no amber text under File on both the filing page and its board card (previously it would have shown the broken sentence above); once step 5 was marked Done, both read "waiting on submission screenshot, filed form · BIR, 0d"; the dashboard's own "Waiting on BIR" row picked it up too, once every numerically-earlier step (6, 7, 8, 9) was also resolved — see the note below.
 
 *A separate, pre-existing dashboard nuance, found while verifying this, not caused by it.* The dashboard (`app/(app)/page.tsx`) shows exactly one step per filing per row, chosen by `currentStepCode` — the earliest unresolved step by **raw step sequence across all sixteen steps**, not by group and not by `Filing.status`. Immediately after filing, with steps 6/7 (sequence 6, 7) still Pending, `currentStepCode` picks step 6 — not step 10 — so the filing shows under "Needs my action now" ("Save submission-page screenshot"), not "Waiting on BIR," even though step 10 is genuinely waiting at that moment. It only appears under "Waiting on BIR" once every step numbered lower than 10 (6, 7, 8, 9) is also resolved. This is a pre-existing dashboard design (one row per filing, by raw sequence) that predates this brief and D68 alike — D68 just makes it newly relevant, since step 10 can now be waiting far earlier in a filing's life than before. Not fixed here — not asked for, and changing how the dashboard picks its one representative step is a larger, separate decision.
+**✅ FIXED 2026-09-29 by D74 (brief #5m §2).** The dashboard's "Waiting on BIR" row now scans every filing for any of steps 10/13/14 currently waiting, independent of the filing's one "representative" step; "Needs my action"/"Waiting on client" pick that representative step by group order now, not raw sequence — see D74.
 
 *Checked, not changed, per her instruction:* Pay, SAWT and Close all still build their own summary through the generic fallback. None of them lock a step behind an earlier one the way File's steps 6/7/10 were locked behind step 5, so they don't share File's "reads as waiting when it's actually locked" bug. They do share the milder lowercasing quirk (e.g., SAWT's "DAT file" renders as "dat file") — noted for her to decide on when she walks each group, not changed here.
 
 *Tests.* `tests/workflow/groups.test.ts` gained a `fileGroupOutstandingLabel` describe block covering every row of the table above as a pure-function test (matching where `summarizeGroup`'s other tests already live). `tests/actions/workflowSteps.test.ts` gained a "brief #5l" describe block: step 5 done moves step 10 to `WAITING_EXTERNAL` with `waitingSince` set and leaves 6/7 `PENDING`; an upload on step 10 completes it and clears `waitingSince`; removing the only TRRC returns it to `WAITING_EXTERNAL` with step 5's own `completedAt`; Replace keeps it Done; `markStepWaitingExternal` refuses `RECEIVE_TRRC`; and the D29 regression (Pay completes freely while step 10 waits). One pre-existing test (`marking RECEIVE_TRRC WAITING_EXTERNAL flips the filing status to WAITING_BIR`) was rewritten, since it called the now-refused `markStepWaitingExternal` directly — it now drives the same outcome through `markStepDone(FILE_RETURN)`, the real path. Full suite (**331 tests, 37 files**), typecheck, and build all verified.
+
+---
+
+## 2026-09-29 — brief #5m (six groups, BIR Confirmations, and the Pay group built)
+
+**D70 — Six groups: Prepare, File, Pay, eAFS, BIR Confirmations, Client package** *(2026-09-29, brief #5m §1, her decision)*
+
+**Supersedes D32's table of five entirely.** The groups, in order:
+
+| # | Group | Steps |
+|---|---|---|
+| 1 | Prepare | 1 Record quarterly sales · 2 Receive Form 2307 · 3 Prepare computation · 4 Advise client |
+| 2 | File | 5 File return · 6 Submission screenshot · 7 Filed form |
+| 3 | Pay | 8 Make payment · 9 Save proof of payment |
+| 4 | eAFS | 11 Alphalist entry · 12 Email DAT · 13 SAWT acknowledgement · 15 eAFS |
+| 5 | BIR Confirmations | 10 TRRC · 14 SAWT validation |
+| 6 | Client package | 16 Email package to client |
+
+*Why.* The TRRC (10) and the SAWT validation (14) are the two things she only ever WAITS to receive from BIR, with nothing downstream depending on either (D29). Inside File and SAWT they held those groups open and made finished work look unfinished — File would sit "3 of 4" for days waiting on a document that had nothing to do with the submission screenshot or the filed form sitting right next to it. Pulling both into their own group means every OTHER group (Prepare, File, Pay, eAFS) is entirely her own work, resolvable without waiting on anyone; BIR Confirmations comes after all of them because nothing in it can start before its own trigger fires; Client package goes last because it needs documents from both File and BIR Confirmations (step 16's package-readiness check, unchanged — see below).
+
+*Naming.* "eAFS" is her own chosen name for group 4, kept even though it also holds the three SAWT steps (11, 12, 13) — she declined renaming it to include "SAWT." `lib/workflow/groups.ts`'s `GroupCode` type is `"PREPARE" | "FILE" | "PAY" | "EAFS" | "BIR_CONFIRMATIONS" | "CLIENT_PACKAGE"`.
+
+*What doesn't change.* Step numbers are untouched — File (5, 6, 7) and Pay (8, 9) still sit ahead of BIR Confirmations (10, 14) numerically even though BIR Confirmations is now a LATER group; step numbers record sequence, groups record meaning (D32's own principle, unchanged). Group membership is still the fixed lookup table in `lib/workflow/groups.ts`, never `category` repurposed. `currentGroupCode` (the board's own "which group is a filing sitting at" function) needed no logic change at all — it already just iterates `WORKFLOW_GROUPS` in order; six groups instead of five just falls out of the array having six entries. The board (`app/(app)/filings/page.tsx`) and the filing detail page's checklist both map over `WORKFLOW_GROUPS` directly, so both render six columns/cards automatically — no board-specific code changed.
+
+*No certificates for this filing.* Steps 11–14 are still auto-`NA` when `requiresSawt` is false, exactly as before. This now splits across two groups: eAFS shows only step 15 applicable (11/12/13 all `NA`), BIR Confirmations shows only step 10 applicable (14 `NA`). Both groups read Done once their one applicable step resolves — `summarizeGroup`'s existing `NA`-exclusion logic (brief #5i) needed no change; confirmed with a test.
+
+*The 13→14 dependency (D29) crosses groups now but is unaffected* — it's enforced in `markStepDone` by step CODE (`SAWT_ACK`/`SAWT_VALIDATION`), never by group, so moving step 14 into a different group changed nothing about how the check itself works. In practice D71 (below) now enforces the same relationship a second, stronger way — step 14 can't even be attempted before step 13 is Done — but the original `markStepDone` check is left in place, not deleted, and still functions if called directly. Proven with two tests: one exercising the real D71 lock/auto-wait/complete flow end to end, one calling `markStepDone` on step 14 directly (bypassing D71's lock by hand) to confirm the legacy check alone still refuses it correctly.
+
+*Step 16's package-readiness check (steps 7, 9, 10, 14) is unchanged* — `lib/workflow/docSlots.ts`'s `SEND_CLIENT_PACKAGE_DEPENDENCIES` is still a flat step-code list, reads nothing about groups. Confirmed by an existing test continuing to pass unmodified.
+
+*Group header text — generalising D69 to all six groups, not just File (D73 below).* Never show "waiting on…" text for a step she hasn't reached, whether locked (File before step 5, Pay before File, BIR Confirmations before its own gating step) or simply not yet possible. Every group now has its own dedicated summary function in `lib/workflow/groups.ts` — `fileGroupOutstandingLabel` (narrowed, see D69's marker), `payGroupOutstandingLabel` (D75), `birConfirmationsOutstandingLabel` (D71), `eafsGroupOutstandingLabel` (D73), Prepare's own inline logic (unchanged, brief #4e), and Client package (no function at all — step 16 never has anything to say). The old generic "any `WAITING_EXTERNAL` step's `waitingOnLabel` plus, failing that, any missing required document" fallback is gone outright — it was File's exact original bug (D69) and would have reproduced the identical bug for Pay and BIR Confirmations if left in place.
+
+**D71 — Step 14 behaves exactly like step 10 always has** *(2026-09-29, brief #5m §2, her decision)*
+
+Locked ("Available once step 13 is done.") until step 13 (`SAWT_ACK`) is Done. The moment it is, step 14 moves to `WAITING_EXTERNAL` automatically, `waitingSince` stamped to that same instant — the identical mechanism D68 gave step 10 off step 5, now generalised: `lib/actions/workflowSteps.ts`'s `markStepDone` loops over `BIR_CONFIRMATIONS_UNLOCK_STEP_CODE` (`{ RECEIVE_TRRC: "FILE_RETURN", SAWT_VALIDATION: "SAWT_ACK" }`) rather than special-casing `FILE_RETURN` alone. The upload box shows directly once unlocked; uploading completes the step; removing the only file reverts it to `WAITING_EXTERNAL` again, `waitingSince` reset to step 13's own `completedAt` (not step 10's D68 quirk of reading `FILE_RETURN`'s `completedAt` — each of the two reads its OWN gating step). No Start, no Mark waiting (`markStepWaitingExternal` refuses `SAWT_VALIDATION` by step code, same as it already refused `RECEIVE_TRRC`), no Skip (`NO_START_NO_SKIP_STEP_CODES` gained `SAWT_VALIDATION`), no Mark done button on the card at all — `components/file-group-doc-step-card.tsx` (kept its name; used for five step codes now, not just File's three) renders it identically to steps 6/7/10.
+
+*Her own caveat, recorded because it matters for the SAWT walk still to come:* she hasn't walked SAWT yet. Making step 14 behave exactly like step 10 follows from D70 putting them in the same group, not from a dedicated SAWT walkthrough — she can revisit this when she gets there.
+
+**D72 — No Log follow-up on any BIR wait; one combined "Waiting on BIR · Nd" pill** *(2026-09-29, brief #5m §2, her decision)*
+
+*Log follow-up is gone, not just hidden.* She can't follow up with BIR on any of steps 10, 13 or 14 — there's no phone number to call, no portal to check. The button is removed from every card that can show one of these three (the bespoke self-completing card for 10/14, the generic `WorkflowStepCard` for 13) and from the dashboard's "Waiting on BIR" row. `lib/actions/workflowSteps.ts`'s `logFollowUp` also refuses these three step codes server-side now — `BIR_WAIT_STEP_CODES` (`RECEIVE_TRRC`, `SAWT_ACK`, `SAWT_VALIDATION`) — so it can't be bypassed by calling the action directly. The day-count itself stays (aging is still computed and shown); only the follow-up button goes. `WorkflowStep.followUpCount` stays in the schema, unused for these three step codes from now on — no migration needed to drop a column that other rows/steps may still increment (Client waits, unaffected by this decision, still use it).
+
+*One pill, not three.* Before this, a waiting BIR step showed grey "waiting on BIR" text beside the title, a separate aging pill (green while young), and a separate amber "Waiting" status pill, all at once. Both `components/file-group-doc-step-card.tsx` and `components/workflow-step-card.tsx` now collapse all three into one: `"Waiting on BIR · Nd"`, toned amber while waiting and red once past twice `expectedResponseDays` (the same thresholds `deriveStepAging` already computed) — **never green**, even on day zero. This only fires when `waitingOnLabel === "BIR"`, so it applies to steps 10, 13 and 14 and nothing else (Client waits, e.g. step 1/2, keep their own separate rendering, untouched).
+
+*BIR Confirmations' own header text* (part of D70's per-group functions): `"waiting on TRRC, Nd"`, `"waiting on SAWT validation, Nd"`, or both joined `" · "` with one `"waiting on"` stated once — no text at all while neither step has started waiting (i.e. before step 5 or step 13 is Done, matching D73's rule below).
+
+**D73 — Group header text never shows "waiting on…" for a step not yet reached; always a fixed plain name** *(2026-09-29, brief #5m §1, generalises D69)*
+
+D69 (brief #5l) fixed this specifically for File. The same bug existed in the OLD generic fallback for every other group: it read `missingRequiredSlots` on any unresolved step regardless of whether that step was actually reachable, so a screenshot from her walkthrough showed Pay reading "waiting on payment confirmation" and SAWT reading "waiting on generated report, dat file, acknowledgement email, validation email" on a filing whose sales weren't even recorded yet. Both are wrong the same way File's old bug was wrong: a locked/unreachable step is not a waiting one.
+
+*The fix, generalised across all six groups* (see D70's own paragraph on this): every group now has its own dedicated function that only ever reads a step's LIVE status (`WAITING_EXTERNAL`), never "does this step have a doc slot that happens to be empty." eAFS and Client package haven't been walked yet (her own note) — until they are, eAFS shows text only for step 13 genuinely waiting (`"waiting on SAWT acknowledgement, Nd"` — a fixed plain name, never the generic `waitingOnLabel` "BIR" and never a lowercased doc-slot label), and Client package shows nothing at all (step 16 has no waiting state of its own, D27).
+
+**D74 — The dashboard lists BIR waits independently and follows group order** *(2026-09-29, brief #5m §2, fixing the nuance brief #5l/D69 found but didn't fix)*
+
+*Before.* `app/(app)/page.tsx` picked exactly one "representative" step per filing via `lib/workflow/status.ts`'s `currentStepCode` — the earliest unresolved step by RAW SEQUENCE across all sixteen, regardless of group. A filing whose only genuinely outstanding work was step 10 waiting on BIR would still show under "Needs my action now" for whichever numerically-earlier step (6, 7, 8, 9) happened to still be open, and only migrate to "Waiting on BIR" once ALL of those resolved too — the exact bug D69 noted as "found while verifying this, not caused by it, not fixed."
+
+*After.* Two separate fixes, both in `lib/workflow/groups.ts`:
+- `currentStepCodeByGroupOrder` — the same "representative step" concept, but picking it from WITHIN the earliest incomplete GROUP (in that group's own step order), not by raw sequence across all sixteen. `app/(app)/page.tsx`'s "Needs my action" and "Waiting on client" rows now use this instead of `currentStepCode`.
+- `BIR_WAIT_STEP_CODES` (`RECEIVE_TRRC`, `SAWT_ACK`, `SAWT_VALIDATION`) — the dashboard's "Waiting on BIR" row no longer derives from the one representative step at all; it scans every active filing's FULL step list for any of these three currently `WAITING_EXTERNAL` and lists one row per (filing, step) pair found. A filing can appear more than once here if two of the three happen to be waiting at once (a real, if unusual, possibility — step 10 and step 13 wait independently of each other).
+
+*Consequence, intended, not a bug:* the same filing can now appear in BOTH "Needs my action" (for its own next step, by group order) and "Waiting on BIR" (for step 10 or 14, independent of what else is open) at the same time. This is exactly what she asked for — the two rows answer different questions and shouldn't gate each other.
+
+*Row keys.* Since more than one BIR-wait row can now belong to the same filing, `waitingBirRows`' key is `` `${filing.id}-${step.stepCode}` ``, not `filing.id` alone (a duplicate-key regression the old single-row-per-filing design never had to guard against).
+
+**D75 — Pay opens once File is Done; step 8 records amount/date/channel; step 9 self-completes** *(2026-09-29, brief #5m §3, her decisions)*
+
+*Her own working pattern, stated plainly because it shapes the whole design:* she pays the client's tax herself, then receives the proof by email, sometimes days later. The full amount is always paid, never in parts. Keeping steps 8 and 9 separate lets her stop between paying and receiving the proof — exactly as before, unchanged.
+
+*3.1 — Pay is locked until File (5, 6, 7) is fully Done, not just step 5.* `lib/workflow/groups.ts`'s `payGroupBlockReason` checks all three of File's step codes against the FULL step list passed to it (not the group-filtered subset `summarizeGroup` normally works with internally — Pay's own gate needs to read a DIFFERENT group's steps, so `summarizeGroup` special-cases this one call to use the outer, unfiltered list). Enforced server-side in `markStepDone`'s own `MAKE_PAYMENT` branch and again, explicitly, at the top of `lib/actions/filings.ts`'s new `savePayment` action (so a locked save fails before writing anything to the filing, not after). Pay's header shows no text at all while locked (D73).
+
+*3.2 — Step 8 (Make payment).* No Start, no Skip (`PAY_GROUP_NO_START_NO_SKIP` joins `NO_START_NO_SKIP_STEP_CODES`) — a fixed sequence, the same reasoning D65 gave File's own steps. One new action, `savePayment` (`lib/actions/filings.ts`), validates three required fields with Zod (`lib/validation/payment.ts`) — amount paid, date of payment, paid through (free text, offered via a native `<datalist>` of this client's own previously-used channels, no new dependency) — and, in one save, writes them to `Filing.amountPaidCents`/`paymentDate`/`paymentChannel` (SPEC.md had always named these columns; nothing wrote them from inside the app until now) and calls the ordinary `markStepDone` on step 8 (so the File-done gate and the election hard-blocker both still apply, unduplicated). The amount field defaults to this return's own computed tax payable (never an overpayment — a return in that state has nothing to pay at all, see D76); she can change it, and if her figure disagrees, one muted line reads "Differs from tax payable ₱X" — informational, never a block. Once Done, the card collapses to "Paid ₱X on [date] through [bank]" with an Edit button (Save/Cancel — the same D40/D55 pattern `OtherCreditsForm` already uses), editable until `isPaymentLocked` (below) says otherwise.
+
+*This closes D55's own known gap.* Item 56 (1701Q) / item 58 (1701A) — payments for earlier quarters — already read `Filing.amountPaidCents` for every earlier filed period in the same taxable year (`lib/filingComputation.ts`'s `priorPeriodPaymentsCentsThrough`, built in brief #5f); nothing had ever written that field for a return filed inside the app, so it always read ₱0. `savePayment` is the missing writer. Confirmed with a test: a Q1 payment saved via `savePayment` appears as Q2's own item 56.
+
+*Editable until locked, not until filed.* `lib/filingComputation.ts`'s new `isPaymentLocked(clientId, taxableYear, period)` — editable until the NEXT filing of the same taxable year has ITS OWN step 5 (`FILE_RETURN`) Done, not until THIS filing's own step 5 is Done. Different from every other per-return lock in this app (item 61, the certificate list, the income quarter — all lock on the filing's OWN step 5): the amount only becomes load-bearing for someone else's figures once that later return has actually been filed with it baked in, so it stays open a little longer than the others on purpose. No next filing yet (e.g. this is the year's last period) means never locked by this rule.
+
+*Reopening (extends D50).* Saving step 8 for the first time, or editing it afterward, changes item 56/58 on every LATER filing of the same taxable year — unlike item 61's inheritance chain, there's no "chain break" to stop at: every later filing's own item 56/58 always depends on THIS filing's actual paid amount (summed cumulatively), so `savePayment` calls `reopenPreparedFiling` on every later period in the year, relying on that function's own guards (no-op if unfiled-but-not-yet-prepared, no-op if already filed) rather than pre-filtering.
+
+*3.3 — Step 9 (Save proof of payment).* Locked ("Available once step 8 is done.") until step 8 is Done, then behaves exactly like steps 6/7/10/14 — upload box shown directly, no "Attach" link, uploading completes it, Replace swaps one file for another, no Mark done/Start/Skip of its own. **Unlike steps 10/14, it never enters `WAITING_EXTERNAL` on its own** — `PAY_UNLOCK_STEP_CODE` (`{ SAVE_PROOF_PAYMENT: "MAKE_PAYMENT" }`) is deliberately absent from `BIR_CONFIRMATIONS_UNLOCK_STEP_CODE`, so `recomputeFileGroupDocStepStatus`'s "no file left" branch reverts it to `PENDING`, the same as steps 6/7, never to a waiting state. The header line "waiting on proof of payment" (`payGroupOutstandingLabel`) is what tells her it's outstanding instead — there's no proof-of-payment "BIR" to wait on, only her own next action.
+
+*Bug she found and asked to be confirmed fixed, not newly caused:* after an upload, a doc-slot's own box used to stay open below the saved file. Checked specifically for step 9 once it moved to the D67-style card: fixed, the same way it already was for 6/7/10 — `showReplace` starts `false` and the upload handler resets it to `false` again on success. No OTHER doc slot in the app was found still leaving its box open after upload (the generic `WorkflowStepCard`'s slot-open state — `openSlots` — already closes on a successful upload too; confirmed by reading, not just asserting).
+
+**D76 — Nothing to pay makes steps 8 and 9 NA automatically** *(2026-09-29, brief #5m §3.4, her decision)*
+
+*The rule.* The instant step 5 (`FILE_RETURN`) is marked Done, `markStepDone` checks this return's own computation: if it's an overpayment, or exactly ₱0 payable, both step 8 and step 9 move straight to `NA` (only if they're still `PENDING` — a one-way transition, the same shape D68 already established for the auto-wait). No clicks needed; Pay reads "Nothing to pay" (or "Nothing to pay — overpayment ₱X" when it genuinely is one) and counts as resolved (green Done pill) the moment step 5 is Done. The two overpayment filings from her own walkthrough (Rosario Garcia ₱8,200 and another at ₱10,600) are exactly the cases this was built from — both had been showing steps 8/9 as ordinary open work before this decision.
+
+*Implementation note, worth recording plainly.* This is meant to key off the FROZEN `computationSnapshot` (D76's own wording says "when the snapshot freezes") — but the production `markStepDone` path has never actually written that field; confirmed by grep, only `prisma/seed.ts` does. This is a pre-existing gap this brief did not create and was not asked to close (the schema's own `Filing.filedAt` has the identical property, already noted in D68). A LIVE recomputation (`assembleAndComputeFiling`) at the exact instant step 5 is marked Done is the practical equivalent and is what's actually implemented — functionally identical for every case that matters here, since nothing else can have changed the figures between "step 5 marked Done" and "the check runs" (they're the same action).
+
+*Item 56/58 on a later return treats this return's payment as ₱0* when 8/9 are NA — confirmed by a test: `priorPeriodPaymentsCentsThrough` never reads a value for a filing whose `amountPaidCents` was never written (NA'd steps never call `savePayment`), so it naturally contributes 0, no special-casing needed.
+
+**D77 — The Next banner never offers a control the step's own card doesn't have** *(2026-09-29, brief #5m §4, her decision)*
+
+*What she saw.* A fresh filing's banner read "Next: Step 1 of 16 — Record quarterly sales" with a Mark done button — step 1 has none, it completes itself (D33). On step 8, the banner offered Start and Mark done — step 8 needs three fields filled in first, not a bare click.
+
+*The fix.* `components/next-action-control.tsx` gains a `mode` prop, computed per step code by `lib/workflow/groups.ts`'s `nextActionModeForStepCode`, checked against every one of the sixteen steps' real controls (not just the two she happened to see):
+- **`"goToStep"`** — steps 1, 2, 6, 7, 9, 10, 14 (self-completing, no bare control at all) and step 8 (needs fields filled in first). The banner offers a single "Go to step" link, no buttons.
+- **`"markDoneOnly"`** — steps 3, 4, 5, whose own card already offers Mark done and nothing else (`controlsMode="markDoneOnly"`). The banner keeps Mark done, gated by the same server-side checks the card's own button already uses.
+- **`"full"`** (the default, every other step — 11, 12, 13, 15, 16) — unchanged: Start + Mark done, the shape every step used to get regardless of whether it fit.
+
+*Before/after, every step checked:*
+
+| Step | Before | After |
+|---|---|---|
+| 1 Record quarterly sales | Start + Mark done (neither exists) | Go to step |
+| 2 Receive Form 2307 | Start + Mark done (neither exists) | Go to step |
+| 3 Prepare computation | Mark done only (already correct) | Mark done only (unchanged) |
+| 4 Advise client | Mark done only (already correct) | Mark done only (unchanged) |
+| 5 File return | Mark done only (already correct) | Mark done only (unchanged) |
+| 6 Submission screenshot | Start + Mark done (neither exists) | Go to step |
+| 7 Filed form | Start + Mark done (neither exists) | Go to step |
+| 8 Make payment | Start + Mark done (needs fields, not a click) | Go to step |
+| 9 Proof of payment | Start + Mark done (neither exists) | Go to step |
+| 10 TRRC | Start + Mark done (neither exists) | Go to step |
+| 11 Alphalist entry | Start + Mark done (both real) | Unchanged |
+| 12 Email DAT | Start + Mark done (both real) | Unchanged |
+| 13 SAWT acknowledgement | Start + Mark done (both real) | Unchanged |
+| 14 SAWT validation | Start + Mark done (neither exists) | Go to step |
+| 15 eAFS | Start + Mark done (both real) | Unchanged |
+| 16 Email package | Start + Mark done (both real) | Unchanged |
+
+*Why 11–13/15/16 needed no change.* Their own cards genuinely offer both Start and Mark done as real controls (plus Skip/doc upload, which the banner never surfaced anyway) — the banner's existing pair is a true subset of what the card offers, so nothing was wrong there to begin with.
+
+---
+
+**Documentation reconciled through brief #5m** (this pass) — see the "Last reconciled" line at the top of this file, CURRENT_STATE.md, PROJECT_MASTER.md and CLAUDE.md.
