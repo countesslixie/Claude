@@ -10,6 +10,7 @@ import { getStartingFigures } from "@/lib/startingFigures";
 import type { Period } from "@/lib/tax/types";
 import { getActorId } from "@/lib/actor";
 import { logActivity } from "@/lib/activityLog";
+import { assertMidYearStartingFiguresEntered } from "@/lib/workflow/midYearGuard";
 
 /**
  * Generates every Filing (and its WorkflowStep checklist) a client needs
@@ -24,6 +25,9 @@ export async function generateFilingsForClientYear(
   clientId: string,
   taxableYear: number,
 ): Promise<{ createdPeriods: Period[]; skippedPeriods: Period[]; outsidePeriods: Period[] }> {
+  // Brief #5n §1 (D78) — refuse before anything is created.
+  await assertMidYearStartingFiguresEntered(clientId, taxableYear);
+
   const client = await prisma.client.findUniqueOrThrow({ where: { id: clientId } });
   const ruleSet = await prisma.taxRuleSet.findUniqueOrThrow({ where: { taxableYear } });
 

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState } from "react";
 import { generateFilingsAction, type GenerateFilingsResult } from "@/lib/actions/filings";
 import { Input } from "@/components/ui/input";
@@ -41,6 +42,14 @@ export function GenerateFilingsForm({ clientId, defaultYear }: { clientId: strin
                 state.outsideCount > 0 ? `, ${state.outsideCount} filed outside the app` : ""
               }.`
             : state.error}
+          {!state.ok && state.startingFiguresHref && (
+            <>
+              {" "}
+              <Link href={state.startingFiguresHref} className="underline">
+                Open starting figures
+              </Link>
+            </>
+          )}
         </p>
       )}
     </form>

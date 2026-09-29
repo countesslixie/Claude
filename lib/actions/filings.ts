@@ -6,6 +6,7 @@ import { getActorId } from "@/lib/actor";
 import { logActivity } from "@/lib/activityLog";
 import { pesosToCents, centsToPesos } from "@/lib/money";
 import { generateFilingsForClientYear } from "@/lib/workflow/filingGeneration";
+import { MidYearGuardError } from "@/lib/workflow/midYearGuard";
 import { recomputeReceive2307Status, reopenPreparedFiling, markStepDone } from "@/lib/actions/workflowSteps";
 import { payGroupBlockReason } from "@/lib/workflow/groups";
 import { otherCreditsSchema } from "@/lib/validation/otherCredits";
@@ -17,7 +18,7 @@ import type { Period } from "@/lib/tax/types";
 
 export type GenerateFilingsResult =
   | { ok: true; createdCount: number; skippedCount: number; outsideCount: number }
-  | { ok: false; error: string };
+  | { ok: false; error: string; startingFiguresHref?: string };
 
 /**
  * UI trigger for filing generation (Phase 3). Iterates ALL_PERIODS
@@ -36,6 +37,20 @@ export async function generateFilingsAction(clientId: string, taxableYear: numbe
     revalidatePath("/filings");
     return { ok: true, createdCount: createdPeriods.length, skippedCount: skippedPeriods.length, outsideCount: outsidePeriods.length };
   } catch (err) {
+    if (err instanceof MidYearGuardError) {
+      // D78 — link straight to that year's starting figures; if the tax-year row
+      // doesn't exist yet, that screen can't open, so link to adding it instead.
+      const taxYear = await prisma.clientTaxYear.findUnique({
+        where: { clientId_taxableYear: { clientId, taxableYear } },
+      });
+      return {
+        ok: false,
+        error: err.message,
+        startingFiguresHref: taxYear
+          ? `/clients/${clientId}/tax-years/${taxYear.id}/starting-figures`
+          : `/clients/${clientId}/tax-years/new`,
+      };
+    }
     if (err instanceof Error && err.message.includes("TaxRuleSet")) {
       return { ok: false, error: `No TaxRuleSet exists for taxable year ${taxableYear}. Add one in Settings first.` };
     }
