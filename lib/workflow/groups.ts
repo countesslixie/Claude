@@ -1,7 +1,8 @@
 import { isResolved } from "./status";
-import { missingRequiredSlots, type AttachedDocument, type DocSlotLike } from "./docSlots";
+import { missingRequiredSlots, SEND_CLIENT_PACKAGE_DEPENDENCIES, type AttachedDocument, type DocSlotLike } from "./docSlots";
 import type { WorkflowStepStatus } from "./types";
 import { centsToPesos } from "@/lib/money";
+import { BIR_WAIT_SHORT_NAME } from "./aging";
 
 /**
  * Brief #4a — the sixteen steps wrapped in groups. This changes nothing
@@ -353,6 +354,102 @@ export function currentStepCodeByGroupOrder(steps: { stepCode: string; status: W
 }
 
 /**
+ * D85 (brief #5o §3, her decision) — the eAFS group (steps 11, 12, 13, 15)
+ * opens only once File AND Pay are both Done. Pay counts as Done when it's
+ * "Nothing to pay" (D76 — steps 8/9 NA). Enforced server-side for every
+ * action on these steps, not just by the UI.
+ */
+export function eafsGroupBlockReason(steps: { stepCode: string; status: WorkflowStepStatus }[]): string | null {
+  const codesOf = (code: GroupCode) => WORKFLOW_GROUPS.find((g) => g.code === code)!.stepCodes;
+  const inGroup = (code: GroupCode) => steps.filter((s) => codesOf(code).includes(s.stepCode));
+  const fileDone = inGroup("FILE").length > 0 && inGroup("FILE").every((s) => s.status === "DONE");
+  const payDone = inGroup("PAY").length > 0 && inGroup("PAY").every((s) => isResolved(s.status));
+  return fileDone && payDone ? null : "Available once Pay is done.";
+}
+
+/** Within eAFS: step 12 needs step 11 Done, step 13 needs step 12 Done (D87/D88). Step 15 needs only the group gate. */
+export const EAFS_UNLOCK_STEP_CODE: Record<string, string> = {
+  EMAIL_DAT: "ALPHALIST_ENTRY",
+  SAWT_ACK: "EMAIL_DAT",
+};
+
+/**
+ * D84 (brief #5o) — why a step can't be worked yet, or null. One place that
+ * knows every gate in the workflow (steps 3/4, 6/7/10, 8/9, the eAFS chain,
+ * 14, and 16's package readiness), used by nextActionForFiling below.
+ */
+export function stepLockReason(stepCode: string, steps: { stepCode: string; status: WorkflowStepStatus }[]): string | null {
+  const statusOf = (code: string) => steps.find((s) => s.stepCode === code)?.status;
+  switch (stepCode) {
+    case "PREPARE_RETURN":
+      return prepareGroupBlockReason(steps);
+    case "ADVISE_CLIENT":
+      return adviseClientBlockReason(steps);
+    case "SAVE_SUBMISSION_SS":
+    case "SAVE_FORM_COPY":
+    case "RECEIVE_TRRC":
+      return statusOf("FILE_RETURN") === "DONE" ? null : "Available once step 5 is done.";
+    case "MAKE_PAYMENT":
+      return payGroupBlockReason(steps);
+    case "SAVE_PROOF_PAYMENT":
+      return statusOf("MAKE_PAYMENT") === "DONE" ? null : "Available once step 8 is done.";
+    case "ALPHALIST_ENTRY":
+    case "EMAIL_DAT":
+    case "SAWT_ACK":
+    case "EAFS_SUBMIT": {
+      const group = eafsGroupBlockReason(steps);
+      if (group) return group;
+      const gate = EAFS_UNLOCK_STEP_CODE[stepCode];
+      return gate && statusOf(gate) !== "DONE" ? `Available once step ${STEP_NUMBER[gate]} is done.` : null;
+    }
+    case "SAWT_VALIDATION":
+      return statusOf("SAWT_ACK") === "DONE" ? null : "Available once step 13 is done.";
+    case "SEND_CLIENT_PACKAGE":
+      return SEND_CLIENT_PACKAGE_DEPENDENCIES.some((code) => {
+        const st = statusOf(code);
+        return st != null && !isResolved(st);
+      })
+        ? "Available once the filed form, proof of payment and BIR emails are saved."
+        : null;
+    default:
+      return null;
+  }
+}
+
+/**
+ * D84 (brief #5o §2, her decision) — the ONE definition of "Next" for a
+ * filing, shared by the filing page's Next banner, the slim bar (D80) and
+ * the dashboard's "Needs my action". It is the first open step, in GROUP
+ * order, that is HER work: steps that are locked are skipped, and so are
+ * steps waiting on BIR (WAITING_EXTERNAL on 10, 13 or 14). Only when nothing
+ * of hers is left does it report the BIR wait(s) — no action button. If the
+ * only open steps are locked ones (shouldn't happen) it falls back to the
+ * first of them rather than claiming the filing is done.
+ */
+export type NextAction =
+  | { kind: "work"; stepCode: string }
+  | { kind: "birWait"; stepCodes: string[] }
+  | { kind: "complete" };
+
+export function nextActionForFiling(steps: { stepCode: string; status: WorkflowStepStatus }[]): NextAction {
+  const unresolved: string[] = [];
+  for (const group of WORKFLOW_GROUPS) {
+    for (const stepCode of group.stepCodes) {
+      const step = steps.find((s) => s.stepCode === stepCode);
+      if (step && !isResolved(step.status)) unresolved.push(stepCode);
+    }
+  }
+  const isBirWait = (code: string) =>
+    BIR_WAIT_STEP_CODES.includes(code) && steps.find((s) => s.stepCode === code)?.status === "WAITING_EXTERNAL";
+  const work = unresolved.find((code) => !isBirWait(code) && !stepLockReason(code, steps));
+  if (work) return { kind: "work", stepCode: work };
+  const waits = unresolved.filter(isBirWait);
+  if (waits.length > 0) return { kind: "birWait", stepCodes: waits };
+  if (unresolved.length > 0) return { kind: "work", stepCode: unresolved[0] };
+  return { kind: "complete" };
+}
+
+/**
  * D74 — the three steps that ever wait on BIR (RECEIVE_TRRC, SAWT_ACK,
  * SAWT_VALIDATION — every step whose seeded waitingOnLabel is "BIR").
  * Used by the dashboard to list every currently-waiting one across every
@@ -437,8 +534,8 @@ function fileGroupOutstandingLabel(groupSteps: GroupStepInput[]): string | null 
  * joined with " · " (one "waiting on," stated once).
  */
 const BIR_CONFIRMATIONS_SHORT_NAMES: Record<string, string> = {
-  RECEIVE_TRRC: "TRRC",
-  SAWT_VALIDATION: "SAWT validation",
+  RECEIVE_TRRC: BIR_WAIT_SHORT_NAME.RECEIVE_TRRC,
+  SAWT_VALIDATION: BIR_WAIT_SHORT_NAME.SAWT_VALIDATION, // D92: "eAFS validation"
 };
 
 function birConfirmationsOutstandingLabel(groupSteps: GroupStepInput[]): string | null {

@@ -34,8 +34,8 @@ import { ComputationSheetPanel } from "@/components/computation-sheet-panel";
 import { OtherCreditsForm } from "@/components/other-credits-form";
 import { centsToPesos } from "@/lib/money";
 import { formatManilaDate, toManilaDateInputValue } from "@/lib/dates";
-import { deriveStepAging } from "@/lib/workflow/aging";
-import { countSkippedSteps, filingStatusLabel, currentStepCode } from "@/lib/workflow/status";
+import { deriveStepAging, BIR_WAIT_SHORT_NAME } from "@/lib/workflow/aging";
+import { countSkippedSteps, filingStatusLabel } from "@/lib/workflow/status";
 import {
   WORKFLOW_GROUPS,
   currentGroupCode,
@@ -43,6 +43,7 @@ import {
   prepareGroupBlockReason,
   adviseClientBlockReason,
   nextActionModeForStepCode,
+  nextActionForFiling,
   nothingToPayLabel,
   type GroupStepInput,
 } from "@/lib/workflow/groups";
@@ -247,8 +248,20 @@ export default async function FilingDetailPage({
   // §4.2 — the page's primary job: what to do next, in words, with the
   // action adjacent. currentStepCode is the same "earliest unresolved
   // step" logic the board/dashboard use (lib/workflow/status.ts).
-  const nextStepCode = currentStepCode(filing.workflowSteps);
-  const nextStep = nextStepCode ? allSteps.find((s) => s.stepCode === nextStepCode) : undefined;
+  // D84 (brief #5o) — "Next" is her next piece of work, by group order, skipping
+  // locked steps and steps waiting on BIR; the banner and the slim bar share it
+  // (and the dashboard's "Needs my action" uses the same helper).
+  const nextAction = nextActionForFiling(filing.workflowSteps);
+  const nextStep = nextAction.kind === "work" ? allSteps.find((s) => s.stepCode === nextAction.stepCode) : undefined;
+  const birWaitText =
+    nextAction.kind === "birWait"
+      ? `waiting on BIR — ${nextAction.stepCodes
+          .map((code) => {
+            const days = allSteps.find((s) => s.stepCode === code)?.agingDaysWaiting;
+            return `${BIR_WAIT_SHORT_NAME[code]}${days != null ? `, ${days}d` : ""}`;
+          })
+          .join(" · ")}`
+      : null;
 
   // Step 13 -> 14 (D29) — the one genuine sequencing dependency. Computed
   // once here so both NextActionControl (if step 14 happens to be next)
@@ -496,6 +509,7 @@ export default async function FilingDetailPage({
         headerId="filing-page-header"
         title={`${filing.client.registeredName} — TY${filing.taxableYear} ${filing.period}`}
         next={nextStep ? { stepCode: nextStep.stepCode, sequence: nextStep.sequence, title: nextStep.title } : null}
+        waitingText={birWaitText}
       />
       <div id="filing-page-header" className="mb-2 flex items-start justify-between">
         <div>
@@ -553,6 +567,8 @@ export default async function FilingDetailPage({
                 mode={nextActionModeForStepCode(nextStep.stepCode)}
               />
             </div>
+          ) : birWaitText ? (
+            <p className="text-sm font-medium text-ink">Next: {birWaitText}</p>
           ) : (
             <p className="text-sm font-medium text-green">
               All 16 steps resolved — nothing left to do on this filing.

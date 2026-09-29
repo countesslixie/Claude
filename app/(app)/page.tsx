@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { StatusBadge, type StatusTone } from "@/components/status-badge";
 import { ClickableRow, ActionCell } from "@/components/clickable-row";
 import { formatManilaDate, currentTaxableYearManila, manilaCalendarDay } from "@/lib/dates";
-import { currentStepCodeByGroupOrder, BIR_WAIT_STEP_CODES } from "@/lib/workflow/groups";
+import { nextActionForFiling, BIR_WAIT_STEP_CODES } from "@/lib/workflow/groups";
 import { deriveStepAging, type AgingTone } from "@/lib/workflow/aging";
 import { stepDueDate } from "@/lib/workflow/dueDate";
 import { missingRequiredSlots } from "@/lib/workflow/docSlots";
@@ -54,8 +54,10 @@ export default async function DashboardPage() {
     // step in an earlier GROUP (e.g. step 11) would pick step 10 here —
     // wrong, since group order says the earlier group's own step 11 is
     // what she needs to act on first.
-    const code = currentStepCodeByGroupOrder(filing.workflowSteps);
-    const step = code ? filing.workflowSteps.find((s) => s.stepCode === code) : undefined;
+    // D84 (brief #5o) — the same "Next" helper as the filing page's banner and bar:
+    // her next piece of work, skipping locked steps and BIR waits (those list below).
+    const next = nextActionForFiling(filing.workflowSteps);
+    const step = next.kind === "work" ? filing.workflowSteps.find((s) => s.stepCode === next.stepCode) : undefined;
 
     if (step) {
       // Each step shows ITS OWN due date, never the filing's adjustedDueDate

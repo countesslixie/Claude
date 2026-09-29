@@ -61,10 +61,22 @@ export function birWaitTone(agingTone: AgingTone | null | undefined): "waiting" 
   return agingTone === "red" ? "overdue" : "waiting";
 }
 
+/**
+ * The short plain name of each BIR wait, used by the board tag (D79), the
+ * BIR Confirmations/eAFS header text (D73), and the Next banner/bar (D84).
+ * D92 (brief #5o) — step 14 is "eAFS validation" everywhere, no longer
+ * "SAWT validation".
+ */
+export const BIR_WAIT_SHORT_NAME: Record<string, string> = {
+  RECEIVE_TRRC: "TRRC",
+  SAWT_ACK: "SAWT acknowledgement",
+  SAWT_VALIDATION: "eAFS validation",
+};
+
 /** D79 — the two waits that can carry a board tag, in display order, with their tag wording. */
 const BIR_WAIT_TAG_LABELS: ReadonlyArray<{ stepCode: string; label: string }> = [
-  { stepCode: "RECEIVE_TRRC", label: "TRRC" },
-  { stepCode: "SAWT_VALIDATION", label: "SAWT validation" },
+  { stepCode: "RECEIVE_TRRC", label: BIR_WAIT_SHORT_NAME.RECEIVE_TRRC },
+  { stepCode: "SAWT_VALIDATION", label: BIR_WAIT_SHORT_NAME.SAWT_VALIDATION },
 ];
 
 export interface BirWaitTag {

@@ -17,11 +17,14 @@ export function FilingStickyBar({
   headerId,
   title,
   next,
+  waitingText = null,
 }: {
   headerId: string;
   /** e.g. "Rosario Garcia — TY2026 Q3" */
   title: string;
   next: { stepCode: string; sequence: number; title: string } | null;
+  /** D84 — when nothing of hers is left but a BIR wait: "waiting on BIR — TRRC, 3d". No link. */
+  waitingText?: string | null;
 }) {
   const [visible, setVisible] = useState(false);
 
@@ -53,6 +56,8 @@ export function FilingStickyBar({
             <span className="text-faint">·</span>
             <GoToStepLink stepCode={next.stepCode} className="flex-shrink-0 text-ink-secondary underline hover:text-ink" />
           </>
+        ) : waitingText ? (
+          <span className="truncate text-ink-secondary">Next: {waitingText}</span>
         ) : (
           <span className="font-medium text-green">Complete</span>
         )}
