@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { markStepInProgress, markStepDone } from "@/lib/actions/workflowSteps";
 import { stepBlockReason, type AttachedDocument, type DocSlotLike } from "@/lib/workflow/docSlots";
+import { GoToStepLink } from "@/components/go-to-step";
 import type { NextActionMode } from "@/lib/workflow/groups";
 
 /**
@@ -36,6 +37,7 @@ import type { NextActionMode } from "@/lib/workflow/groups";
  */
 export function NextActionControl({
   stepId,
+  stepCode,
   status,
   requiredDocSlots,
   documents,
@@ -43,6 +45,8 @@ export function NextActionControl({
   mode = "full",
 }: {
   stepId: string;
+  /** D80 — lets "Go to step" expand the right group and scroll to this step's own card. */
+  stepCode?: string;
   status: string;
   requiredDocSlots: DocSlotLike[];
   documents: AttachedDocument[];
@@ -64,9 +68,13 @@ export function NextActionControl({
   if (mode === "goToStep") {
     return (
       <div className="flex flex-col gap-1">
-        <a href="#checklist" className="text-xs text-ink-secondary underline hover:text-ink">
-          Go to step
-        </a>
+        {stepCode ? (
+          <GoToStepLink stepCode={stepCode} className="text-xs text-ink-secondary underline hover:text-ink" />
+        ) : (
+          <a href="#checklist" className="text-xs text-ink-secondary underline hover:text-ink">
+            Go to step
+          </a>
+        )}
       </div>
     );
   }

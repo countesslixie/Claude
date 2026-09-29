@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { StatusBadge } from "@/components/status-badge";
+import { OPEN_STEP_EVENT } from "@/components/go-to-step";
 
 /**
  * Brief #4a — a collapsed group shows its name, progress, and what's
@@ -40,6 +41,7 @@ export function WorkflowGroupCard({
   unresolvedSummary,
   outstandingLabel,
   defaultOpen,
+  stepCodes,
   children,
 }: {
   name: string;
@@ -51,9 +53,20 @@ export function WorkflowGroupCard({
   unresolvedSummary: string | null;
   outstandingLabel: string | null;
   defaultOpen: boolean;
+  /** D77/D80 — every step code in this group, so "Go to step" knows which group to expand. */
+  stepCodes: readonly string[];
   children: React.ReactNode;
 }) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
+
+  useEffect(() => {
+    function onOpenStep(e: Event) {
+      const code = (e as CustomEvent<{ stepCode: string }>).detail?.stepCode;
+      if (code && stepCodes.includes(code)) setIsOpen(true);
+    }
+    window.addEventListener(OPEN_STEP_EVENT, onOpenStep);
+    return () => window.removeEventListener(OPEN_STEP_EVENT, onOpenStep);
+  }, [stepCodes]);
 
   return (
     <div className="rounded-lg border border-line">

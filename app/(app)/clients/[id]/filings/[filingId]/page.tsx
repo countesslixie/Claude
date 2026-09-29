@@ -29,6 +29,7 @@ import { Receive2307StepCard, type CertificateRow } from "@/components/receive-2
 import { FileGroupDocStepCard } from "@/components/file-group-doc-step-card";
 import { MakePaymentStepCard } from "@/components/make-payment-step-card";
 import { NextActionControl } from "@/components/next-action-control";
+import { FilingStickyBar } from "@/components/filing-sticky-bar";
 import { ComputationSheetPanel } from "@/components/computation-sheet-panel";
 import { OtherCreditsForm } from "@/components/other-credits-form";
 import { centsToPesos } from "@/lib/money";
@@ -494,7 +495,12 @@ export default async function FilingDetailPage({
 
   return (
     <div className="mx-auto max-w-3xl">
-      <div className="mb-2 flex items-start justify-between">
+      <FilingStickyBar
+        headerId="filing-page-header"
+        title={`${filing.client.registeredName} — TY${filing.taxableYear} ${filing.period}`}
+        next={nextStep ? { stepCode: nextStep.stepCode, sequence: nextStep.sequence, title: nextStep.title } : null}
+      />
+      <div id="filing-page-header" className="mb-2 flex items-start justify-between">
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-semibold text-ink">
@@ -542,6 +548,7 @@ export default async function FilingDetailPage({
               </p>
               <NextActionControl
                 stepId={nextStep.id}
+                stepCode={nextStep.stepCode}
                 status={nextStep.status}
                 requiredDocSlots={nextStep.requiredDocSlots}
                 documents={nextStep.documents}
@@ -677,8 +684,11 @@ export default async function FilingDetailPage({
                 unresolvedSummary={summary.unresolvedSummary}
                 outstandingLabel={def.code === "PAY" ? (payNothingToPayLabel ?? summary.outstandingLabel) : summary.outstandingLabel}
                 defaultOpen={def.code === activeGroupCode}
+                stepCodes={def.stepCodes}
               >
-                {steps.map((step) => {
+                {steps.map((step) => (
+                  <div key={step.id} id={`step-${step.stepCode}`} className="scroll-mt-20">
+                    {(() => {
                   // Brief #4b — steps 1 and 2 are self-completing and carry no
                   // manual controls at all; they get their own bespoke cards
                   // instead of the generic WorkflowStepCard.
@@ -812,7 +822,9 @@ export default async function FilingDetailPage({
                       }
                     />
                   );
-                })}
+                    })()}
+                  </div>
+                ))}
               </WorkflowGroupCard>
             ))}
           </div>
