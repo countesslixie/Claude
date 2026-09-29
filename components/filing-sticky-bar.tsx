@@ -36,13 +36,12 @@ export function FilingStickyBar({
     return () => observer.disconnect();
   }, [headerId]);
 
+  // Not rendered at all while the real header is in view — a hidden bar would
+  // still leave its "Go to step" link in the tab order.
+  if (!visible) return null;
+
   return (
-    <div
-      aria-hidden={!visible}
-      className={`fixed left-60 right-0 top-0 z-20 border-b border-line bg-surface px-6 py-2 transition-opacity ${
-        visible ? "opacity-100" : "pointer-events-none opacity-0"
-      }`}
-    >
+    <div className="fixed left-60 right-0 top-0 z-20 border-b border-line bg-surface px-6 py-2">
       <div className="mx-auto flex max-w-3xl items-center gap-2 overflow-hidden whitespace-nowrap text-sm">
         <span className="truncate font-medium text-ink">{title}</span>
         <span className="text-faint">·</span>

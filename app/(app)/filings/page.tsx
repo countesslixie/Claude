@@ -92,8 +92,13 @@ export default async function FilingsBoardPage({
       : null;
     // D79 — a card outside BIR Confirmations still shows any BIR wait it's carrying;
     // one inside that column already says so.
-    const birTags = groupCode === "BIR_CONFIRMATIONS" ? [] : birWaitTags(f.workflowSteps, f.certificatesExpectedBy, now);
-    return { ...f, groupCode, outstandingLabel, birTags };
+    const allBirTags = birWaitTags(f.workflowSteps, f.certificatesExpectedBy, now);
+    const birTags = groupCode === "BIR_CONFIRMATIONS" ? [] : allBirTags;
+    // Inside BIR Confirmations the group's own wait line carries the colour instead:
+    // red once either wait is past twice its expected response days (same thresholds as the pill).
+    const outstandingTone: "amber" | "red" =
+      groupCode === "BIR_CONFIRMATIONS" && allBirTags.some((t) => t.tone === "overdue") ? "red" : "amber";
+    return { ...f, groupCode, outstandingLabel, outstandingTone, birTags };
   });
 
   const columns = WORKFLOW_GROUPS.map((g) => ({
@@ -196,6 +201,7 @@ function BoardColumn({
     client: { registeredName: string };
     workflowSteps: Array<{ status: WorkflowStepStatus }>;
     outstandingLabel: string | null;
+    outstandingTone: "amber" | "red";
     birTags: BirWaitTag[];
   }>;
 }) {
@@ -219,7 +225,9 @@ function BoardColumn({
                 </StatusBadge>
                 <span className="text-xs text-faint">{formatManilaDate(f.adjustedDueDate)}</span>
               </div>
-              {f.outstandingLabel && <p className="mt-1 text-xs text-amber">{f.outstandingLabel}</p>}
+              {f.outstandingLabel && (
+                <p className={`mt-1 text-xs ${f.outstandingTone === "red" ? "text-red" : "text-amber"}`}>{f.outstandingLabel}</p>
+              )}
               {f.birTags.length > 0 && (
                 <div className="mt-1 flex flex-wrap gap-1">
                   {f.birTags.map((t) => (

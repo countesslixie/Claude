@@ -25,7 +25,7 @@ export function GenerateFilingsForm({ clientId, defaultYear }: { clientId: strin
   const [state, formAction, isPending] = useActionState(runGenerate.bind(null, clientId), null);
 
   return (
-    <form action={formAction} className="flex items-end gap-2">
+    <form action={formAction} className="flex flex-wrap items-end justify-end gap-2">
       <div>
         <label className="text-xs font-medium uppercase tracking-wide text-faint" htmlFor="taxableYear">
           Generate filings for year
@@ -36,7 +36,7 @@ export function GenerateFilingsForm({ clientId, defaultYear }: { clientId: strin
         {isPending ? "Generating…" : "Generate"}
       </Button>
       {state && (
-        <p className={`text-xs ${state.ok ? "text-faint" : "text-red"}`}>
+        <p className={`basis-full text-right text-xs ${state.ok ? "text-faint" : "text-red"}`}>
           {state.ok
             ? `Created ${state.createdCount} filing(s), skipped ${state.skippedCount} (already existed)${
                 state.outsideCount > 0 ? `, ${state.outsideCount} filed outside the app` : ""
