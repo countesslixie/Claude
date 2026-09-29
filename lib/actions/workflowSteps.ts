@@ -135,14 +135,43 @@ export async function markStepDone(stepId: string): Promise<StepActionResult> {
 
   const actorId = await getActorId();
   const before = step;
+  const now = new Date();
   const updated = await prisma.workflowStep.update({
     where: { id: stepId },
-    data: { status: "DONE", completedAt: new Date(), startedAt: step.startedAt ?? new Date(), actorId },
+    data: { status: "DONE", completedAt: now, startedAt: step.startedAt ?? now, actorId },
   });
 
   await logActivity({ entityType: "WorkflowStep", entityId: stepId, action: "UPDATE", before, after: updated, actorId });
   await recomputeFilingStatus(step.filingId, actorId);
   if (step.stepCode === "PREPARE_RETURN") await ensureComputationSheetSaved(step.filingId);
+
+  // D68 (brief #5l §1, her decision) — a TRRC is always owed once the
+  // return is filed. Waiting for her to click a manual "Mark waiting"
+  // meant the BIR aging clock never started until she remembered to do
+  // that herself, so a late TRRC could sit silently instead of reaching
+  // the dashboard's red list. Step 10 (RECEIVE_TRRC) can only be PENDING
+  // at this point — D67 already locks it until step 5 is Done, so it
+  // can't have been touched yet — making this a one-way transition that's
+  // never re-triggered by a later no-op call to this same function.
+  if (step.stepCode === "FILE_RETURN") {
+    const trrcStep = step.filing.workflowSteps.find((s) => s.stepCode === "RECEIVE_TRRC");
+    if (trrcStep && trrcStep.status === "PENDING") {
+      const trrcUpdated = await prisma.workflowStep.update({
+        where: { id: trrcStep.id },
+        data: { status: "WAITING_EXTERNAL", waitingSince: now, actorId },
+      });
+      await logActivity({
+        entityType: "WorkflowStep",
+        entityId: trrcStep.id,
+        action: "UPDATE",
+        before: trrcStep,
+        after: trrcUpdated,
+        actorId,
+        note: "Step 10 started waiting on BIR automatically — the return was filed.",
+      });
+      await recomputeFilingStatus(step.filingId, actorId);
+    }
+  }
 
   // Brief #5e §3 — the message is saved exactly as sent at the moment
   // step 4 is marked Done, not rebuilt live afterward. If reopening later
@@ -394,15 +423,21 @@ export async function recomputeReceive2307Status(filingId: string): Promise<void
  * its document marks the step DONE directly, with no separate "Mark
  * done" left to click. Called after every upload/removal against one of
  * these three steps (lib/actions/documents.ts's saveDocumentForStep /
- * deleteDocument). Reverts to PENDING — never back to WAITING_EXTERNAL,
- * even for step 10 — if the document is removed (or replaced away
- * without a replacement) and none remains: a step whose only file just
- * vanished isn't "now actively waiting," it's simply not done, the same
- * PENDING state it started in (§4.4). The election hard-blocker (D27)
- * still applies, mirroring recomputeReceive2307Status's own check: an
- * unconfirmed Q1 election leaves the step un-done regardless of what's
- * attached, since these three steps bypass markStepDone's own check
- * entirely by completing themselves here instead.
+ * deleteDocument). Reverts to PENDING if the document is removed (or
+ * replaced away without a replacement) and none remains — a step whose
+ * only file just vanished isn't done, the same PENDING state it started
+ * in (§4.4). **Brief #5l §1 (D68) exception: RECEIVE_TRRC (step 10)
+ * reverts to WAITING_EXTERNAL instead, never PENDING** — a TRRC is still
+ * owed once the return is filed, so losing the file just means it hasn't
+ * arrived (again); waitingSince is reset to step 5's (FILE_RETURN) own
+ * `completedAt` on this same filing — a reliable existing record of when
+ * the return was actually filed, not "now," so the aging clock measures
+ * from filing, not from whenever the file happened to be removed. The
+ * election hard-blocker (D27) still applies to the completing branch,
+ * mirroring recomputeReceive2307Status's own check: an unconfirmed Q1
+ * election leaves the step un-done regardless of what's attached, since
+ * these three steps bypass markStepDone's own check entirely by
+ * completing themselves here instead.
  */
 export async function recomputeFileGroupDocStepStatus(stepId: string): Promise<void> {
   const step = await prisma.workflowStep.findUnique({
@@ -422,17 +457,42 @@ export async function recomputeFileGroupDocStepStatus(stepId: string): Promise<v
 
     const updated = await prisma.workflowStep.update({
       where: { id: step.id },
-      data: { status: "DONE", completedAt: new Date(), startedAt: step.startedAt ?? new Date(), actorId },
+      data: {
+        status: "DONE",
+        completedAt: new Date(),
+        startedAt: step.startedAt ?? new Date(),
+        // D68 (brief #5l §1) — an upload completing step 10 clears its
+        // waitingSince along with the status; harmless no-op for 6/7,
+        // which never have one set in the first place.
+        waitingSince: null,
+        actorId,
+      },
     });
     await logActivity({ entityType: "WorkflowStep", entityId: step.id, action: "UPDATE", before: step, after: updated, actorId });
     await recomputeFilingStatus(step.filingId, actorId);
     revalidatePath(`/clients/${step.filing.clientId}/filings/${step.filingId}`);
     revalidatePath("/filings");
   } else if (!hasDoc && step.status === "DONE") {
-    const updated = await prisma.workflowStep.update({
-      where: { id: step.id },
-      data: { status: "PENDING", completedAt: null, actorId },
-    });
+    let updated;
+    if (step.stepCode === "RECEIVE_TRRC") {
+      const fileReturnStep = await prisma.workflowStep.findFirst({
+        where: { filingId: step.filingId, stepCode: "FILE_RETURN" },
+      });
+      updated = await prisma.workflowStep.update({
+        where: { id: step.id },
+        data: {
+          status: "WAITING_EXTERNAL",
+          completedAt: null,
+          waitingSince: fileReturnStep?.completedAt ?? new Date(),
+          actorId,
+        },
+      });
+    } else {
+      updated = await prisma.workflowStep.update({
+        where: { id: step.id },
+        data: { status: "PENDING", completedAt: null, actorId },
+      });
+    }
     await logActivity({ entityType: "WorkflowStep", entityId: step.id, action: "UPDATE", before: step, after: updated, actorId });
     await recomputeFilingStatus(step.filingId, actorId);
     revalidatePath(`/clients/${step.filing.clientId}/filings/${step.filingId}`);
@@ -471,6 +531,20 @@ export async function markStepInProgress(stepId: string): Promise<StepActionResu
 export async function markStepWaitingExternal(stepId: string): Promise<StepActionResult> {
   const step = await prisma.workflowStep.findUnique({ where: { id: stepId }, include: { filing: true } });
   if (!step) return { ok: false, error: "Step not found." };
+
+  // D68 (brief #5l §1) — step 10 (RECEIVE_TRRC) no longer has a manual
+  // Mark waiting: it enters WAITING_EXTERNAL by itself the moment step 5
+  // is marked Done (markStepDone's own FILE_RETURN branch above), so
+  // there's nothing left for a manual click to do. Refused here, not
+  // just by removing the button, so it can't be bypassed by calling this
+  // action directly.
+  if (step.stepCode === "RECEIVE_TRRC") {
+    return {
+      ok: false,
+      error: "Step 10 starts waiting on BIR automatically once step 5 (file the return) is done — there's no manual Mark waiting any more.",
+    };
+  }
+
   if (!step.isWaitingState) return { ok: false, error: "This step isn't a waiting-on-external step." };
 
   const actorId = await getActorId();

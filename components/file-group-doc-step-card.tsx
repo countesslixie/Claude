@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { StatusBadge, type StatusTone } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { markStepWaitingExternal, logFollowUp } from "@/lib/actions/workflowSteps";
+import { logFollowUp } from "@/lib/actions/workflowSteps";
 import { uploadDocument } from "@/lib/actions/documents";
 import { stepStatusLabel } from "@/lib/workflow/status";
 import { fileTooLargeMessage } from "@/lib/upload";
@@ -34,11 +34,19 @@ export interface FileGroupDoc {
  * relies on — so it's allowed to render as standing text here.
  *
  * Once unlocked, the upload box (file + date + Upload) sits directly on
- * the card with no "Attach" link to open it first. RECEIVE_TRRC alone
- * also keeps Mark waiting (hasMarkWaiting) — it's still waiting on
- * someone else (BIR), unlike 6/7 which are purely "save this file."
- * Once Done, the file shows as a normal saved document row with a
- * Replace action (one-for-one, D46's pattern).
+ * the card with no "Attach" link to open it first. Once Done, the file
+ * shows as a normal saved document row with a Replace action (one-for-one,
+ * D46's pattern).
+ *
+ * Brief #5l §1 (D68) — RECEIVE_TRRC (step 10) no longer has a manual Mark
+ * waiting: it enters WAITING_EXTERNAL by itself the moment step 5 is
+ * marked Done (markStepDone's own FILE_RETURN branch,
+ * lib/actions/workflowSteps.ts), since a TRRC is always owed once the
+ * return is filed. All that's left here for that state is Log follow-up,
+ * the same control every other waiting step already has — shown whenever
+ * `status` is live WAITING_EXTERNAL, which in practice is only ever true
+ * for step 10 (6 and 7 never enter that status at all), so no per-step
+ * flag is needed to gate it.
  */
 export function FileGroupDocStepCard({
   stepId,
@@ -49,7 +57,6 @@ export function FileGroupDocStepCard({
   slotCode,
   slotLabel,
   documents,
-  hasMarkWaiting = false,
   waitingOnLabel,
   followUpCount,
   agingDaysWaiting,
@@ -64,8 +71,6 @@ export function FileGroupDocStepCard({
   slotCode: string;
   slotLabel: string;
   documents: FileGroupDoc[];
-  /** Only RECEIVE_TRRC (step 10) gets Mark waiting. */
-  hasMarkWaiting?: boolean;
   waitingOnLabel: string | null;
   followUpCount: number;
   agingDaysWaiting: number | null;
@@ -143,14 +148,7 @@ export function FileGroupDocStepCard({
 
       {isStep5Done && !isDone && (
         <div className="mt-2 flex flex-col gap-2">
-          {hasMarkWaiting && !isWaiting && (
-            <div>
-              <Button size="sm" variant="secondary" disabled={isPending} onClick={() => run(() => markStepWaitingExternal(stepId))}>
-                Mark waiting
-              </Button>
-            </div>
-          )}
-          {hasMarkWaiting && isWaiting && (
+          {isWaiting && (
             <div>
               <Button size="sm" variant="secondary" disabled={isPending} onClick={() => run(() => logFollowUp(stepId))}>
                 Log follow-up ({followUpCount})

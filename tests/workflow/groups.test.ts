@@ -305,6 +305,72 @@ describe("summarizeGroup", () => {
   });
 });
 
+describe("D69 (brief #5l §2): the File group's own summary line", () => {
+  const file = WORKFLOW_GROUPS.find((g) => g.code === "FILE")!;
+
+  it("step 5 not done: no text at all, even though 6/7/10 are technically 'unresolved'", () => {
+    const steps: GroupStepInput[] = file.stepCodes.map((stepCode) => ({ stepCode, status: "PENDING" }));
+    const summary = summarizeGroup(file, steps);
+    expect(summary.outstandingLabel).toBeNull();
+  });
+
+  it("step 5 done, 6 and 7 both still missing: fixed short names, step order, no lowercased slot labels", () => {
+    const steps: GroupStepInput[] = [
+      { stepCode: "FILE_RETURN", status: "DONE" },
+      { stepCode: "SAVE_SUBMISSION_SS", status: "PENDING" },
+      { stepCode: "SAVE_FORM_COPY", status: "PENDING" },
+      { stepCode: "RECEIVE_TRRC", status: "PENDING" },
+    ];
+    const summary = summarizeGroup(file, steps);
+    expect(summary.outstandingLabel).toBe("waiting on submission screenshot, filed form");
+  });
+
+  it("step 5 done, only step 7 still missing", () => {
+    const steps: GroupStepInput[] = [
+      { stepCode: "FILE_RETURN", status: "DONE" },
+      { stepCode: "SAVE_SUBMISSION_SS", status: "DONE" },
+      { stepCode: "SAVE_FORM_COPY", status: "PENDING" },
+      { stepCode: "RECEIVE_TRRC", status: "PENDING" },
+    ];
+    const summary = summarizeGroup(file, steps);
+    expect(summary.outstandingLabel).toBe("waiting on filed form");
+  });
+
+  it("step 10 waiting on BIR alone (6/7 already done)", () => {
+    const steps: GroupStepInput[] = [
+      { stepCode: "FILE_RETURN", status: "DONE" },
+      { stepCode: "SAVE_SUBMISSION_SS", status: "DONE" },
+      { stepCode: "SAVE_FORM_COPY", status: "DONE" },
+      { stepCode: "RECEIVE_TRRC", status: "WAITING_EXTERNAL", agingDaysWaiting: 5 },
+    ];
+    const summary = summarizeGroup(file, steps);
+    expect(summary.outstandingLabel).toBe("waiting on BIR, 5d");
+  });
+
+  it("both 6/7 missing and step 10 waiting on BIR: combined with a single 'waiting on'", () => {
+    const steps: GroupStepInput[] = [
+      { stepCode: "FILE_RETURN", status: "DONE" },
+      { stepCode: "SAVE_SUBMISSION_SS", status: "PENDING" },
+      { stepCode: "SAVE_FORM_COPY", status: "PENDING" },
+      { stepCode: "RECEIVE_TRRC", status: "WAITING_EXTERNAL", agingDaysWaiting: 0 },
+    ];
+    const summary = summarizeGroup(file, steps);
+    expect(summary.outstandingLabel).toBe("waiting on submission screenshot, filed form · BIR, 0d");
+  });
+
+  it("group Done: no text", () => {
+    const steps: GroupStepInput[] = [
+      { stepCode: "FILE_RETURN", status: "DONE" },
+      { stepCode: "SAVE_SUBMISSION_SS", status: "DONE" },
+      { stepCode: "SAVE_FORM_COPY", status: "DONE" },
+      { stepCode: "RECEIVE_TRRC", status: "DONE" },
+    ];
+    const summary = summarizeGroup(file, steps);
+    expect(summary.isComplete).toBe(true);
+    expect(summary.outstandingLabel).toBeNull();
+  });
+});
+
 describe("prepareGroupBlockReason (brief #4b)", () => {
   it("names both steps missing when neither is resolved", () => {
     const reason = prepareGroupBlockReason([

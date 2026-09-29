@@ -205,6 +205,58 @@ export interface GroupSummary {
 }
 
 /**
+ * D69 (brief #5l §2) — fixed, short, plain names for steps 6 and 7's own
+ * documents, used ONLY by fileGroupOutstandingLabel below. Never derived
+ * from a doc slot's own `label` (which is written for a form field, not a
+ * summary line, and was showing up lowercased and slot-shaped — "pdf",
+ * "trrc" — when the generic fallback built this text out of
+ * missingRequiredSlots instead).
+ */
+const FILE_GROUP_SHORT_NAMES: Record<string, string> = {
+  SAVE_SUBMISSION_SS: "submission screenshot",
+  SAVE_FORM_COPY: "filed form",
+};
+
+/**
+ * D69 (brief #5l §2) — the File group's own collapsed-summary text,
+ * replacing the generic doc-slot fallback for this one group (see the
+ * comment at its call site in summarizeGroup). Three situations, laid out
+ * in the brief's own table:
+ *   - Step 5 (FILE_RETURN) not Done: steps 6/7/10 are locked, not
+ *     waiting on anything (D67) — no text at all. The "0 of 4" count and
+ *     the Pending label already say enough.
+ *   - Step 5 Done, steps 6 and/or 7 still without a file: "waiting on
+ *     submission screenshot, filed form" — only the ones actually
+ *     missing, always in step order (6 before 7).
+ *   - Step 10 (RECEIVE_TRRC) waiting on BIR (D68 — automatic once step 5
+ *     is Done): "waiting on BIR, Nd", or without the day count on its
+ *     own first tick (Nd omitted only if aging wasn't precomputed by the
+ *     caller — see GroupStepInput's own comment).
+ * Both of the last two combine with " · ", "waiting on" stated once:
+ * "waiting on submission screenshot, filed form · BIR, Nd".
+ */
+function fileGroupOutstandingLabel(groupSteps: GroupStepInput[]): string | null {
+  const fileReturnStep = groupSteps.find((s) => s.stepCode === "FILE_RETURN");
+  if (fileReturnStep?.status !== "DONE") return null;
+
+  const missingDocNames = (["SAVE_SUBMISSION_SS", "SAVE_FORM_COPY"] as const)
+    .map((stepCode) => groupSteps.find((s) => s.stepCode === stepCode))
+    .filter((s): s is GroupStepInput => s != null && s.status !== "DONE")
+    .map((s) => FILE_GROUP_SHORT_NAMES[s.stepCode]);
+
+  const parts: string[] = [];
+  if (missingDocNames.length > 0) parts.push(`waiting on ${missingDocNames.join(", ")}`);
+
+  const trrcStep = groupSteps.find((s) => s.stepCode === "RECEIVE_TRRC");
+  if (trrcStep?.status === "WAITING_EXTERNAL") {
+    const bir = trrcStep.agingDaysWaiting != null ? `BIR, ${trrcStep.agingDaysWaiting}d` : "BIR";
+    parts.push(parts.length > 0 ? bir : `waiting on ${bir}`);
+  }
+
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
+
+/**
  * Rolls a group's steps up into one summary. Group status/blocking is
  * always DERIVED from its steps (§3) — there is no hand-set group-level
  * field anywhere.
@@ -235,35 +287,47 @@ export function summarizeGroup(group: WorkflowGroupDef, steps: GroupStepInput[])
 
   let outstandingLabel: string | null = null;
   if (!isComplete) {
-    // Brief #4e — Prepare's own two self-completing steps (RECORD_SALES,
-    // RECEIVE_2307) both read WAITING_EXTERNAL with the same generic
-    // waitingOnLabel ("Client") until resolved, which used to make this
-    // summary read "waiting on Client, 0d" regardless of which of the
-    // two was actually still open — no more informative than the
-    // now-removed standing block-reason text it sat next to. Name the
-    // specific thing outstanding instead, same short style as every
-    // other group. Falls through to the generic case below once both
-    // are resolved (e.g. step 4/ADVISE_CLIENT genuinely marked waiting).
-    if (group.code === "PREPARE") {
-      const step1 = groupSteps.find((s) => s.stepCode === "RECORD_SALES");
-      const step2 = groupSteps.find((s) => s.stepCode === "RECEIVE_2307");
-      const step1Done = step1?.status === "DONE";
-      const step2Resolved = step2 ? isResolved(step2.status) : false;
-      const outstanding: string[] = [];
-      if (!step1Done) outstanding.push("quarterly sales");
-      if (!step2Resolved) outstanding.push("Form 2307");
-      if (outstanding.length > 0) outstandingLabel = `waiting on ${outstanding.join(" and ")}`;
-    }
+    // D69 (brief #5l §2) — File gets its own summary entirely, never the
+    // generic fallback below: the generic one reads unresolved steps'
+    // missing doc slots regardless of WHY they're unresolved, which read
+    // "waiting on submission-page screenshot, filed form pdf, trrc
+    // email/pdf" even before step 5 was done — steps 6/7/10 are locked
+    // then (D67), not waiting on anything, and lowercased slot labels
+    // ("pdf", "trrc") never read as words she'd use. See
+    // fileGroupOutstandingLabel below.
+    if (group.code === "FILE") {
+      outstandingLabel = fileGroupOutstandingLabel(groupSteps);
+    } else {
+      // Brief #4e — Prepare's own two self-completing steps (RECORD_SALES,
+      // RECEIVE_2307) both read WAITING_EXTERNAL with the same generic
+      // waitingOnLabel ("Client") until resolved, which used to make this
+      // summary read "waiting on Client, 0d" regardless of which of the
+      // two was actually still open — no more informative than the
+      // now-removed standing block-reason text it sat next to. Name the
+      // specific thing outstanding instead, same short style as every
+      // other group. Falls through to the generic case below once both
+      // are resolved (e.g. step 4/ADVISE_CLIENT genuinely marked waiting).
+      if (group.code === "PREPARE") {
+        const step1 = groupSteps.find((s) => s.stepCode === "RECORD_SALES");
+        const step2 = groupSteps.find((s) => s.stepCode === "RECEIVE_2307");
+        const step1Done = step1?.status === "DONE";
+        const step2Resolved = step2 ? isResolved(step2.status) : false;
+        const outstanding: string[] = [];
+        if (!step1Done) outstanding.push("quarterly sales");
+        if (!step2Resolved) outstanding.push("Form 2307");
+        if (outstanding.length > 0) outstandingLabel = `waiting on ${outstanding.join(" and ")}`;
+      }
 
-    if (outstandingLabel == null) {
-      const waitingStep = groupSteps.find((s) => s.status === "WAITING_EXTERNAL");
-      if (waitingStep?.waitingOnLabel) {
-        outstandingLabel =
-          waitingStep.agingDaysWaiting != null
-            ? `waiting on ${waitingStep.waitingOnLabel}, ${waitingStep.agingDaysWaiting}d`
-            : `waiting on ${waitingStep.waitingOnLabel}`;
-      } else if (missingLabels.length > 0) {
-        outstandingLabel = `waiting on ${missingLabels.join(", ").toLowerCase()}`;
+      if (outstandingLabel == null) {
+        const waitingStep = groupSteps.find((s) => s.status === "WAITING_EXTERNAL");
+        if (waitingStep?.waitingOnLabel) {
+          outstandingLabel =
+            waitingStep.agingDaysWaiting != null
+              ? `waiting on ${waitingStep.waitingOnLabel}, ${waitingStep.agingDaysWaiting}d`
+              : `waiting on ${waitingStep.waitingOnLabel}`;
+        } else if (missingLabels.length > 0) {
+          outstandingLabel = `waiting on ${missingLabels.join(", ").toLowerCase()}`;
+        }
       }
     }
   }

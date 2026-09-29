@@ -695,7 +695,6 @@ export default async function FilingDetailPage({
                         slotCode={slot.slotCode}
                         slotLabel={slot.label}
                         documents={step.documents}
-                        hasMarkWaiting={step.stepCode === "RECEIVE_TRRC"}
                         waitingOnLabel={step.waitingOnLabel}
                         followUpCount={step.followUpCount}
                         agingDaysWaiting={step.agingDaysWaiting}

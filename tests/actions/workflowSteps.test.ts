@@ -105,7 +105,7 @@ describe("workflow step actions", () => {
     expect(result.error).toContain("step 7");
   });
 
-  it("marking RECEIVE_TRRC WAITING_EXTERNAL flips the filing status to WAITING_BIR", async () => {
+  it("D68: marking FILE_RETURN done moves step 10 to WAITING_EXTERNAL automatically, flipping the filing status to WAITING_BIR", async () => {
     // Q3 (adjusted due Nov 16, 2026) — not yet past due relative to "now"
     // when this suite runs, unlike Q2 (due Aug 17), so BLOCKED doesn't
     // pre-empt WAITING_BIR here (BLOCKED correctly takes priority when a
@@ -114,12 +114,32 @@ describe("workflow step actions", () => {
     const filing = await prisma.filing.findUniqueOrThrow({
       where: { clientId_taxableYear_period: { clientId: client.id, taxableYear: 2026, period: "Q3" } },
     });
+    const fileReturnStep = await prisma.workflowStep.findFirstOrThrow({
+      where: { filingId: filing.id, stepCode: "FILE_RETURN" },
+    });
     const trrcStep = await prisma.workflowStep.findFirstOrThrow({
       where: { filingId: filing.id, stepCode: "RECEIVE_TRRC" },
     });
+    const submissionStep = await prisma.workflowStep.findFirstOrThrow({
+      where: { filingId: filing.id, stepCode: "SAVE_SUBMISSION_SS" },
+    });
+    const formCopyStep = await prisma.workflowStep.findFirstOrThrow({
+      where: { filingId: filing.id, stepCode: "SAVE_FORM_COPY" },
+    });
+    expect(trrcStep.status).toBe("PENDING");
 
-    const result = await markStepWaitingExternal(trrcStep.id);
+    const result = await markStepDone(fileReturnStep.id);
     expect(result.ok).toBe(true);
+
+    const updatedTrrc = await prisma.workflowStep.findUniqueOrThrow({ where: { id: trrcStep.id } });
+    expect(updatedTrrc.status).toBe("WAITING_EXTERNAL");
+    expect(updatedTrrc.waitingSince).not.toBeNull();
+
+    // Steps 6 and 7 unlock (D67) but don't wait on anyone -- they stay Pending.
+    const updatedSubmission = await prisma.workflowStep.findUniqueOrThrow({ where: { id: submissionStep.id } });
+    const updatedFormCopy = await prisma.workflowStep.findUniqueOrThrow({ where: { id: formCopyStep.id } });
+    expect(updatedSubmission.status).toBe("PENDING");
+    expect(updatedFormCopy.status).toBe("PENDING");
 
     const updatedFiling = await prisma.filing.findUniqueOrThrow({ where: { id: filing.id } });
     expect(updatedFiling.status).toBe("WAITING_BIR");
@@ -289,12 +309,17 @@ describe("workflow step actions", () => {
       const stillBlocked = await markStepDone(validationStep.id);
       expect(stillBlocked.ok).toBe(false);
 
-      // Step 10 (RECEIVE_TRRC) waiting blocks nothing downstream --
-      // marking it WAITING_EXTERNAL has no effect on step 14's outcome.
+      // Step 10 (RECEIVE_TRRC) waiting blocks nothing downstream -- filing
+      // the return (which now auto-starts step 10 waiting on BIR, D68) has
+      // no effect on step 14's outcome.
+      const fileReturnStep = await prisma.workflowStep.findFirstOrThrow({
+        where: { filingId: filing.id, stepCode: "FILE_RETURN" },
+      });
+      await markStepDone(fileReturnStep.id);
       const trrcStep = await prisma.workflowStep.findFirstOrThrow({
         where: { filingId: filing.id, stepCode: "RECEIVE_TRRC" },
       });
-      await markStepWaitingExternal(trrcStep.id);
+      expect(trrcStep.status).toBe("WAITING_EXTERNAL");
       const stillBlockedAfterTrrcWaiting = await markStepDone(validationStep.id);
       expect(stillBlockedAfterTrrcWaiting.ok).toBe(false);
 
@@ -804,7 +829,7 @@ describe("workflow step actions", () => {
       expect(reverted.status).toBe("PENDING");
     });
 
-    it("D67: a step-10 upload clears a waiting state and marks it Done -- whether or not it was marked waiting first", async () => {
+    it("D68: an upload on step 10 completes it and clears waitingSince (it's already auto-waiting once step 5 is Done)", async () => {
       const { filing } = await makeClientWithQ2Filing("p5k-trrc-waiting-then-upload");
       const fileReturnStep = await prisma.workflowStep.findFirstOrThrow({
         where: { filingId: filing.id, stepCode: "FILE_RETURN" },
@@ -814,10 +839,8 @@ describe("workflow step actions", () => {
       const trrcStep = await prisma.workflowStep.findFirstOrThrow({
         where: { filingId: filing.id, stepCode: "RECEIVE_TRRC" },
       });
-      expect((await markStepWaitingExternal(trrcStep.id)).ok).toBe(true);
-      expect((await prisma.workflowStep.findUniqueOrThrow({ where: { id: trrcStep.id } })).status).toBe(
-        "WAITING_EXTERNAL",
-      );
+      expect(trrcStep.status).toBe("WAITING_EXTERNAL");
+      expect(trrcStep.waitingSince).not.toBeNull();
 
       const upload = new FormData();
       upload.set("file", new File(["trrc-bytes"], "trrc.pdf", { type: "application/pdf" }));
@@ -829,30 +852,7 @@ describe("workflow step actions", () => {
 
       const updated = await prisma.workflowStep.findUniqueOrThrow({ where: { id: trrcStep.id } });
       expect(updated.status).toBe("DONE");
-    });
-
-    it("D67: a step-10 upload with no prior Mark waiting also marks it Done directly", async () => {
-      const { filing } = await makeClientWithQ2Filing("p5k-trrc-direct-upload");
-      const fileReturnStep = await prisma.workflowStep.findFirstOrThrow({
-        where: { filingId: filing.id, stepCode: "FILE_RETURN" },
-      });
-      await markStepDone(fileReturnStep.id);
-
-      const trrcStep = await prisma.workflowStep.findFirstOrThrow({
-        where: { filingId: filing.id, stepCode: "RECEIVE_TRRC" },
-      });
-      expect(trrcStep.status).toBe("PENDING");
-
-      const upload = new FormData();
-      upload.set("file", new File(["trrc-bytes"], "trrc.pdf", { type: "application/pdf" }));
-      upload.set("workflowStepId", trrcStep.id);
-      upload.set("docSlotCode", "trrc");
-      upload.set("documentDate", "2026-08-17");
-      const result = await uploadDocument(upload);
-      expect(result.ok).toBe(true);
-
-      const updated = await prisma.workflowStep.findUniqueOrThrow({ where: { id: trrcStep.id } });
-      expect(updated.status).toBe("DONE");
+      expect(updated.waitingSince).toBeNull();
     });
 
     it("Step 16's package-readiness check still finds documents attached to steps 7/9/10 via this new path", async () => {
@@ -917,6 +917,123 @@ describe("workflow step actions", () => {
       // are scanned) -- steps 6/7/10 stay PENDING while locked, so they can
       // never appear here as "missing," locked or not.
       expect(gaps).toEqual([]);
+    });
+  });
+
+  describe("brief #5l: the File group finished -- the TRRC waits by itself", () => {
+    it("D68: removing the only TRRC returns step 10 to WAITING_EXTERNAL with step 5's own completedAt as waitingSince, not PENDING", async () => {
+      const { filing } = await makeClientWithQ2Filing("p5l-trrc-remove-reverts-to-waiting");
+      const fileReturnStep = await prisma.workflowStep.findFirstOrThrow({
+        where: { filingId: filing.id, stepCode: "FILE_RETURN" },
+      });
+      await markStepDone(fileReturnStep.id);
+      const filedAt = (await prisma.workflowStep.findUniqueOrThrow({ where: { id: fileReturnStep.id } })).completedAt;
+
+      const trrcStep = await prisma.workflowStep.findFirstOrThrow({
+        where: { filingId: filing.id, stepCode: "RECEIVE_TRRC" },
+      });
+      const upload = new FormData();
+      upload.set("file", new File(["trrc-bytes"], "trrc.pdf", { type: "application/pdf" }));
+      upload.set("workflowStepId", trrcStep.id);
+      upload.set("docSlotCode", "trrc");
+      upload.set("documentDate", "2026-08-17");
+      const uploadResult = await uploadDocument(upload);
+      expect((await prisma.workflowStep.findUniqueOrThrow({ where: { id: trrcStep.id } })).status).toBe("DONE");
+
+      await deleteDocument(uploadResult.documentId!, "test: simulate the only TRRC removed");
+
+      const reverted = await prisma.workflowStep.findUniqueOrThrow({ where: { id: trrcStep.id } });
+      expect(reverted.status).toBe("WAITING_EXTERNAL");
+      expect(reverted.waitingSince?.getTime()).toBe(filedAt?.getTime());
+    });
+
+    it("D68: Replace (one file swapped for another) keeps step 10 Done, unchanged", async () => {
+      const { filing } = await makeClientWithQ2Filing("p5l-trrc-replace-stays-done");
+      const fileReturnStep = await prisma.workflowStep.findFirstOrThrow({
+        where: { filingId: filing.id, stepCode: "FILE_RETURN" },
+      });
+      await markStepDone(fileReturnStep.id);
+
+      const trrcStep = await prisma.workflowStep.findFirstOrThrow({
+        where: { filingId: filing.id, stepCode: "RECEIVE_TRRC" },
+      });
+      const firstUpload = new FormData();
+      firstUpload.set("file", new File(["v1"], "trrc-v1.pdf", { type: "application/pdf" }));
+      firstUpload.set("workflowStepId", trrcStep.id);
+      firstUpload.set("docSlotCode", "trrc");
+      firstUpload.set("documentDate", "2026-08-17");
+      await uploadDocument(firstUpload);
+
+      const replaceUpload = new FormData();
+      replaceUpload.set("file", new File(["v2"], "trrc-v2.pdf", { type: "application/pdf" }));
+      replaceUpload.set("workflowStepId", trrcStep.id);
+      replaceUpload.set("docSlotCode", "trrc");
+      replaceUpload.set("documentDate", "2026-08-18");
+      const replaceResult = await uploadDocument(replaceUpload);
+      expect(replaceResult.ok).toBe(true);
+
+      const updated = await prisma.workflowStep.findUniqueOrThrow({ where: { id: trrcStep.id } });
+      expect(updated.status).toBe("DONE");
+      const liveDocs = await prisma.document.findMany({ where: { workflowStepId: trrcStep.id, deletedAt: null } });
+      expect(liveDocs).toHaveLength(1);
+      expect(liveDocs[0].originalFilename).toBe("trrc-v2.pdf");
+    });
+
+    it("D68: step 10 has no Mark waiting action -- markStepWaitingExternal refuses RECEIVE_TRRC even once step 5 is Done", async () => {
+      const { filing } = await makeClientWithQ2Filing("p5l-trrc-no-manual-wait");
+      const fileReturnStep = await prisma.workflowStep.findFirstOrThrow({
+        where: { filingId: filing.id, stepCode: "FILE_RETURN" },
+      });
+      await markStepDone(fileReturnStep.id);
+
+      const trrcStep = await prisma.workflowStep.findFirstOrThrow({
+        where: { filingId: filing.id, stepCode: "RECEIVE_TRRC" },
+      });
+      const before = trrcStep.waitingSince;
+
+      const result = await markStepWaitingExternal(trrcStep.id);
+      expect(result.ok).toBe(false);
+
+      const unchanged = await prisma.workflowStep.findUniqueOrThrow({ where: { id: trrcStep.id } });
+      expect(unchanged.waitingSince?.getTime()).toBe(before?.getTime());
+    });
+
+    it("D29 regression: waiting at step 10 (auto-started once step 5 is Done) still blocks nothing in Pay", async () => {
+      const { filing } = await makeClientWithQ2Filing("p5l-trrc-waiting-doesnt-block-pay");
+      const fileReturnStep = await prisma.workflowStep.findFirstOrThrow({
+        where: { filingId: filing.id, stepCode: "FILE_RETURN" },
+      });
+      await markStepDone(fileReturnStep.id);
+      const trrcStep = await prisma.workflowStep.findFirstOrThrow({
+        where: { filingId: filing.id, stepCode: "RECEIVE_TRRC" },
+      });
+      expect(trrcStep.status).toBe("WAITING_EXTERNAL");
+
+      const makePaymentStep = await prisma.workflowStep.findFirstOrThrow({
+        where: { filingId: filing.id, stepCode: "MAKE_PAYMENT" },
+      });
+      const proofStep = await prisma.workflowStep.findFirstOrThrow({
+        where: { filingId: filing.id, stepCode: "SAVE_PROOF_PAYMENT" },
+      });
+      const proofUpload = new FormData();
+      proofUpload.set("file", new File(["proof-bytes"], "proof.pdf", { type: "application/pdf" }));
+      proofUpload.set("workflowStepId", proofStep.id);
+      proofUpload.set("docSlotCode", "proof");
+      proofUpload.set("documentDate", "2026-08-15");
+      await uploadDocument(proofUpload);
+
+      expect((await markStepDone(makePaymentStep.id)).ok).toBe(true);
+      expect((await markStepDone(proofStep.id)).ok).toBe(true);
+
+      const pay = WORKFLOW_GROUPS.find((g) => g.code === "PAY")!;
+      const steps = await prisma.workflowStep.findMany({
+        where: { filingId: filing.id, stepCode: { in: ["MAKE_PAYMENT", "SAVE_PROOF_PAYMENT"] } },
+      });
+      const summary = summarizeGroup(
+        pay,
+        steps.map((s) => ({ stepCode: s.stepCode, status: s.status })),
+      );
+      expect(summary.isComplete).toBe(true);
     });
   });
 });
