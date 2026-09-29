@@ -4,7 +4,6 @@ import { computeFiling, computeQuarterlyForm, computeAnnualForm, roundToWholePes
 import { sumCwtThroughPeriod } from "@/lib/tax/cwt";
 import {
   ALL_PERIODS,
-  periodEndDate,
   priorPeriodsOf,
   cumulativeSalesQuartersThroughPeriod,
   ownSalesQuarterOf,
@@ -12,6 +11,7 @@ import {
   outsidePeriodsFor,
 } from "@/lib/tax/periods";
 import { getStartingFigures } from "@/lib/startingFigures";
+import { differsFromFrozen, netPayableCents } from "@/lib/tax/amendment";
 import type { FilingComputationResult, LatestOutsideReturn, Period, SalesQuarter } from "@/lib/tax/types";
 
 /**
@@ -412,60 +412,76 @@ export async function isPaymentLocked(clientId: string, taxableYear: number, per
 }
 
 /**
- * The integrity rule (SPEC.md 5): a frozen Filing's computationSnapshot
- * is never silently rewritten. When a transaction dated on or before a
- * frozen filing's period end is created or edited, this raises an
- * AmendmentAlert on that filing showing the delta between the frozen
- * snapshot and a live recomputation — and does NOT touch
- * computationSnapshot itself. The bookkeeper decides whether to amend.
+ * D83 (brief #5o) — the ONE reader of a filing's own figures. Once step 5
+ * (FILE_RETURN) is Done the frozen `computationSnapshot` is what the return
+ * says; before that it's a live computation. Every screen and action that
+ * shows or decides on a filing's own figures (the sheet, the summary strip,
+ * step 3/4's text, Pay's default, D76's nothing-to-pay, the saved HTML) goes
+ * through this so none of them can quietly recompute a filed return.
+ * A LATER filing's item 56/57/50 still come from real data through
+ * assembleAndComputeFiling — only a return's own figures freeze.
+ */
+export async function getFilingSheet(filingId: string): Promise<FilingComputationResult> {
+  const filing = await prisma.filing.findUniqueOrThrow({ where: { id: filingId } });
+  return readFilingSheet(filing);
+}
+
+export async function readFilingSheet(filing: {
+  clientId: string;
+  taxableYear: number;
+  period: string;
+  computationSnapshot: unknown;
+}): Promise<FilingComputationResult> {
+  if (filing.computationSnapshot != null) {
+    return JSON.parse(filing.computationSnapshot as string) as FilingComputationResult;
+  }
+  return assembleAndComputeFiling(filing.clientId, filing.taxableYear, filing.period as Period);
+}
+
+/**
+ * The integrity rule (SPEC.md 5, D6, D83): a filed return's frozen
+ * computationSnapshot is never rewritten. After any change that could feed a
+ * filed return of the same taxable year — declared sales, a payment, a
+ * certificate, item 61, the starting figures — this recomputes every filed
+ * (snapshotted) filing of the year live and, where anything would now read
+ * differently, raises an AmendmentAlert (informational — D11, no amended
+ * returns are filed). It never touches computationSnapshot.
  *
- * `affectedDate` should be the EARLIEST of a transaction's old/new dates
- * when editing (a lower bound is always safe here: periodEndDate only
- * grows Q1 -> Q2 -> Q3 -> ANNUAL, so using the earliest date means every
- * filing that could possibly be impacted gets checked; one whose figures
- * turn out unchanged just produces a zero delta and no alert).
- *
- * Brief #5d — taxPayableCents/overpaymentCents are common to every
- * FilingComputationResult shape (legacy, 1701Q, 1701A), so this delta
- * check is unaffected by which shape a given filing's snapshot uses.
+ * A repeat of the exact same live result while an earlier alert for it is
+ * still unacknowledged raises nothing new. `_affectedDate` is kept so the
+ * older call sites still compile; it no longer narrows anything, because an
+ * earlier quarter's payment reaches LATER returns, which a period-end window
+ * would have skipped.
  */
 export async function checkAndRecordAmendments(
   clientId: string,
   taxableYear: number,
-  affectedDate: Date,
+  _affectedDate: Date | null,
   reason: string,
 ): Promise<number> {
   const frozenFilings = await prisma.filing.findMany({
-    where: {
-      clientId,
-      taxableYear,
-      filedAt: { not: null },
-      computationSnapshot: { not: Prisma.DbNull },
-      deletedAt: null,
-    },
+    where: { clientId, taxableYear, computationSnapshot: { not: Prisma.DbNull }, deletedAt: null },
+    include: { amendmentAlerts: { orderBy: { createdAt: "desc" } } },
   });
 
   let alertsCreated = 0;
 
   for (const filing of frozenFilings) {
-    const periodEnd = periodEndDate(taxableYear, filing.period);
-    if (affectedDate.getTime() > periodEnd.getTime()) continue; // outside this filing's cumulative window
-
     const live = await assembleAndComputeFiling(clientId, taxableYear, filing.period);
     const frozen = JSON.parse(filing.computationSnapshot as string) as FilingComputationResult;
+    if (!differsFromFrozen(frozen, live)) continue;
 
-    const frozenNetCents = frozen.taxPayableCents - frozen.overpaymentCents;
-    const liveNetCents = live.taxPayableCents - live.overpaymentCents;
-    const deltaCents = liveNetCents - frozenNetCents;
-    if (deltaCents === 0) continue;
+    const liveJson = JSON.stringify(live);
+    const latest = filing.amendmentAlerts[0];
+    if (latest && latest.acknowledgedAt == null && latest.recomputedJson === liveJson) continue;
 
     await prisma.amendmentAlert.create({
       data: {
         filingId: filing.id,
         reason,
         snapshotJson: filing.computationSnapshot as string,
-        recomputedJson: JSON.stringify(live),
-        deltaCents,
+        recomputedJson: liveJson,
+        deltaCents: netPayableCents(live) - netPayableCents(frozen),
       },
     });
     alertsCreated += 1;

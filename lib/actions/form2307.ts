@@ -11,6 +11,7 @@ import { periodToSingleQuarterCovered } from "@/lib/tax/periods";
 import { recomputeRequiresSawt } from "@/lib/workflow/filingGeneration";
 import { recomputeReceive2307Status, reopenPreparedFiling } from "@/lib/actions/workflowSteps";
 import { setAllCertificatesReceived } from "@/lib/actions/filings";
+import { checkAndRecordAmendments } from "@/lib/filingComputation";
 import { saveDocumentForStep } from "@/lib/actions/documents";
 
 export type CertificateFormState = {
@@ -174,6 +175,7 @@ export async function addCertificate(
   // Brief #5d §6 — adding a certificate reopens steps 3/4 if step 3 was
   // already Done.
   await reopenPreparedFiling(filing.id);
+  await checkAndRecordAmendments(filing.clientId, filing.taxableYear, null, `A certificate was added on ${filing.period} ${filing.taxableYear}.`);
   revalidatePath(`/clients/${filing.clientId}/filings/${filing.id}`);
 
   return { saved: true };
@@ -222,6 +224,7 @@ export async function deleteCertificate(certificateId: string, reason: string): 
     // Brief #5d §6 — removing a certificate reopens steps 3/4 if step 3
     // was already Done.
     await reopenPreparedFiling(filing.id);
+    await checkAndRecordAmendments(filing.clientId, filing.taxableYear, null, `A certificate was removed from ${filing.period} ${filing.taxableYear}.`);
     revalidatePath(`/clients/${filing.clientId}/filings/${filing.id}`);
   }
 

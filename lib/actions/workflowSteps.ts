@@ -18,8 +18,9 @@ import {
   BIR_WAIT_STEP_CODES,
 } from "@/lib/workflow/groups";
 import { buildLiveAdviceMessageForFiling } from "@/lib/workflow/adviceMessage";
-import { assembleAndComputeFiling } from "@/lib/filingComputation";
-import type { Period } from "@/lib/tax/types";
+import { Prisma } from "@prisma/client";
+import { getFilingSheet, readFilingSheet } from "@/lib/filingComputation";
+import type { FilingComputationResult } from "@/lib/tax/types";
 
 export type StepActionResult = { ok: boolean; error?: string };
 
@@ -146,10 +147,28 @@ export async function markStepDone(stepId: string): Promise<StepActionResult> {
   const actorId = await getActorId();
   const before = step;
   const now = new Date();
-  const updated = await prisma.workflowStep.update({
-    where: { id: stepId },
-    data: { status: "DONE", completedAt: now, startedAt: step.startedAt ?? now, actorId },
-  });
+  // D83 (brief #5o) — step 5 is the moment a return is filed, so it is the
+  // moment its figures freeze: the full computation result is written to
+  // Filing.computationSnapshot in the SAME transaction that marks the step
+  // Done. The write only ever lands on a filing whose snapshot is still null,
+  // so nothing — not even marking step 5 Done twice — can overwrite it.
+  let filingSheet: FilingComputationResult | null = null;
+  if (step.stepCode === "FILE_RETURN") {
+    filingSheet = await readFilingSheet(step.filing);
+  }
+  const doneData = { status: "DONE" as const, completedAt: now, startedAt: step.startedAt ?? now, actorId };
+  const updated =
+    step.stepCode === "FILE_RETURN" && filingSheet
+      ? (
+          await prisma.$transaction([
+            prisma.workflowStep.update({ where: { id: stepId }, data: doneData }),
+            prisma.filing.updateMany({
+              where: { id: step.filingId, computationSnapshot: { equals: Prisma.DbNull } },
+              data: { computationSnapshot: JSON.stringify(filingSheet), filedAt: now },
+            }),
+          ])
+        )[0]
+      : await prisma.workflowStep.update({ where: { id: stepId }, data: doneData });
 
   await logActivity({ entityType: "WorkflowStep", entityId: stepId, action: "UPDATE", before, after: updated, actorId });
   await recomputeFilingStatus(step.filingId, actorId);
@@ -198,7 +217,8 @@ export async function markStepDone(stepId: string): Promise<StepActionResult> {
   // nothing is ever owed for this return, so both steps skip straight to
   // Not applicable rather than sitting PENDING with nothing to do.
   if (step.stepCode === "FILE_RETURN") {
-    const sheet = await assembleAndComputeFiling(step.filing.clientId, step.filing.taxableYear, step.filing.period as Period);
+    // D83 — reads the frozen result (just written above, or already there), never a fresh computation.
+    const sheet = filingSheet ?? (await getFilingSheet(step.filingId));
     if (sheet.isOverpayment || sheet.taxPayableCents === 0) {
       for (const payStepCode of ["MAKE_PAYMENT", "SAVE_PROOF_PAYMENT"]) {
         const payStep = step.filing.workflowSteps.find((s) => s.stepCode === payStepCode);

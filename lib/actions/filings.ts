@@ -13,7 +13,7 @@ import { otherCreditsSchema } from "@/lib/validation/otherCredits";
 import { paymentSchema } from "@/lib/validation/payment";
 import { ALL_PERIODS } from "@/lib/tax/periods";
 import { manilaDateInputToJsDate } from "@/lib/dates";
-import { isPaymentLocked } from "@/lib/filingComputation";
+import { isPaymentLocked, checkAndRecordAmendments } from "@/lib/filingComputation";
 import type { Period } from "@/lib/tax/types";
 
 export type GenerateFilingsResult =
@@ -224,6 +224,10 @@ export async function updateFilingOtherCredits(
     }
   }
 
+  if (changed) {
+    await checkAndRecordAmendments(filing.clientId, filing.taxableYear, null, `Item 61 on ${filing.period} ${filing.taxableYear} changed.`);
+  }
+
   revalidatePath(`/clients/${filing.clientId}/filings/${filingId}`);
   return { saved: true, values };
 }
@@ -330,6 +334,11 @@ export async function savePayment(
     for (let i = startIndex + 1; i < ordered.length; i++) {
       await reopenPreparedFiling(ordered[i].id);
     }
+  }
+
+  if (changed) {
+    // D83 — a payment reaches later returns' item 56; any already-filed one stays frozen and gets an alert.
+    await checkAndRecordAmendments(filing.clientId, filing.taxableYear, null, `A payment saved on ${filing.period} ${filing.taxableYear} changed.`);
   }
 
   revalidatePath(`/clients/${filing.clientId}/filings/${filingId}`);

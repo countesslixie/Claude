@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import {
-  assembleAndComputeFiling,
+  readFilingSheet,
   hasSalesRecordedForPeriod,
   effectiveOtherCreditsFor,
   isPaymentLocked,
@@ -52,6 +52,7 @@ import { buildClientPackageEmail } from "@/lib/workflow/clientPackageEmail";
 import { buildLiveAdviceMessageForFiling } from "@/lib/workflow/adviceMessage";
 import { ALL_PERIODS, ownSalesQuarterOf, periodToSingleQuarterCovered, quarterNumberDateRange } from "@/lib/tax/periods";
 import { extractFormSummary } from "@/lib/tax/compute";
+import { changedItems } from "@/lib/tax/amendment";
 import type { FilingComputationResult } from "@/lib/tax/types";
 
 const STATUS_TONE: Record<string, "pending" | "progress" | "waiting" | "overdue" | "done"> = {
@@ -86,9 +87,8 @@ export default async function FilingDetailPage({
   if (!filing || filing.clientId !== id) notFound();
 
   const isFrozen = filing.computationSnapshot != null;
-  const sheet: FilingComputationResult = isFrozen
-    ? (JSON.parse(filing.computationSnapshot as string) as FilingComputationResult)
-    : await assembleAndComputeFiling(filing.clientId, filing.taxableYear, filing.period);
+  // D83 — the frozen return once filed, live before; the one reader of a filing's own figures.
+  const sheet: FilingComputationResult = await readFilingSheet(filing);
   const hasSalesRecorded = await hasSalesRecordedForPeriod(filing.clientId, filing.taxableYear, filing.period);
 
   // Brief #4b — step 1's own card shows this filing's own quarter total
@@ -600,46 +600,38 @@ export default async function FilingDetailPage({
         </div>
       )}
 
-      {filing.amendmentAlerts.length > 0 && (
-        <Card className="mb-3 border-amber">
-          <CardHeader>
-            <h2 className="text-sm font-semibold text-amber">
-              Amendment alerts ({filing.amendmentAlerts.length})
-            </h2>
-          </CardHeader>
-          <CardBody>
-            <p className="mb-3 text-xs text-faint">
-              Declared sales changed after this filing was frozen. The computation sheet below still shows
-              exactly what was filed — it was never rewritten. You decide whether to amend.
-            </p>
-            <div className="flex flex-col gap-3">
-              {filing.amendmentAlerts.map((alert) => (
-                <div key={alert.id} className="rounded-md border border-amber bg-amber-tint p-3">
-                  <p className="text-sm text-amber">{alert.reason}</p>
-                  <p className="mt-1 text-sm font-medium text-amber">
-                    Delta: {alert.deltaCents >= 0 ? "+" : ""}
-                    {centsToPesos(alert.deltaCents, { withSymbol: true })}
-                  </p>
-                  <p className="text-xs text-faint">Raised {formatManilaDate(alert.createdAt)}</p>
-                  {alert.acknowledgedAt ? (
-                    <p className="mt-1 text-xs text-faint">
-                      Acknowledged {formatManilaDate(alert.acknowledgedAt)}
-                      {alert.acknowledgedNote ? ` — ${alert.acknowledgedNote}` : ""}
-                    </p>
-                  ) : (
-                    <form action={submitAmendmentAck.bind(null, alert.id)} className="mt-2 flex items-end gap-2">
-                      <Textarea name="note" placeholder="Optional note" rows={1} className="flex-1" />
-                      <Button type="submit" size="sm" variant="secondary">
-                        Acknowledge
-                      </Button>
-                    </form>
-                  )}
-                </div>
-              ))}
+      {/* D83 (brief #5o) — one amber line per unread alert: this return was filed, and something feeding it changed since. The return itself still shows exactly what was filed. */}
+      {filing.amendmentAlerts
+        .filter((alert) => alert.acknowledgedAt == null)
+        .map((alert) => {
+          const items = changedItems(
+            JSON.parse(alert.snapshotJson as string) as FilingComputationResult,
+            JSON.parse(alert.recomputedJson as string) as FilingComputationResult,
+          );
+          return (
+            <div key={alert.id} className="mb-3 flex items-start justify-between gap-3 rounded-lg border border-amber bg-amber-tint px-3 py-2">
+              <p className="text-sm text-amber">
+                Figures feeding this filed return changed since it was filed ({alert.reason.replace(/\.$/, "")}). It still shows what was filed.{" "}
+                {items.map((c, i) => (
+                  <span key={c.label}>
+                    {i > 0 && "; "}
+                    {c.item ? `item ${c.item}` : c.label}: {centsToPesos(c.oldCents, { withSymbol: true })} → {centsToPesos(c.newCents, { withSymbol: true })} (
+                    {c.diffCents >= 0 ? "+" : "−"}
+                    {centsToPesos(Math.abs(c.diffCents), { withSymbol: true })})
+                  </span>
+                ))}
+                {items.length > 0 ? "; " : ""}
+                net {alert.deltaCents >= 0 ? "+" : "−"}
+                {centsToPesos(Math.abs(alert.deltaCents), { withSymbol: true })} on tax payable.
+              </p>
+              <form action={submitAmendmentAck.bind(null, alert.id)}>
+                <Button type="submit" size="sm" variant="ghost">
+                  Dismiss
+                </Button>
+              </form>
             </div>
-          </CardBody>
-        </Card>
-      )}
+          );
+        })}
 
       {/* Brief #4a — the sixteen steps wrapped in five groups: one "Mark
           done" per group instead of one per step. Opening a group still

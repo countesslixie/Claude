@@ -8,6 +8,7 @@ import { logActivity } from "@/lib/activityLog";
 import { pesosToCents } from "@/lib/money";
 import { getStartingFigures, isStartingFiguresLocked } from "@/lib/startingFigures";
 import { ALL_PERIODS, outsidePeriodsFor } from "@/lib/tax/periods";
+import { checkAndRecordAmendments } from "@/lib/filingComputation";
 import { reopenPreparedFiling } from "@/lib/actions/workflowSteps";
 
 export type StartingFiguresFormState = {
@@ -139,6 +140,8 @@ export async function saveStartingFigures(
   for (const f of filings) {
     await reopenPreparedFiling(f.id);
   }
+
+  await checkAndRecordAmendments(clientId, taxableYear, null, `The starting figures for ${taxableYear} changed.`);
 
   revalidatePath(`/clients/${clientId}`);
   revalidatePath(`/clients/${clientId}/tax-years/${clientTaxYear.id}/starting-figures`);

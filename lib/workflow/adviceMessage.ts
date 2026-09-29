@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { assembleAndComputeFiling, hasSalesRecordedForPeriod } from "@/lib/filingComputation";
+import { getFilingSheet, hasSalesRecordedForPeriod } from "@/lib/filingComputation";
 import { extractFormSummary } from "@/lib/tax/compute";
 import { clientPaymentDueDate } from "@/lib/tax/deadlines";
 import { buildClientTaxAdviceMessage } from "@/lib/workflow/clientTaxAdviceMessage";
@@ -24,7 +24,7 @@ export async function buildLiveAdviceMessageForFiling(
   const hasSalesRecorded = await hasSalesRecordedForPeriod(filing.clientId, filing.taxableYear, filing.period);
   if (!hasSalesRecorded) return null;
 
-  const sheet = await assembleAndComputeFiling(filing.clientId, filing.taxableYear, filing.period);
+  const sheet = await getFilingSheet(filingId); // D83: the frozen return once filed, live before
   if (sheet.formType !== "F1701Q" && sheet.formType !== "F1701A") return null;
 
   const summaryFigures = extractFormSummary(sheet);

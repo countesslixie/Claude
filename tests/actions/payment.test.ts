@@ -26,6 +26,7 @@ describe("savePayment (D75)", () => {
 
   afterAll(async () => {
     if (createdClientIds.length === 0) return;
+    await prisma.amendmentAlert.deleteMany({ where: { filing: { clientId: { in: createdClientIds } } } });
     await prisma.document.deleteMany({ where: { clientId: { in: createdClientIds } } });
     await prisma.quarterlySalesCustomer.deleteMany({ where: { quarterlySales: { clientId: { in: createdClientIds } } } });
     await prisma.quarterlySales.deleteMany({ where: { clientId: { in: createdClientIds } } });
