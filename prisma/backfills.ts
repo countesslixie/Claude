@@ -1,5 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import { deriveFilingStatus } from "../lib/workflow/status";
+import { clientDocsDueDate } from "../lib/tax/deadlines";
 
 /**
  * Idempotent backfills the seed runs over an existing database (brief #5q).
@@ -40,5 +41,29 @@ export async function backfillFilingStatuses(prisma: PrismaClient): Promise<void
       now,
     });
     if (status !== filing.status) await prisma.filing.update({ where: { id: filing.id }, data: { status } });
+  }
+}
+
+/**
+ * D106 (brief #5s) -- Filing.certificatesExpectedBy is stored when a filing is
+ * generated, so filings that already exist still hold the old "10 days before
+ * the due date" (or Feb 15) value. Rewrite it to the engagement-letter date for
+ * every filing not yet filed (step 5 not Done); filed ones keep the date they
+ * were worked to. A waiting step 2 whose clock was stamped at the old date
+ * moves with it. Idempotent: a second run finds nothing different.
+ */
+export async function backfillClientDocsDue(prisma: PrismaClient): Promise<void> {
+  const filings = await prisma.filing.findMany({ include: { workflowSteps: true } });
+  const ruleSets = new Map((await prisma.taxRuleSet.findMany()).map((r) => [r.taxableYear, r.clientDocsDueDay]));
+  for (const filing of filings) {
+    if (filing.workflowSteps.some((s) => s.stepCode === "FILE_RETURN" && s.status === "DONE")) continue;
+    const next = clientDocsDueDate(filing.period, filing.taxableYear, ruleSets.get(filing.taxableYear) ?? 20);
+    const old = filing.certificatesExpectedBy;
+    if (old && old.getTime() === next.getTime()) continue;
+    await prisma.filing.update({ where: { id: filing.id }, data: { certificatesExpectedBy: next } });
+    const step2 = filing.workflowSteps.find((s) => s.stepCode === "RECEIVE_2307");
+    if (step2 && step2.status === "WAITING_EXTERNAL" && old && step2.waitingSince?.getTime() === old.getTime()) {
+      await prisma.workflowStep.update({ where: { id: step2.id }, data: { waitingSince: next } });
+    }
   }
 }

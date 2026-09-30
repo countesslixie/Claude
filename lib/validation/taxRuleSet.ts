@@ -37,8 +37,8 @@ export const taxRuleSetSchema = z.object({
   eafsDeadlineOffsetDays: z.coerce.number().int().min(0).max(365),
   // D87 (brief #5o) — the BIR eSubmission address step 12's email draft goes to.
   eSubmissionEmail: z.string().trim().email("Enter an email address"),
-  // D102 (brief #5r) — her own date for receiving a client's documents for the annual return.
-  annualDocsDueMonthDay: monthDay,
+  // D106 (brief #5s) — the day of the month after each period ends by which the client sends documents (her engagement letter).
+  clientDocsDueDay: z.coerce.number().int().min(1).max(28),
 
   surchargeRateBps: optionalBps,
   interestRateBpsPerAnnum: optionalBps,

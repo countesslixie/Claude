@@ -71,7 +71,8 @@ export function buildClientTaxAdviceMessage(input: ClientTaxAdviceMessageInput):
       `Amount payable: ${centsToPesos(input.taxPayableCents, { withSymbol: true })}`,
       `Due date: ${formatManilaDateLong(input.clientDueDate)}`,
       "",
-      "Please let me know when you plan to make the payment, or if you would like me to advance the payment on your behalf.",
+      // D107 (brief #5s) — no advance offer: her letter requires advance requests by the 10th, long past by the time this goes out.
+      "Please let me know when you plan to make the payment.",
     );
   } else {
     bodyLines.push(`Overpayment: ${centsToPesos(input.overpaymentCents, { withSymbol: true })}`, "");

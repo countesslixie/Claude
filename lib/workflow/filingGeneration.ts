@@ -88,7 +88,13 @@ export async function generateFilingsForClientYear(
 
     const statutoryDueDate = resolveStatutoryDueDate(taxableYear, period, ruleSet);
     const adjustedDueDate = resolveAdjustedDueDate(statutoryDueDate, holidayDates);
-    const { certificatesExpectedBy, internalFilingTarget } = deriveWorkingCalendar(period, statutoryDueDate, adjustedDueDate);
+    const { certificatesExpectedBy, internalFilingTarget } = deriveWorkingCalendar(
+      period,
+      taxableYear,
+      statutoryDueDate,
+      adjustedDueDate,
+      ruleSet.clientDocsDueDay,
+    );
     const formType = resolveFormType({ period, taxpayerType: client.taxpayerType });
 
     // requiresSawt is genuinely derived from actual Form2307 records

@@ -1,8 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import { getFilingSheet } from "@/lib/filingComputation";
 import { ALL_PERIODS } from "@/lib/tax/periods";
+import { clientDocsDueDate } from "@/lib/tax/deadlines";
 import { loadPackageDocuments } from "@/lib/documents/filingPackage";
-import { buildClientPackageEmail, formatMonthDayLabel, type ClientPackageEmail } from "@/lib/workflow/clientPackageEmail";
+import { buildClientPackageEmail, type ClientPackageEmail } from "@/lib/workflow/clientPackageEmail";
 
 /**
  * D101/D102 (brief #5r) — the I/O half of step 16's email: gathers the
@@ -39,9 +40,9 @@ export async function buildClientPackageEmailForFiling(filingId: string): Promis
     sheet,
     attachments,
     next: nextFiling
-      ? { period: nextFiling.period, taxableYear: nextFiling.taxableYear, formType: nextFiling.formType, dueDate: nextFiling.adjustedDueDate }
+      ? { period: nextFiling.period, taxableYear: nextFiling.taxableYear, formType: nextFiling.formType, dueDate: nextFiling.adjustedDueDate,
+        docsDueDate: clientDocsDueDate(nextFiling.period, nextFiling.taxableYear, ruleSet?.clientDocsDueDay ?? 20),
+      }
       : null,
-    // Her own document date for the Annual, in the year after the taxable year.
-    annualDocsDueLabel: ruleSet ? formatMonthDayLabel(ruleSet.annualDocsDueMonthDay, filing.taxableYear + 1) : null,
   });
 }

@@ -64,7 +64,7 @@ async function recomputeFilingStatus(filingId: string, actorId: string): Promise
  *      acknowledgement it follows, so SAWT_VALIDATION stays blocked while
  *      SAWT_ACK is unresolved. One explicit edge, not a general
  *      "waiting blocks the next step" rule.
- * SEND_CLIENT_PACKAGE's own dependency check (steps 7/9/10/14 must each
+ * SEND_CLIENT_PACKAGE's own dependency check (steps 7/9/10/13 must each
  * have their document, SPEC.md 7.1) runs before its own (now nonexistent)
  * slot would, so its specific "what's missing" message isn't masked.
  */

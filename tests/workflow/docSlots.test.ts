@@ -38,15 +38,15 @@ describe("canCompleteStep", () => {
 
 /**
  * SPEC.md §16 item 14: SEND_CLIENT_PACKAGE blocks and names the specific
- * missing document when any of steps 7/9/10/14 lacks its document.
+ * missing document when any of steps 7/9/10/13 lacks its document.
  */
 describe("checkSendClientPackageReadiness", () => {
   const FORM_SLOT = { slotCode: "form", label: "Filed form PDF", required: true, acceptedTypes: ["pdf"] };
   const PROOF_SLOT = { slotCode: "proof", label: "Payment confirmation", required: true, acceptedTypes: ["pdf"] };
   const TRRC_SLOT = { slotCode: "trrc", label: "TRRC email/PDF", required: true, acceptedTypes: ["pdf", "eml"] };
-  const VALIDATION_SLOT = {
-    slotCode: "validation",
-    label: "Validation email",
+  const ACK_SLOT = {
+    slotCode: "acknowledgement",
+    label: "Acknowledgement email",
     required: true,
     acceptedTypes: ["eml"],
   };
@@ -61,9 +61,9 @@ describe("checkSendClientPackageReadiness", () => {
       },
       { stepCode: "RECEIVE_TRRC", status: overrides.RECEIVE_TRRC ?? "DONE", requiredDocSlots: [TRRC_SLOT] },
       {
-        stepCode: "SAWT_VALIDATION",
-        status: overrides.SAWT_VALIDATION ?? "DONE",
-        requiredDocSlots: [VALIDATION_SLOT],
+        stepCode: "SAWT_ACK",
+        status: overrides.SAWT_ACK ?? "DONE",
+        requiredDocSlots: [ACK_SLOT],
       },
     ];
   }
@@ -73,7 +73,7 @@ describe("checkSendClientPackageReadiness", () => {
       ["SAVE_FORM_COPY", [{ docSlotCode: "form", deletedAt: null }]],
       ["SAVE_PROOF_PAYMENT", [{ docSlotCode: "proof", deletedAt: null }]],
       ["RECEIVE_TRRC", [{ docSlotCode: "trrc", deletedAt: null }]],
-      ["SAWT_VALIDATION", [{ docSlotCode: "validation", deletedAt: null }]],
+      ["SAWT_ACK", [{ docSlotCode: "acknowledgement", deletedAt: null }]],
     ]);
     const result = checkSendClientPackageReadiness(steps(), docs);
     expect(result.ok).toBe(true);
@@ -85,7 +85,7 @@ describe("checkSendClientPackageReadiness", () => {
       ["SAVE_FORM_COPY", [{ docSlotCode: "form", deletedAt: null }]],
       ["SAVE_PROOF_PAYMENT", [{ docSlotCode: "proof", deletedAt: null }]],
       ["RECEIVE_TRRC", []], // missing
-      ["SAWT_VALIDATION", [{ docSlotCode: "validation", deletedAt: null }]],
+      ["SAWT_ACK", [{ docSlotCode: "acknowledgement", deletedAt: null }]],
     ]);
     const result = checkSendClientPackageReadiness(steps(), docs);
     expect(result.ok).toBe(false);
@@ -93,26 +93,26 @@ describe("checkSendClientPackageReadiness", () => {
     expect(result.missing[0]).toMatchObject({ stepCode: "RECEIVE_TRRC", slotCode: "trrc" });
   });
 
-  it("names every missing document when multiple of steps 7/9/10/14 lack theirs", () => {
+  it("names every missing document when multiple of steps 7/9/10/13 lack theirs", () => {
     const docs = new Map<string, AttachedDocument[]>([
       ["SAVE_FORM_COPY", []],
       ["SAVE_PROOF_PAYMENT", [{ docSlotCode: "proof", deletedAt: null }]],
       ["RECEIVE_TRRC", []],
-      ["SAWT_VALIDATION", [{ docSlotCode: "validation", deletedAt: null }]],
+      ["SAWT_ACK", [{ docSlotCode: "acknowledgement", deletedAt: null }]],
     ]);
     const result = checkSendClientPackageReadiness(steps(), docs);
     expect(result.ok).toBe(false);
     expect(result.missing.map((m) => m.stepCode).sort()).toEqual(["RECEIVE_TRRC", "SAVE_FORM_COPY"]);
   });
 
-  it("a step 14 marked NA (no SAWT requirement) is not treated as missing", () => {
+  it("a step 13 marked NA (no SAWT requirement) is not treated as missing", () => {
     const docs = new Map<string, AttachedDocument[]>([
       ["SAVE_FORM_COPY", [{ docSlotCode: "form", deletedAt: null }]],
       ["SAVE_PROOF_PAYMENT", [{ docSlotCode: "proof", deletedAt: null }]],
       ["RECEIVE_TRRC", [{ docSlotCode: "trrc", deletedAt: null }]],
-      // SAWT_VALIDATION has no document at all, but is NA below.
+      // SAWT_ACK has no document at all, but is NA below.
     ]);
-    const result = checkSendClientPackageReadiness(steps({ SAWT_VALIDATION: "NA" }), docs);
+    const result = checkSendClientPackageReadiness(steps({ SAWT_ACK: "NA" }), docs);
     expect(result.ok).toBe(true);
   });
 });

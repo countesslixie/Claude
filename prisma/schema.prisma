@@ -782,12 +782,12 @@ model TaxRuleSet {
   // Editable on the tax rule set screen; confirm it against BIR before live use (D19).
   eSubmissionEmail String @default("esubmission@bir.gov.ph")
 
-  // Brief #5r (D102) — the bookkeeper's own date for receiving a client's
-  // documents for the ANNUAL return, "MM-DD" of the year AFTER the taxable
-  // year. Named in the step 16 email's "Next filing" line. Not the same as
-  // internalFilingTarget (D14, her own filing target); never a literal in
-  // code (D4).
-  annualDocsDueMonthDay String @default("02-15")
+  // Brief #5s (D106) — her engagement letter: the client sends documents no
+  // later than this day of the month AFTER the period ends (Q1 -> Apr 20,
+  // Q2 -> Jul 20, Q3 -> Oct 20, Annual -> Jan 20 of the next year). One
+  // setting for every period; no weekend/holiday shift. Replaces brief #5r's
+  // annualDocsDueMonthDay. Not internalFilingTarget (D14); never a literal (D4).
+  clientDocsDueDay Int @default(20)
 
   // Late filing exposure (informational only — see SPEC.md 3.7)
   surchargeRateBps          Int?

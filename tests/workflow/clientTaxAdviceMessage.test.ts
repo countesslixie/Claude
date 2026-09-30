@@ -44,7 +44,7 @@ describe("buildClientTaxAdviceMessage", () => {
         "Amount payable: ₱12,100.00",
         "Due date: November 6, 2026",
         "",
-        "Please let me know when you plan to make the payment, or if you would like me to advance the payment on your behalf.",
+        "Please let me know when you plan to make the payment.",
         "",
         "Thank you!",
       ].join("\n"),

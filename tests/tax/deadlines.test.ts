@@ -7,6 +7,7 @@ import {
   resolveStatutoryDueDate,
   resolveAdjustedDueDate,
   deriveWorkingCalendar,
+  clientDocsDueDate,
   type DueDateRuleSet,
 } from "@/lib/tax/deadlines";
 
@@ -197,26 +198,37 @@ describe("resolveStatutoryDueDate / resolveAdjustedDueDate", () => {
  * cross-checked against those exact figures here.
  */
 describe("deriveWorkingCalendar", () => {
-  it("Q1: certificatesExpectedBy 10 days before the statutory due date; internalFilingTarget is the adjusted due date (statutory == adjusted here, May 15 is a Friday)", () => {
-    const result = deriveWorkingCalendar("Q1", D("2026-05-15"), D("2026-05-15"));
-    expect(result).toEqual({ certificatesExpectedBy: D("2026-05-05"), internalFilingTarget: D("2026-05-15") });
+  // D106 (brief #5s): certificatesExpectedBy is the client's document deadline from her engagement letter --
+  // the 20th of the month after the period ends, for every period, with no weekend/holiday shift.
+  it("Q1: documents due Apr 20; internalFilingTarget is the adjusted due date (D14)", () => {
+    const result = deriveWorkingCalendar("Q1", 2026, D("2026-05-15"), D("2026-05-15"), 20);
+    expect(result).toEqual({ certificatesExpectedBy: D("2026-04-20"), internalFilingTarget: D("2026-05-15") });
   });
 
-  it("Q2: internalFilingTarget is the ADJUSTED due date (Aug 17, Mon), not the statutory date (Aug 15, Sat) -- no internal buffer by design", () => {
-    const result = deriveWorkingCalendar("Q2", D("2026-08-15"), D("2026-08-17"));
-    expect(result).toEqual({ certificatesExpectedBy: D("2026-08-05"), internalFilingTarget: D("2026-08-17") });
-    // certificatesExpectedBy stays anchored to the STATUTORY date, not the adjusted one.
-    expect(result.certificatesExpectedBy).not.toEqual(D("2026-08-07"));
+  it("Q2: documents due Jul 20; internalFilingTarget is the ADJUSTED due date (Aug 17), no internal buffer", () => {
+    const result = deriveWorkingCalendar("Q2", 2026, D("2026-08-15"), D("2026-08-17"), 20);
+    expect(result).toEqual({ certificatesExpectedBy: D("2026-07-20"), internalFilingTarget: D("2026-08-17") });
   });
 
-  it("Q3: internalFilingTarget is the adjusted due date (Nov 16, Mon), not the statutory date (Nov 15, Sun)", () => {
-    const result = deriveWorkingCalendar("Q3", D("2026-11-15"), D("2026-11-16"));
-    expect(result).toEqual({ certificatesExpectedBy: D("2026-11-05"), internalFilingTarget: D("2026-11-16") });
+  it("Q3: documents due Oct 20; internalFilingTarget is the adjusted due date (Nov 16)", () => {
+    const result = deriveWorkingCalendar("Q3", 2026, D("2026-11-15"), D("2026-11-16"), 20);
+    expect(result).toEqual({ certificatesExpectedBy: D("2026-10-20"), internalFilingTarget: D("2026-11-16") });
   });
 
-  it("ANNUAL: keeps a real buffer -- Feb 15 / Mar 31, ahead of the Apr 15 statutory/adjusted deadline, of the same year as the (following-year) statutory due date", () => {
-    const result = deriveWorkingCalendar("ANNUAL", D("2027-04-15"), D("2027-04-15"));
-    expect(result).toEqual({ certificatesExpectedBy: D("2027-02-15"), internalFilingTarget: D("2027-03-31") });
+  it("ANNUAL 2026: documents due Jan 20, 2027; internalFilingTarget stays Mar 31 (D14)", () => {
+    const result = deriveWorkingCalendar("ANNUAL", 2026, D("2027-04-15"), D("2027-04-15"), 20);
+    expect(result).toEqual({ certificatesExpectedBy: D("2027-01-20"), internalFilingTarget: D("2027-03-31") });
+  });
+
+  it("changing the setting moves all four dates", () => {
+    expect(clientDocsDueDate("Q1", 2026, 18)).toEqual(D("2026-04-18"));
+    expect(clientDocsDueDate("Q2", 2026, 18)).toEqual(D("2026-07-18"));
+    expect(clientDocsDueDate("Q3", 2026, 18)).toEqual(D("2026-10-18"));
+    expect(clientDocsDueDate("ANNUAL", 2026, 18)).toEqual(D("2027-01-18"));
+  });
+
+  it("does not shift for a weekend: Oct 20, 2029 is a Saturday and stays Oct 20", () => {
+    expect(clientDocsDueDate("Q3", 2029, 20)).toEqual(D("2029-10-20"));
   });
 });
 

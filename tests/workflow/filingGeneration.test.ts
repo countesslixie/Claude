@@ -66,10 +66,10 @@ describe("generateFilingsForClientYear", () => {
     // Working calendar (Phase 2b P7 pattern, generalized). Quarterly
     // internalFilingTarget is the ADJUSTED due date (Aug 17, Mon) -- not
     // the statutory date (Aug 15, Sat) -- no internal buffer by design;
-    // certificatesExpectedBy stays anchored to the statutory date.
-    expect(byPeriod.Q2.certificatesExpectedBy).toEqual(new Date("2026-08-05T00:00:00.000Z"));
+    // D106 (brief #5s): certificatesExpectedBy is the client documents deadline -- the 20th of the month after the period ends.
+    expect(byPeriod.Q2.certificatesExpectedBy).toEqual(new Date("2026-07-20T00:00:00.000Z"));
     expect(byPeriod.Q2.internalFilingTarget).toEqual(new Date("2026-08-17T00:00:00.000Z"));
-    expect(byPeriod.ANNUAL.certificatesExpectedBy).toEqual(new Date("2027-02-15T00:00:00.000Z"));
+    expect(byPeriod.ANNUAL.certificatesExpectedBy).toEqual(new Date("2027-01-20T00:00:00.000Z"));
     expect(byPeriod.ANNUAL.internalFilingTarget).toEqual(new Date("2027-03-31T00:00:00.000Z"));
 
     // requiresSawt starts false (zero certificates exist yet), not

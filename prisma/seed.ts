@@ -26,7 +26,7 @@
  */
 
 import { PrismaClient } from "@prisma/client";
-import { renameSawtSteps, backfillFilingStatuses } from "./backfills";
+import { renameSawtSteps, backfillFilingStatuses, backfillClientDocsDue } from "./backfills";
 
 const prisma = new PrismaClient();
 
@@ -466,6 +466,7 @@ async function main() {
   await seedAtcCodes();
   await seedWorkflowStepTemplate();
   await backfillFilingStatuses(prisma); // D97 (brief #5q)
+  await backfillClientDocsDue(prisma); // D106 (brief #5s)
   stubNextCache();
   const { seedScenarios } = await import("./seedScenarios");
   await seedScenarios(prisma, user.id);

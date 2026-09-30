@@ -28,13 +28,6 @@ export function periodPlainName(period: Period, taxableYear: number): string {
   return period === "ANNUAL" ? "Annual ITR" : `${period} ${taxableYear}`;
 }
 
-/** "10-15" + 2027 -> "Oct 15, 2027". Straight from the setting; no Date, so no timezone slips. */
-export function formatMonthDayLabel(monthDay: string, year: number): string {
-  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  const [mm, dd] = monthDay.split("-").map((n) => Number(n));
-  return `${months[(mm ?? 1) - 1]} ${dd}, ${year}`;
-}
-
 /**
  * The email's summary lines from the frozen sheet, in the return's own
  * order. Credits are positive amounts under "Less:" labels; a "Rounding"
@@ -114,9 +107,7 @@ export interface ClientPackageEmailInput {
   /** The package's own document list (lib/documents/filingPackage.ts). */
   attachments: { label: string; filename: string }[];
   /** The next return of this taxable year, if any. */
-  next: { period: Period; taxableYear: number; formType: string; dueDate: Date } | null;
-  /** Already formatted, e.g. "Feb 15, 2027" — only used when the next filing is the Annual. */
-  annualDocsDueLabel: string | null;
+  next: { period: Period; taxableYear: number; formType: string; dueDate: Date; docsDueDate: Date } | null;
 }
 
 export interface ClientPackageEmail {
@@ -151,13 +142,12 @@ export function buildClientPackageEmail(input: ClientPackageEmailInput): ClientP
 
   if (input.next) {
     const nextForm = formLabel(input.next.formType);
-    const due = formatManilaDate(input.next.dueDate);
-    if (input.next.period === "ANNUAL") {
-      const docs = input.annualDocsDueLabel ? ` Please send required documents by ${input.annualDocsDueLabel}.` : "";
-      bodyLines.push(`Next filing: Annual ITR (${nextForm}), due ${due}.${docs}`, "");
-    } else {
-      bodyLines.push(`Next filing: ${nextForm} for ${periodPlainName(input.next.period, input.next.taxableYear)}, due ${due}.`, "");
-    }
+    // D106 — the same closing sentence for every period: her engagement letter's document deadline.
+    const target = input.next.period === "ANNUAL" ? `Annual ITR (${nextForm})` : `${nextForm} for ${periodPlainName(input.next.period, input.next.taxableYear)}`;
+    bodyLines.push(
+      `Next filing: ${target}, due ${formatManilaDate(input.next.dueDate)}. Please send required documents by ${formatManilaDate(input.next.docsDueDate)}.`,
+      "",
+    );
   }
 
   bodyLines.push("Please keep this for your records.");

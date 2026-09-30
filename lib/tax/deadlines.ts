@@ -187,29 +187,46 @@ export interface WorkingCalendar {
 }
 
 /**
+ * D106 (brief #5s) — the client's document deadline, from her engagement
+ * letter: the `dayOfMonth`th (setting, default 20) of the month AFTER the
+ * period ends. Q1 -> Apr 20, Q2 -> Jul 20, Q3 -> Oct 20, Annual -> Jan 20 of
+ * the year after the taxable year. A contractual date: no weekend or
+ * holiday shift. Returned as a UTC-midnight Date, like the other stored
+ * calendar dates.
+ */
+export function clientDocsDueDate(period: Period, taxableYear: number, dayOfMonth: number): Date {
+  switch (period) {
+    case "Q1":
+      return new Date(Date.UTC(taxableYear, 3, dayOfMonth));
+    case "Q2":
+      return new Date(Date.UTC(taxableYear, 6, dayOfMonth));
+    case "Q3":
+      return new Date(Date.UTC(taxableYear, 9, dayOfMonth));
+    case "ANNUAL":
+      return new Date(Date.UTC(taxableYear + 1, 0, dayOfMonth));
+  }
+}
+
+/**
  * The bookkeeper's working-calendar practice targets for a period
  * (SPEC.md 3.6, Phase 2b P7) — distinct from and never overriding the
- * statutory/adjusted due date. Quarterly returns: internalFilingTarget is
- * the ADJUSTED (business-day-shifted) due date itself — no internal buffer
- * by design, the bookkeeper works to the normal deadline for quarterlies —
- * and certificatesExpectedBy is 10 days before the STATUTORY due date
- * (unshifted; a fixed lead time ahead of the normal deadline, not the
- * shifted one). ANNUAL keeps a real buffer instead: certificatesExpectedBy
- * Feb 15, internalFilingTarget Mar 31, of the same calendar year as the
- * ANNUAL statutory due date (which is itself already "of the following
- * year" relative to the taxable year — see resolveStatutoryDueDate above)
- * — ahead of the Apr 15 statutory/adjusted deadline.
+ * statutory/adjusted due date. `certificatesExpectedBy` (the field keeps its
+ * name) is the client's document deadline, D106 — the engagement letter's
+ * date above, for every period. `internalFilingTarget` is unchanged (D14):
+ * quarterly returns use the ADJUSTED due date itself; the ANNUAL keeps a
+ * real buffer, Mar 31 of the year of its statutory due date.
  */
-export function deriveWorkingCalendar(period: Period, statutoryDueDate: Date, adjustedDueDate: Date): WorkingCalendar {
+export function deriveWorkingCalendar(
+  period: Period,
+  taxableYear: number,
+  statutoryDueDate: Date,
+  adjustedDueDate: Date,
+  clientDocsDueDay: number,
+): WorkingCalendar {
+  const certificatesExpectedBy = clientDocsDueDate(period, taxableYear, clientDocsDueDay);
   if (period === "ANNUAL") {
     const year = statutoryDueDate.getUTCFullYear();
-    return {
-      certificatesExpectedBy: new Date(Date.UTC(year, 1, 15)), // Feb 15
-      internalFilingTarget: new Date(Date.UTC(year, 2, 31)), // Mar 31
-    };
+    return { certificatesExpectedBy, internalFilingTarget: new Date(Date.UTC(year, 2, 31)) }; // Mar 31
   }
-  return {
-    certificatesExpectedBy: addDays(statutoryDueDate, -10),
-    internalFilingTarget: adjustedDueDate,
-  };
+  return { certificatesExpectedBy, internalFilingTarget: adjustedDueDate };
 }

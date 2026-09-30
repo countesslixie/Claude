@@ -20,6 +20,7 @@ export interface PackageDocument {
 
 export interface PackageStepInput {
   id: string;
+  stepCode: string;
   sequence: number;
   title: string;
   requiredDocSlots: unknown;
@@ -36,16 +37,27 @@ export interface PackageDocInput {
 
 /** Plain, client-facing names for the slots a package can hold — the slot's own label is written for the form field, not for the client. */
 const CLIENT_LABEL_BY_SLOT: Record<string, string> = {
-  submission_screenshot: "Submission screenshot",
   filed_form: "Filed return",
   proof: "Proof of payment",
   trrc: "BIR confirmation (TRRC)",
-  generated_report: "SAWT report",
-  dat_file: "SAWT data file",
-  acknowledgement: "BIR acknowledgement email",
-  validation_email: "BIR validation email",
-  draft_computation: "Computation sheet",
+  acknowledgement: "SAWT acknowledgement email",
 };
+
+/**
+ * D108 (brief #5s, her decision) — the client's package holds only: the filed
+ * return (step 7), proof of payment (9), the TRRC (10), the SAWT
+ * acknowledgement email (13) and the Form 2307 scans (2). Everything else —
+ * submission screenshot (6), computation sheet (3), alphalist report and DAT
+ * (11), SAWT validation email (14) — stays out. A step that doesn't apply
+ * simply has no document, so it is absent, with no placeholder.
+ */
+export const CLIENT_PACKAGE_STEP_CODES: readonly string[] = [
+  "RECEIVE_2307",
+  "SAVE_FORM_COPY",
+  "SAVE_PROOF_PAYMENT",
+  "RECEIVE_TRRC",
+  "SAWT_ACK",
+];
 
 function withSuffix(name: string, n: number): string {
   const dot = name.lastIndexOf(".");
@@ -56,10 +68,8 @@ function withSuffix(name: string, n: number): string {
 export function planPackageDocuments(steps: PackageStepInput[], documents: PackageDocInput[]): PackageDocument[] {
   const ordered: { step: PackageStepInput | null; doc: PackageDocInput }[] = [];
   for (const step of [...steps].sort((a, b) => a.sequence - b.sequence)) {
+    if (!CLIENT_PACKAGE_STEP_CODES.includes(step.stepCode)) continue;
     for (const doc of documents) if (doc.workflowStepId === step.id) ordered.push({ step, doc });
-  }
-  for (const doc of documents) {
-    if (!doc.workflowStepId || !steps.some((s) => s.id === doc.workflowStepId)) ordered.push({ step: null, doc });
   }
 
   const taken = new Set<string>();
@@ -86,7 +96,7 @@ export async function loadPackageDocuments(filingId: string): Promise<PackageDoc
   });
   if (!filing) return [];
   return planPackageDocuments(
-    filing.workflowSteps.map((s) => ({ id: s.id, sequence: s.sequence, title: s.title, requiredDocSlots: s.requiredDocSlots })),
+    filing.workflowSteps.map((s) => ({ id: s.id, stepCode: s.stepCode, sequence: s.sequence, title: s.title, requiredDocSlots: s.requiredDocSlots })),
     filing.documents.map((d) => ({
       id: d.id,
       workflowStepId: d.workflowStepId,

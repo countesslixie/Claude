@@ -3,7 +3,6 @@ import {
   buildClientPackageEmail,
   buildSummaryLines,
   signedResultOf,
-  formatMonthDayLabel,
   periodPlainName,
   type ClientPackageEmailInput,
 } from "@/lib/workflow/clientPackageEmail";
@@ -80,8 +79,7 @@ function baseInput(overrides: Partial<ClientPackageEmailInput> = {}): ClientPack
       { label: "Filed return", filename: "filed-form.pdf" },
       { label: "Proof of payment", filename: "proof.pdf" },
     ],
-    next: { period: "ANNUAL", taxableYear: 2026, formType: "F1701A", dueDate: new Date("2027-04-15T00:00:00.000Z") },
-    annualDocsDueLabel: "Feb 15, 2027",
+    next: { period: "ANNUAL", taxableYear: 2026, formType: "F1701A", dueDate: new Date("2027-04-15T00:00:00.000Z"), docsDueDate: new Date("2027-01-20T00:00:00.000Z") },
     ...overrides,
   };
 }
@@ -192,17 +190,16 @@ describe("buildClientPackageEmail (D102)", () => {
 
   it("Annual next filing: right form, plain period name, and her documents date (her wording)", () => {
     const { body } = buildClientPackageEmail(baseInput());
-    expect(body).toContain("Next filing: Annual ITR (1701A), due Apr 15, 2027. Please send required documents by Feb 15, 2027.");
+    expect(body).toContain("Next filing: Annual ITR (1701A), due Apr 15, 2027. Please send required documents by Jan 20, 2027.");
     expect(body).not.toContain("1701Q for ANNUAL");
     expect(body).not.toMatch(/\bANNUAL\b/);
   });
 
-  it("quarterly next filing keeps its form and reads a plain period; no documents date", () => {
+  it("quarterly next filing ends with the same documents sentence (D106)", () => {
     const { body } = buildClientPackageEmail(
-      baseInput({ period: "Q2", next: { period: "Q3", taxableYear: 2026, formType: "F1701Q", dueDate: new Date("2026-11-16T00:00:00.000Z") } }),
+      baseInput({ period: "Q2", next: { period: "Q3", taxableYear: 2026, formType: "F1701Q", dueDate: new Date("2026-11-16T00:00:00.000Z"), docsDueDate: new Date("2026-10-20T00:00:00.000Z") } }),
     );
-    expect(body).toContain("Next filing: 1701Q for Q3 2026, due Nov 16, 2026.");
-    expect(body).not.toContain("send required documents");
+    expect(body).toContain("Next filing: 1701Q for Q3 2026, due Nov 16, 2026. Please send required documents by Oct 20, 2026.");
   });
 
   it("omits the next-filing line when there is no next filing", () => {
@@ -226,9 +223,5 @@ describe("plain names", () => {
   it("period names", () => {
     expect(periodPlainName("ANNUAL", 2026)).toBe("Annual ITR");
     expect(periodPlainName("Q1", 2027)).toBe("Q1 2027");
-  });
-  it("month-day setting to a plain date, no timezone maths", () => {
-    expect(formatMonthDayLabel("02-15", 2027)).toBe("Feb 15, 2027");
-    expect(formatMonthDayLabel("12-01", 2027)).toBe("Dec 1, 2027");
   });
 });

@@ -505,7 +505,7 @@ export default async function FilingDetailPage({
               )}
               {(filing.certificatesExpectedBy || filing.internalFilingTarget) && (
                 <p>
-                  Working calendar — certificates expected by {formatManilaDate(filing.certificatesExpectedBy)},
+                  Working calendar — documents due from client {formatManilaDate(filing.certificatesExpectedBy)},
                   filing target {formatManilaDate(filing.internalFilingTarget)} (practice targets, not the
                   statutory deadline).
                 </p>

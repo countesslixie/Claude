@@ -72,8 +72,8 @@ export function stepBlockReason(
 /**
  * SEND_CLIENT_PACKAGE's contents are assembled from documents already
  * saved against steps 7 (SAVE_FORM_COPY), 9 (SAVE_PROOF_PAYMENT), 10
- * (RECEIVE_TRRC), and 14 (SAWT_VALIDATION) — SPEC.md 7.1, §16 item 14. A
- * dependency step with status NA (e.g. step 14 when the filing has no
+ * (RECEIVE_TRRC), and 13 (SAWT_ACK) — D109 (SPEC.md 7.1 said 14). A
+ * dependency step with status NA (e.g. step 13 when the filing has no
  * SAWT requirement) is skipped, not treated as missing — it doesn't
  * apply to this filing.
  */
@@ -81,7 +81,8 @@ export const SEND_CLIENT_PACKAGE_DEPENDENCIES = [
   "SAVE_FORM_COPY",
   "SAVE_PROOF_PAYMENT",
   "RECEIVE_TRRC",
-  "SAWT_VALIDATION",
+  // D109 (brief #5s) — step 13, not step 14: the validation email is never sent to the client.
+  "SAWT_ACK",
 ] as const;
 
 export interface StepForPackageCheck {
@@ -106,7 +107,7 @@ const DEPENDENCY_LABELS: Record<string, string> = {
   SAVE_FORM_COPY: "Download and save filed form (step 7)",
   SAVE_PROOF_PAYMENT: "Save proof of payment (step 9)",
   RECEIVE_TRRC: "Save TRRC email (step 10)",
-  SAWT_VALIDATION: "Save SAWT validation email (step 14)",
+  SAWT_ACK: "Save SAWT acknowledgement email (step 13)",
 };
 
 /**

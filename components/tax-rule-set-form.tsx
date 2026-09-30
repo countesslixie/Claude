@@ -144,12 +144,13 @@ export function TaxRuleSetForm({
           hint="As given by the bookkeeper — confirm against BIR before live use"
         />
         <Field
-          name="annualDocsDueMonthDay"
-          label="Client documents due for the Annual return"
-          defaultValue={v("annualDocsDueMonthDay") || "02-15"}
-          errors={errs("annualDocsDueMonthDay")}
+          name="clientDocsDueDay"
+          label="Client documents due — day of the month after each period ends"
+          type="number"
+          defaultValue={v("clientDocsDueDay") || "20"}
+          errors={errs("clientDocsDueDay")}
           required
-          hint="MM-DD, of the FOLLOWING year — named in the step 16 email to the client"
+          hint="From the engagement letter (20 = Apr 20, Jul 20, Oct 20, Jan 20). Named in the client email and the filing page's working calendar"
         />
       </fieldset>
 
