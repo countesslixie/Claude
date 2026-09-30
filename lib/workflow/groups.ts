@@ -418,6 +418,14 @@ export const EAFS_UNLOCK_STEP_CODE: Record<string, string> = {
   SAWT_ACK: "EMAIL_DAT",
 };
 
+/** D113 — plain names for step 16's prerequisites, as they read in "Available once the … saved." */
+const PACKAGE_PREREQUISITE_NAME: Record<string, string> = {
+  SAVE_FORM_COPY: "filed form",
+  SAVE_PROOF_PAYMENT: "proof of payment",
+  RECEIVE_TRRC: "TRRC",
+  SAWT_ACK: "SAWT acknowledgement",
+};
+
 /**
  * D84 (brief #5o) — why a step can't be worked yet, or null. One place that
  * knows every gate in the workflow (steps 3/4, 6/7/10, 8/9, the eAFS chain,
@@ -457,13 +465,16 @@ export function stepLockReason(
     }
     case "SAWT_VALIDATION":
       return statusOf("SAWT_ACK") === "DONE" ? null : "Available once step 13 is done.";
-    case "SEND_CLIENT_PACKAGE":
-      return SEND_CLIENT_PACKAGE_DEPENDENCIES.some((code) => {
+    case "SEND_CLIENT_PACKAGE": {
+      // D113 (brief #5t) — name only what is still missing, in step order.
+      const missing = SEND_CLIENT_PACKAGE_DEPENDENCIES.filter((code) => {
         const st = statusOf(code);
         return st != null && !isResolved(st);
-      })
-        ? "Available once the filed form, proof of payment and BIR emails are saved."
-        : null;
+      }).map((code) => PACKAGE_PREREQUISITE_NAME[code]);
+      if (missing.length === 0) return null;
+      const list = missing.length === 1 ? missing[0] : `${missing.slice(0, -1).join(", ")} and ${missing[missing.length - 1]}`;
+      return `Available once the ${list} ${missing.length === 1 ? "is" : "are"} saved.`;
+    }
     default:
       return null;
   }

@@ -1,6 +1,6 @@
-import { centsToPesos } from "@/lib/money";
 import { formatManilaDateLong } from "@/lib/dates";
 import type { Period } from "@/lib/tax/types";
+import { formatSummaryLines, type SummaryLine } from "@/lib/workflow/summaryLines";
 
 /**
  * Step 4's copyable client advice message (brief #5d §8, wording replaced
@@ -15,16 +15,9 @@ export interface ClientTaxAdviceMessageInput {
   period: Period;
   taxableYear: number;
   formType: "F1701Q" | "F1701A";
-  /** Item 47 (either form) — this period's gross sales as shown on the sheet. */
-  grossSalesCents: number;
-  /** Item 54 (1701Q) or item 56 (1701A). */
-  taxDueCents: number;
-  /** Item 62 (1701Q) or item 64 (1701A). */
-  totalCreditsCents: number;
-  /** Item 63 (1701Q) or item 65 (1701A). */
-  taxPayableCents: number;
+  /** D114 — the shared year-to-date summary (buildSummaryLines), the same lines step 16's email prints. */
+  summary: SummaryLine[];
   isOverpayment: boolean;
-  overpaymentCents: number;
   /**
    * Brief #5e §9 — the date shown to the CLIENT: the filing's adjusted BIR
    * due date minus TaxRuleSet.clientPaymentLeadDays calendar days, shifted
@@ -52,30 +45,24 @@ export function buildClientTaxAdviceMessage(input: ClientTaxAdviceMessageInput):
 
   const subject = `${input.clientRegisteredName} — ${formLabel} ${input.period === "ANNUAL" ? "Annual" : input.period} ${input.taxableYear} computation`;
 
-  const figureLines = [
-    `Gross sales/receipts: ${centsToPesos(input.grossSalesCents, { withSymbol: true })}`,
-    `Tax due: ${centsToPesos(input.taxDueCents, { withSymbol: true })}`,
-    `Less: Total credits: ${centsToPesos(input.totalCreditsCents, { withSymbol: true })}`,
-  ];
-
   const bodyLines = [
     `Hi ${input.clientFirstName},`,
     "",
     `Here's the computation for your ${formLabel} ${periodLabel} return:`,
     "",
-    ...figureLines,
+    ...formatSummaryLines(input.summary),
   ];
 
   if (!input.isOverpayment) {
     bodyLines.push(
-      `Amount payable: ${centsToPesos(input.taxPayableCents, { withSymbol: true })}`,
+      "",
       `Due date: ${formatManilaDateLong(input.clientDueDate)}`,
       "",
       // D107 (brief #5s) — no advance offer: her letter requires advance requests by the 10th, long past by the time this goes out.
       "Please let me know when you plan to make the payment.",
     );
   } else {
-    bodyLines.push(`Overpayment: ${centsToPesos(input.overpaymentCents, { withSymbol: true })}`, "");
+    bodyLines.push("");
     if (input.period !== "ANNUAL") {
       bodyLines.push("There is nothing to pay this quarter. The overpayment will be applied to your next return this year.");
     } else {

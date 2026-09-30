@@ -6,6 +6,8 @@ import {
   periodPlainName,
   type ClientPackageEmailInput,
 } from "@/lib/workflow/clientPackageEmail";
+import { buildClientTaxAdviceMessage } from "@/lib/workflow/clientTaxAdviceMessage";
+import { formatSummaryLines } from "@/lib/workflow/summaryLines";
 import type { AnnualFormComputationResult, LegacyFilingComputationResult, QuarterlyFormComputationResult } from "@/lib/tax/types";
 
 /**
@@ -76,8 +78,8 @@ function baseInput(overrides: Partial<ClientPackageEmailInput> = {}): ClientPack
     filedAt: new Date("2026-11-13T00:00:00.000Z"),
     sheet: quarterly(),
     attachments: [
-      { label: "Filed return", filename: "filed-form.pdf" },
-      { label: "Proof of payment", filename: "proof.pdf" },
+      { label: "Filed return" },
+      { label: "Proof of payment" },
     ],
     next: { period: "ANNUAL", taxableYear: 2026, formType: "F1701A", dueDate: new Date("2027-04-15T00:00:00.000Z"), docsDueDate: new Date("2027-01-20T00:00:00.000Z") },
     ...overrides,
@@ -108,7 +110,7 @@ describe("summary lines reconcile to the final figure (D102)", () => {
     });
     const lines = buildSummaryLines(sheet);
     expect(signedResultOf(lines)).toBe(25_000_00);
-    expect(lines.at(-1)).toEqual({ kind: "result", label: "Tax payable", amountCents: 25_000_00 });
+    expect(lines.at(-1)).toEqual({ kind: "result", label: "Amount payable", amountCents: 25_000_00 });
   });
 
   it("whole-peso rounding of the credits shows as its own line so the lines still add up", () => {
@@ -162,7 +164,7 @@ describe("summary lines reconcile to the final figure (D102)", () => {
   it("leaves out zero credit lines and labels the year-to-date figures", () => {
     const lines = buildSummaryLines(quarterly({ item56PriorPeriodPaymentsCents: 0, item57CwtPriorQuartersCents: 0, item58CwtThisQuarterCents: 0, item62TotalCreditsCents: 0, item54TaxDueCents: 5_000_00, taxPayableCents: 5_000_00, isOverpayment: false, overpaymentCents: 0 }));
     expect(lines.filter((l) => l.kind === "credit")).toHaveLength(0);
-    expect(lines.map((l) => l.label)).toEqual(["Gross sales this quarter", "Taxable income, year to date", "Tax due, year to date", "Tax payable"]);
+    expect(lines.map((l) => l.label)).toEqual(["Gross sales this quarter", "Taxable income, year to date", "Tax due, year to date", "Amount payable"]);
   });
 });
 
@@ -178,9 +180,21 @@ describe("buildClientPackageEmail (D102)", () => {
   it("lists only the documents it is given — no certificates line unless a certificate is attached", () => {
     const none = buildClientPackageEmail(baseInput());
     expect(none.body).not.toMatch(/Form 2307 certificates/);
-    expect(none.body).toContain("· Filed return — filed-form.pdf");
-    const withCert = buildClientPackageEmail(baseInput({ attachments: [{ label: "Form 2307 — Sample Payor Inc.", filename: "2307-scan.pdf" }] }));
-    expect(withCert.body).toContain("· Form 2307 — Sample Payor Inc. — 2307-scan.pdf");
+    expect(none.body).toContain("· Filed return");
+    const withCert = buildClientPackageEmail(baseInput({ attachments: [{ label: "Form 2307 (Sample Payor Inc.)" }] }));
+    expect(withCert.body).toContain("· Form 2307 (Sample Payor Inc.)");
+  });
+
+  it("lists document names only — no file names (D110)", () => {
+    const { body } = buildClientPackageEmail(baseInput());
+    expect(body).not.toMatch(/\.(pdf|png|jpe?g|html)\b/i);
+    expect(body).not.toContain(" — ");
+  });
+
+  it("opens with the first name and ends with Thank you!, after the records line (D112)", () => {
+    const { body } = buildClientPackageEmail(baseInput());
+    expect(body.startsWith("Hi Juan,")).toBe(true);
+    expect(body.endsWith("Please keep this for your records.\n\nThank you!")).toBe(true);
   });
 
   it("never mentions eAFS: no forwarding request and no package line (D89)", () => {
@@ -223,5 +237,36 @@ describe("plain names", () => {
   it("period names", () => {
     expect(periodPlainName("ANNUAL", 2026)).toBe("Annual ITR");
     expect(periodPlainName("Q1", 2027)).toBe("Q1 2027");
+  });
+});
+
+describe("step 4 and step 16 print identical summary lines (D114)", () => {
+  it("for the same filing, the summary block of both messages is the same text and reconciles", () => {
+    const sheet = quarterly();
+    const advice = buildClientTaxAdviceMessage({
+      clientRegisteredName: "Juan Dela Cruz", clientFirstName: "Juan", period: "Q3", taxableYear: 2026, formType: "F1701Q",
+      summary: buildSummaryLines(sheet), isOverpayment: sheet.isOverpayment, clientDueDate: new Date("2026-11-06T00:00:00.000Z"),
+    });
+    const filed = buildClientPackageEmail(baseInput({ sheet }));
+    const block = formatSummaryLines(buildSummaryLines(sheet)).join("\n");
+    expect(advice.body).toContain(block);
+    expect(filed.body).toContain(block);
+    expect(block).toContain("Gross sales this quarter");
+    expect(block).toContain("Taxable income, year to date");
+    expect(block).toContain("Tax due, year to date");
+    expect(block).toContain("Less: tax paid on earlier quarters");
+    expect(block).toContain("Less: creditable withholding (Form 2307)");
+    expect(block).toContain("Overpayment");
+    expect(signedResultOf(buildSummaryLines(sheet))).toBe(-sheet.overpaymentCents);
+  });
+
+  it("payable version ends its summary with Amount payable, and 'other credits' shows only when non-zero", () => {
+    const sheet = quarterly({ item54TaxDueCents: 60_000_00, item62TotalCreditsCents: 35_000_00, item63PayableCents: 25_000_00, taxPayableCents: 25_000_00, isOverpayment: false, overpaymentCents: 0 });
+    const lines = buildSummaryLines(sheet);
+    expect(lines.at(-1)).toEqual({ kind: "result", label: "Amount payable", amountCents: 25_000_00 });
+    expect(lines.some((l) => /other credits/.test(l.label))).toBe(false);
+    expect(signedResultOf(lines)).toBe(25_000_00);
+    const withOther = buildSummaryLines({ ...sheet, item61OtherCreditsCents: 1_000_00, item62TotalCreditsCents: 36_000_00, item63PayableCents: 24_000_00, taxPayableCents: 24_000_00 });
+    expect(withOther.some((l) => l.label === "Less: other credits")).toBe(true);
   });
 });

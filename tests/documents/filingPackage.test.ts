@@ -90,9 +90,9 @@ describe("GET /api/filings/[id]/package", () => {
     const arrayBuffer = await response.arrayBuffer();
     const zip = await JSZip.loadAsync(arrayBuffer);
 
-    // D103 (brief #5r) -- flat, no folders, no manifest, saved names kept.
+    // D103 (brief #5r) -- flat, no folders, no manifest, standard names (D111).
     const zipFilenames = Object.keys(zip.files);
-    expect(zipFilenames).toEqual(["filed-form.pdf"]);
+    expect(zipFilenames).toEqual(["Phase 3 Package Test Client - 1701Q Q2 2026 - Filed return.pdf"]);
     expect(zipFilenames.some((f) => f.includes("/"))).toBe(false);
     expect(zipFilenames).not.toContain("manifest.txt");
     expect(response.headers.get("Content-Disposition")).toContain(`Phase 3 Package Test Client - 1701Q Q2 2026.zip`);
@@ -100,7 +100,9 @@ describe("GET /api/filings/[id]/package", () => {
     // The email's "attached" list comes from the same source as the zip, so the two agree.
     const email = await buildClientPackageEmailForFiling(filing.id);
     expect(email).not.toBeNull();
-    const listed = [...email!.body.matchAll(/^ {2}· .* — (.+)$/gm)].map((m) => m[1]);
-    expect(listed.sort()).toEqual(zipFilenames.sort());
+    // D110 — the list names documents, not files; one line per zip entry.
+    const listed = [...email!.body.matchAll(/^ {2}· (.+)$/gm)].map((m) => m[1]);
+    expect(listed).toEqual(["Filed return"]);
+    expect(listed).toHaveLength(zipFilenames.length);
   });
 });

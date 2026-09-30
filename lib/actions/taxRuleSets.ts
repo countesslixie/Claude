@@ -7,7 +7,7 @@ import { taxRuleSetSchema } from "@/lib/validation/taxRuleSet";
 import { getActorId } from "@/lib/actor";
 import { logActivity } from "@/lib/activityLog";
 import { manilaDateInputToJsDate } from "@/lib/dates";
-import { pesosToCents } from "@/lib/money";
+import { pesosToCents, percentToBps } from "@/lib/money";
 
 export type TaxRuleSetFormState = {
   error?: string;
@@ -19,7 +19,7 @@ const FIELDS = [
   "taxableYear",
   "effectiveFrom",
   "effectiveTo",
-  "incomeTaxRateBps",
+  "incomeTaxRatePercent",
   "vatThreshold",
   "allowableDeduction",
   "q1DueMonthDay",
@@ -30,8 +30,8 @@ const FIELDS = [
   "eafsDeadlineOffsetDays",
   "eSubmissionEmail",
   "clientDocsDueDay",
-  "surchargeRateBps",
-  "interestRateBpsPerAnnum",
+  "surchargeRatePercent",
+  "interestRatePercentPerAnnum",
   "notes",
 ] as const;
 
@@ -70,7 +70,7 @@ export async function createTaxRuleSet(
       taxableYear: parsed.data.taxableYear,
       effectiveFrom: manilaDateInputToJsDate(parsed.data.effectiveFrom),
       effectiveTo: parsed.data.effectiveTo ? manilaDateInputToJsDate(parsed.data.effectiveTo) : null,
-      incomeTaxRateBps: parsed.data.incomeTaxRateBps,
+      incomeTaxRateBps: percentToBps(parsed.data.incomeTaxRatePercent),
       vatThresholdCents: pesosToCents(parsed.data.vatThreshold),
       allowableDeductionCents: pesosToCents(parsed.data.allowableDeduction),
       q1DueMonthDay: parsed.data.q1DueMonthDay,
@@ -81,8 +81,8 @@ export async function createTaxRuleSet(
       eafsDeadlineOffsetDays: parsed.data.eafsDeadlineOffsetDays,
       eSubmissionEmail: parsed.data.eSubmissionEmail,
       clientDocsDueDay: parsed.data.clientDocsDueDay,
-      surchargeRateBps: parsed.data.surchargeRateBps ?? null,
-      interestRateBpsPerAnnum: parsed.data.interestRateBpsPerAnnum ?? null,
+      surchargeRateBps: parsed.data.surchargeRatePercent != null ? percentToBps(parsed.data.surchargeRatePercent) : null,
+      interestRateBpsPerAnnum: parsed.data.interestRatePercentPerAnnum != null ? percentToBps(parsed.data.interestRatePercentPerAnnum) : null,
       notes: parsed.data.notes ?? null,
       actorId,
     },
@@ -133,7 +133,7 @@ export async function updateTaxRuleSet(
       taxableYear: parsed.data.taxableYear,
       effectiveFrom: manilaDateInputToJsDate(parsed.data.effectiveFrom),
       effectiveTo: parsed.data.effectiveTo ? manilaDateInputToJsDate(parsed.data.effectiveTo) : null,
-      incomeTaxRateBps: parsed.data.incomeTaxRateBps,
+      incomeTaxRateBps: percentToBps(parsed.data.incomeTaxRatePercent),
       vatThresholdCents: pesosToCents(parsed.data.vatThreshold),
       allowableDeductionCents: pesosToCents(parsed.data.allowableDeduction),
       q1DueMonthDay: parsed.data.q1DueMonthDay,
@@ -144,8 +144,8 @@ export async function updateTaxRuleSet(
       eafsDeadlineOffsetDays: parsed.data.eafsDeadlineOffsetDays,
       eSubmissionEmail: parsed.data.eSubmissionEmail,
       clientDocsDueDay: parsed.data.clientDocsDueDay,
-      surchargeRateBps: parsed.data.surchargeRateBps ?? null,
-      interestRateBpsPerAnnum: parsed.data.interestRateBpsPerAnnum ?? null,
+      surchargeRateBps: parsed.data.surchargeRatePercent != null ? percentToBps(parsed.data.surchargeRatePercent) : null,
+      interestRateBpsPerAnnum: parsed.data.interestRatePercentPerAnnum != null ? percentToBps(parsed.data.interestRatePercentPerAnnum) : null,
       notes: parsed.data.notes ?? null,
       actorId,
     },

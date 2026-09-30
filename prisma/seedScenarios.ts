@@ -368,7 +368,7 @@ export async function seedScenarios(prisma: PrismaClient, actorId: string): Prom
     withholdingBps: null,
     engagedSince: "2026-07-01",
     notes:
-      "Sample C: joined July 1, NO starting figures and no filings generated. Click Generate for 2026 on the client page to see the mid-year guard (D78); save starting figures and it runs.",
+      "Sample C: joined July 1, NO starting figures and no filings generated. Click Generate for 2026 on the client page to see the mid-year guard; save starting figures and it runs.",
   });
 
   // =========================================================================
@@ -437,7 +437,7 @@ export async function seedScenarios(prisma: PrismaClient, actorId: string): Prom
     withholdingBps: null, // no certificates: step 2 is skipped from the start, steps 11-14 NA
     engagedSince: "2026-01-15",
     notes:
-      "Sample E: Q3 overpayment, filed, no certificates. Pay reads 'Nothing to pay — overpayment'; the eAFS group reads 'Not applicable — no Form 2307' (D93). Q1/Q2 were filed outside the app (starting figures).",
+      "Sample E: Q3 overpayment, filed, no certificates. Pay reads 'Nothing to pay — overpayment'; the eAFS group reads 'Not applicable — no Form 2307'. Q1/Q2 were filed outside the app (starting figures).",
   });
   // Her latest return filed outside the app is Q2 (illustrative figures): item 51 ₱500,000,
   // items 57/58 ₱10,000 + ₱15,000, item 56 ₱2,000, ₱8,000 paid on Q2 itself.
@@ -579,7 +579,7 @@ export async function seedScenarios(prisma: PrismaClient, actorId: string): Prom
     withholdingBps: 1000,
     engagedSince: "2026-01-05",
     notes:
-      "Sample H: the mixed-income sample, kept for the day a mixed-income client arrives (Form 1701 has no computation sheet — D49). Annual only, not started.",
+      "Sample H: the mixed-income sample, kept for the day a mixed-income client arrives (Form 1701 has no computation sheet). Annual only, not started.",
   });
   await startingFigures(navarro.id, "Q3", {
     cumulativeIncome: "450,000.00",

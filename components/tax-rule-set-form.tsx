@@ -73,11 +73,10 @@ export function TaxRuleSetForm({
           Computation constants
         </legend>
         <Field
-          name="incomeTaxRateBps"
-          label="Income tax rate (bps, 800 = 8.00%)"
-          type="number"
-          defaultValue={v("incomeTaxRateBps") || "800"}
-          errors={errs("incomeTaxRateBps")}
+          name="incomeTaxRatePercent"
+          label="Income tax rate (%)"
+          defaultValue={v("incomeTaxRatePercent") || "8.00"}
+          errors={errs("incomeTaxRatePercent")}
           required
         />
         <div />
@@ -136,12 +135,12 @@ export function TaxRuleSetForm({
         />
         <Field
           name="eSubmissionEmail"
-          label="BIR eSubmission email address (step 12's draft is addressed to this)"
+          label="BIR eSubmission email address (used as the To address when you email the DAT file)"
           type="email"
           defaultValue={v("eSubmissionEmail") || "esubmission@bir.gov.ph"}
           errors={errs("eSubmissionEmail")}
           required
-          hint="As given by the bookkeeper — confirm against BIR before live use"
+          hint="Confirm against BIR before live use"
         />
         <Field
           name="clientDocsDueDay"
@@ -159,18 +158,16 @@ export function TaxRuleSetForm({
           Late filing exposure — informational only
         </legend>
         <Field
-          name="surchargeRateBps"
-          label="Surcharge rate (bps, optional)"
-          type="number"
-          defaultValue={v("surchargeRateBps")}
-          errors={errs("surchargeRateBps")}
+          name="surchargeRatePercent"
+          label="Surcharge rate (%, optional)"
+          defaultValue={v("surchargeRatePercent")}
+          errors={errs("surchargeRatePercent")}
         />
         <Field
-          name="interestRateBpsPerAnnum"
-          label="Interest rate per annum (bps, optional)"
-          type="number"
-          defaultValue={v("interestRateBpsPerAnnum")}
-          errors={errs("interestRateBpsPerAnnum")}
+          name="interestRatePercentPerAnnum"
+          label="Interest rate per year (%, optional)"
+          defaultValue={v("interestRatePercentPerAnnum")}
+          errors={errs("interestRatePercentPerAnnum")}
         />
       </fieldset>
 

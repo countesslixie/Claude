@@ -17,7 +17,7 @@ export async function buildClientPackageEmailForFiling(filingId: string): Promis
   if (!filing) return null;
 
   const sheet = await getFilingSheet(filingId);
-  const attachments = (await loadPackageDocuments(filingId)).map((d) => ({ label: d.label, filename: d.zipName }));
+  const attachments = (await loadPackageDocuments(filingId)).map((d) => ({ label: d.label }));
 
   const nextPeriod = ALL_PERIODS[ALL_PERIODS.indexOf(filing.period) + 1] ?? null;
   const nextFiling = nextPeriod

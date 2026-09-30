@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import type { SummaryLine } from "@/lib/workflow/summaryLines";
 import { buildClientTaxAdviceMessage, type ClientTaxAdviceMessageInput } from "@/lib/workflow/clientTaxAdviceMessage";
 
 /**
@@ -11,6 +12,15 @@ import { buildClientTaxAdviceMessage, type ClientTaxAdviceMessageInput } from "@
  * me know." line is removed from every variant; each now ends with the
  * payment/overpayment paragraph, then "Thank you!".
  */
+const payableSummary: SummaryLine[] = [
+  { kind: "figure", label: "Gross sales this quarter", amountCents: 130_000_00 },
+  { kind: "figure", label: "Taxable income, year to date", amountCents: 112_000_00 },
+  { kind: "figure", label: "Tax due, year to date", amountCents: 16_800_00 },
+  { kind: "credit", label: "Less: tax paid on earlier quarters", amountCents: 3_000_00 },
+  { kind: "credit", label: "Less: creditable withholding (Form 2307)", amountCents: 1_700_00 },
+  { kind: "result", label: "Amount payable", amountCents: 12_100_00 },
+];
+
 function baseInput(overrides: Partial<ClientTaxAdviceMessageInput> = {}): ClientTaxAdviceMessageInput {
   return {
     clientRegisteredName: "Maria Santos",
@@ -18,12 +28,8 @@ function baseInput(overrides: Partial<ClientTaxAdviceMessageInput> = {}): Client
     period: "Q3",
     taxableYear: 2026,
     formType: "F1701Q",
-    grossSalesCents: 130_000_00,
-    taxDueCents: 16_800_00,
-    totalCreditsCents: 4_700_00,
-    taxPayableCents: 12_100_00,
+    summary: payableSummary,
     isOverpayment: false,
-    overpaymentCents: 0,
     clientDueDate: new Date("2026-11-06T00:00:00.000Z"),
     ...overrides,
   };
@@ -38,10 +44,13 @@ describe("buildClientTaxAdviceMessage", () => {
         "",
         "Here's the computation for your 1701Q Q3 2026 return:",
         "",
-        "Gross sales/receipts: ₱130,000.00",
-        "Tax due: ₱16,800.00",
-        "Less: Total credits: ₱4,700.00",
-        "Amount payable: ₱12,100.00",
+        "  Gross sales this quarter                  ₱130,000.00",
+        "  Taxable income, year to date              ₱112,000.00",
+        "  Tax due, year to date                     ₱16,800.00",
+        "  Less: tax paid on earlier quarters        ₱3,000.00",
+        "  Less: creditable withholding (Form 2307)  ₱1,700.00",
+        "  Amount payable                            ₱12,100.00",
+        "",
         "Due date: November 6, 2026",
         "",
         "Please let me know when you plan to make the payment.",
@@ -55,12 +64,13 @@ describe("buildClientTaxAdviceMessage", () => {
     const message = buildClientTaxAdviceMessage(
       baseInput({
         period: "Q1",
-        grossSalesCents: 450_000_00,
-        taxDueCents: 16_000_00,
-        totalCreditsCents: 22_500_00,
-        taxPayableCents: 0,
+        summary: [
+          { kind: "figure", label: "Gross sales this quarter", amountCents: 450_000_00 },
+          { kind: "figure", label: "Tax due, year to date", amountCents: 16_000_00 },
+          { kind: "credit", label: "Less: creditable withholding (Form 2307)", amountCents: 22_500_00 },
+          { kind: "result", label: "Overpayment", amountCents: 6_500_00 },
+        ],
         isOverpayment: true,
-        overpaymentCents: 6_500_00,
       }),
     );
     expect(message.body).toBe(
@@ -69,10 +79,10 @@ describe("buildClientTaxAdviceMessage", () => {
         "",
         "Here's the computation for your 1701Q Q1 2026 return:",
         "",
-        "Gross sales/receipts: ₱450,000.00",
-        "Tax due: ₱16,000.00",
-        "Less: Total credits: ₱22,500.00",
-        "Overpayment: ₱6,500.00",
+        "  Gross sales this quarter                  ₱450,000.00",
+        "  Tax due, year to date                     ₱16,000.00",
+        "  Less: creditable withholding (Form 2307)  ₱22,500.00",
+        "  Overpayment                               ₱6,500.00",
         "",
         "There is nothing to pay this quarter. The overpayment will be applied to your next return this year.",
         "",
@@ -87,17 +97,13 @@ describe("buildClientTaxAdviceMessage", () => {
       baseInput({
         period: "ANNUAL",
         formType: "F1701A",
-        grossSalesCents: 1_424_056_00,
-        taxDueCents: 93_924_00,
-        totalCreditsCents: 83_937_00,
-        taxPayableCents: 0,
+        summary: [{ kind: "result", label: "Overpayment", amountCents: 9_987_00 }],
         isOverpayment: true,
-        overpaymentCents: 9_987_00,
         yearEndCreditElection: null,
       }),
     );
     expect(message.body).toContain("Here's the computation for your 1701A 2026 return:");
-    expect(message.body).toContain("Overpayment: ₱9,987.00");
+    expect(message.body).toMatch(/Overpayment\s+₱9,987\.00/);
     expect(message.body).toContain("I'll get in touch with you about how the overpayment will be applied.");
     expect(message.body).not.toMatch(/refunded to you|Tax Credit Certificate|carried over to next year's return/);
   });
@@ -108,8 +114,6 @@ describe("buildClientTaxAdviceMessage", () => {
         period: "ANNUAL",
         formType: "F1701A",
         isOverpayment: true,
-        overpaymentCents: 9_987_00,
-        taxPayableCents: 0,
         yearEndCreditElection: "CARRY_OVER",
       }),
     );
@@ -119,21 +123,21 @@ describe("buildClientTaxAdviceMessage", () => {
 
   it("annual overpayment with yearEndCreditElection REFUND", () => {
     const message = buildClientTaxAdviceMessage(
-      baseInput({ period: "ANNUAL", formType: "F1701A", isOverpayment: true, overpaymentCents: 1_000_00, taxPayableCents: 0, yearEndCreditElection: "REFUND" }),
+      baseInput({ period: "ANNUAL", formType: "F1701A", isOverpayment: true, yearEndCreditElection: "REFUND" }),
     );
     expect(message.body).toContain("The overpayment will be refunded to you.");
   });
 
   it("annual overpayment with yearEndCreditElection TCC", () => {
     const message = buildClientTaxAdviceMessage(
-      baseInput({ period: "ANNUAL", formType: "F1701A", isOverpayment: true, overpaymentCents: 1_000_00, taxPayableCents: 0, yearEndCreditElection: "TCC" }),
+      baseInput({ period: "ANNUAL", formType: "F1701A", isOverpayment: true, yearEndCreditElection: "TCC" }),
     );
     expect(message.body).toContain("The overpayment will be issued to you as a Tax Credit Certificate.");
   });
 
   it("annual overpayment with yearEndCreditElection NA: still asks, same as unset", () => {
     const message = buildClientTaxAdviceMessage(
-      baseInput({ period: "ANNUAL", formType: "F1701A", isOverpayment: true, overpaymentCents: 1_000_00, taxPayableCents: 0, yearEndCreditElection: "NA" }),
+      baseInput({ period: "ANNUAL", formType: "F1701A", isOverpayment: true, yearEndCreditElection: "NA" }),
     );
     expect(message.body).toContain("I'll get in touch with you about how the overpayment will be applied.");
   });
@@ -146,10 +150,10 @@ describe("buildClientTaxAdviceMessage", () => {
   it("brief #5f §6: no variant contains the 'questions' line, and every variant ends with 'Thank you!'", () => {
     const payable = buildClientTaxAdviceMessage(baseInput());
     const quarterlyOverpayment = buildClientTaxAdviceMessage(
-      baseInput({ isOverpayment: true, overpaymentCents: 1_000_00, taxPayableCents: 0 }),
+      baseInput({ isOverpayment: true }),
     );
     const annualOverpayment = buildClientTaxAdviceMessage(
-      baseInput({ period: "ANNUAL", formType: "F1701A", isOverpayment: true, overpaymentCents: 1_000_00, taxPayableCents: 0 }),
+      baseInput({ period: "ANNUAL", formType: "F1701A", isOverpayment: true }),
     );
     for (const message of [payable, quarterlyOverpayment, annualOverpayment]) {
       expect(message.body).not.toMatch(/questions/i);

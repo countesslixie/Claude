@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { planPackageDocuments, packageZipName } from "@/lib/documents/filingPackage";
+import { planPackageDocuments, packageZipName, type PackageNaming } from "@/lib/documents/filingPackage";
+
+const naming: PackageNaming = { registeredName: "Rosario Garcia", formType: "F1701Q", period: "Q3", taxableYear: 2026 };
 
 /** D103 (brief #5r) — the package's one document list: flat names, unique, labelled; the email's list and the zip both come from it. */
 describe("planPackageDocuments", () => {
@@ -9,23 +11,37 @@ describe("planPackageDocuments", () => {
     { id: "s2", stepCode: "RECEIVE_2307", sequence: 2, title: "Receive Form 2307", requiredDocSlots: "[]" },
   ];
 
-  it("orders by step, keeps saved names, labels by slot and by payor for certificates", () => {
+  it("orders by step, gives standard names (D111), labels by slot and by payor for certificates", () => {
     const docs = planPackageDocuments(steps, [
       { id: "d1", workflowStepId: "s9", docSlotCode: "proof", originalFilename: "proof.pdf", storedPath: "a" },
       { id: "d2", workflowStepId: "s2", docSlotCode: "form2307_scan", originalFilename: "scan.pdf", storedPath: "b", form2307PayorName: "Sample Payor Inc." },
+    ], naming);
+    expect(docs.map((d) => d.zipName)).toEqual([
+      "Rosario Garcia - 1701Q Q3 2026 - Form 2307 - Sample Payor Inc.pdf",
+      "Rosario Garcia - 1701Q Q3 2026 - Proof of payment.pdf",
     ]);
-    expect(docs.map((d) => d.zipName)).toEqual(["scan.pdf", "proof.pdf"]);
-    expect(docs.map((d) => d.label)).toEqual(["Form 2307 — Sample Payor Inc.", "Proof of payment"]);
+    expect(docs.map((d) => d.label)).toEqual(["Form 2307 (Sample Payor Inc.)", "Proof of payment"]);
     for (const d of docs) expect(d.zipName).not.toContain("/");
   });
 
-  it("adds a short suffix instead of overwriting when two names collide", () => {
+  it("adds (2) when two certificates share a payor, and strips characters Windows disallows (D111)", () => {
     const docs = planPackageDocuments(steps, [
-      { id: "d1", workflowStepId: "s2", docSlotCode: null, originalFilename: "scan.pdf", storedPath: "a" },
-      { id: "d2", workflowStepId: "s9", docSlotCode: "proof", originalFilename: "scan.pdf", storedPath: "b" },
-      { id: "d3", workflowStepId: "s9", docSlotCode: "proof", originalFilename: "SCAN.pdf", storedPath: "c" },
+      { id: "d1", workflowStepId: "s2", docSlotCode: "form2307_scan", originalFilename: "one.PDF", storedPath: "a", form2307PayorName: "Acme" },
+      { id: "d2", workflowStepId: "s2", docSlotCode: "form2307_scan", originalFilename: "two.pdf", storedPath: "b", form2307PayorName: "Acme" },
+      { id: "d3", workflowStepId: "s2", docSlotCode: "form2307_scan", originalFilename: "three.png", storedPath: "c", form2307PayorName: 'A/B: "C"?' },
+    ], naming);
+    expect(docs.map((d) => d.zipName)).toEqual([
+      "Rosario Garcia - 1701Q Q3 2026 - Form 2307 - Acme.pdf",
+      "Rosario Garcia - 1701Q Q3 2026 - Form 2307 - Acme (2).pdf",
+      "Rosario Garcia - 1701Q Q3 2026 - Form 2307 - AB C.png",
     ]);
-    expect(docs.map((d) => d.zipName)).toEqual(["scan.pdf", "scan (2).pdf", "SCAN (3).pdf"]);
+  });
+
+  it("the Annual uses 1701A Annual [year]", () => {
+    const docs = planPackageDocuments(steps, [{ id: "d1", workflowStepId: "s9", docSlotCode: "proof", originalFilename: "x.pdf", storedPath: "a" }], {
+      registeredName: "Rosario Garcia", formType: "F1701A", period: "ANNUAL", taxableYear: 2026,
+    });
+    expect(docs[0].zipName).toBe("Rosario Garcia - 1701A Annual 2026 - Proof of payment.pdf");
   });
 });
 
@@ -60,10 +76,16 @@ describe("what the client package holds (D108)", () => {
   ];
 
   it("a certificate filing lists all five kinds and nothing else", () => {
-    const docs = planPackageDocuments(allSteps, everything);
-    expect(docs.map((d) => d.zipName)).toEqual(["cert.pdf", "filed.pdf", "proof.pdf", "trrc.pdf", "ack.pdf"]);
+    const docs = planPackageDocuments(allSteps, everything, naming);
+    expect(docs.map((d) => d.zipName)).toEqual([
+      "Rosario Garcia - 1701Q Q3 2026 - Form 2307 - Sample Payor Inc.pdf",
+      "Rosario Garcia - 1701Q Q3 2026 - Filed return.pdf",
+      "Rosario Garcia - 1701Q Q3 2026 - Proof of payment.pdf",
+      "Rosario Garcia - 1701Q Q3 2026 - TRRC.pdf",
+      "Rosario Garcia - 1701Q Q3 2026 - SAWT acknowledgement.pdf",
+    ]);
     expect(docs.map((d) => d.label)).toEqual([
-      "Form 2307 — Sample Payor Inc.",
+      "Form 2307 (Sample Payor Inc.)",
       "Filed return",
       "Proof of payment",
       "BIR confirmation (TRRC)",
@@ -72,8 +94,9 @@ describe("what the client package holds (D108)", () => {
   });
 
   it("a no-certificate overpayment filing lists only the filed return and the TRRC, with no placeholder lines", () => {
-    const docs = planPackageDocuments(allSteps, everything.filter((d) => ["b", "c", "d", "f"].includes(d.id)));
+    const docs = planPackageDocuments(allSteps, everything.filter((d) => ["b", "c", "d", "f"].includes(d.id)), naming);
     expect(docs.map((d) => d.label)).toEqual(["Filed return", "BIR confirmation (TRRC)"]);
+    expect(docs.map((d) => d.zipName)).toEqual(["Rosario Garcia - 1701Q Q3 2026 - Filed return.pdf", "Rosario Garcia - 1701Q Q3 2026 - TRRC.pdf"]);
   });
 });
 

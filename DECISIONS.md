@@ -925,6 +925,28 @@ The zip and the email's attachment list — still one source, `planPackageDocume
 
 `SEND_CLIENT_PACKAGE_DEPENDENCIES` is now steps 7, 9, 10 and 13, each saved or NA (`lib/workflow/docSlots.ts`); the validation email (14) is not sent to the client, so step 16 no longer waits its ~10 days. *As built, with step 16 open and step 14 still waiting:* Next points to step 16; the filing stays in the BIR Confirmations group (earliest unfinished group, D70) and its board card sits in that column reading "waiting on SAWT validation"; the pill reads In progress (D97, since step 16 is her work); it reaches Waiting on BIR after step 16 is done and Complete only once step 14 is saved. Nothing read oddly, so no group rule changed. The only other place that named step 14 as a package prerequisite was the readiness message's label list.
 
+**D110 — Step 16's attachment list names documents, never files** *(2026-09-30, brief #5t, her decision; amends D103/D108)*
+
+The email's "The attached package contains:" list reads "Filed return", "Proof of payment", "BIR confirmation (TRRC)", "SAWT acknowledgement email" and one "Form 2307 ([payor name])" line per certificate — no file names, whatever she uploaded. It is still built from the same list as the zip (`planPackageDocuments`).
+
+**D111 — Files inside the client zip get standard names** *(2026-09-30, brief #5t, her decision; amends D103)*
+
+`[Client name] - [Form] [Period] [Year] - [Document].[ext]`, e.g. "Rosario Garcia - 1701Q Q3 2026 - Filed return.pdf", "… - TRRC.pdf", "… - Proof of payment.pdf", "… - SAWT acknowledgement.pdf"; certificates "… - Form 2307 - [Payor].pdf", with " (2)" added for a second one from the same payor. The Annual reads "1701A Annual 2026". The original extension is kept; characters Windows doesn't allow are dropped. **Only the zip copy is renamed** — stored documents keep their names.
+
+**D112 — Step 16's email opens "Hi [first name]," and closes "Thank you!"** *(2026-09-30, brief #5t, her decision; amends D102)*
+
+Same as step 4 (first word of the registered name). "Please keep this for your records." stays just before "Thank you!". The greeting itself was already there from #5r; the closing line is new.
+
+**D113 — Step 16's locked message names only what is still missing** *(2026-09-30, brief #5t, her decision; amends D109)*
+
+From steps 7, 9, 10 and 13 — skipping any that are NA, skipped or saved — in step order, with plain names: "Available once the TRRC is saved." / "Available once the filed form, TRRC and SAWT acknowledgement are saved." One function (`stepLockReason`) feeds both the card's line and the tooltip, so Next and the tooltip agree.
+
+**D114 — Step 4 and step 16 share one summary builder** *(2026-09-30, brief #5t, her decision; amends D51/D102/D107)*
+
+`buildSummaryLines` (`lib/workflow/summaryLines.ts`) is the one source of the year-to-date lines both messages print: Gross sales this quarter · Taxable income, year to date · Tax due, year to date · Less: tax paid on earlier quarters · Less: creditable withholding (Form 2307) · Less: other credits (only when non-zero) · Amount payable (or Overpayment). Step 4 used to show this quarter's sales beside the year-to-date tax due. **Step 16's last line was "Tax payable" and is now "Amount payable"**, so the two messages print identical lines. Step 4's greeting, due-date line, payment sentence and "Thank you!" are unchanged; messages already saved are left alone.
+
+**Also (brief #5t):** the "Download period package" link at the top of the filing page's Workflow card is removed — it duplicated step 16's Download package. Its route (`/api/filings/[id]/package`) stays, because step 16's own button uses it. Her own archive comes from the planned archive browse view. Screen text: the tax rule set form now takes and shows rates as percentages (8.00%, still stored as basis points), and no longer mentions "bps", "step 12's" or "As given by the bookkeeper"; the seed's sample-client notes no longer carry D-numbers (D105 continued).
+
 ---
 
 **Documentation reconciled through brief #5p** (this pass; earlier passes: #5m, then #5o's light additions D83–D93) — see the "Last reconciled" line at the top of this file, CURRENT_STATE.md, PROJECT_MASTER.md and CLAUDE.md.

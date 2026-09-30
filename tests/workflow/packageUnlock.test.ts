@@ -53,3 +53,22 @@ describe("step 16's unlock rule (D109)", () => {
     expect(deriveFilingStatus({ steps: filing({ SEND_CLIENT_PACKAGE: "DONE" }), adjustedDueDate: due, now })).toBe("COMPLETE");
   });
 });
+
+/** D113 (brief #5t) — the locked line names only what is still missing on this filing, in step order. */
+describe("step 16's locked message (D113)", () => {
+  it("no-certificate overpayment filing missing only the TRRC", () => {
+    const steps = filing({ RECEIVE_TRRC: "WAITING_EXTERNAL", SAWT_ACK: "NA", SAWT_VALIDATION: "NA" });
+    expect(lock(steps)).toBe("Available once the TRRC is saved.");
+  });
+
+  it("certificate filing missing the filed form, TRRC and acknowledgement", () => {
+    const steps = filing({ SAVE_FORM_COPY: "PENDING", RECEIVE_TRRC: "PENDING", SAWT_ACK: "PENDING" });
+    expect(lock(steps)).toBe("Available once the filed form, TRRC and SAWT acknowledgement are saved.");
+  });
+
+  it("two missing read as 'a and b'; skipped and saved ones are not named", () => {
+    expect(lock(filing({ SAVE_PROOF_PAYMENT: "PENDING", SAWT_ACK: "PENDING", RECEIVE_TRRC: "SKIPPED" }))).toBe(
+      "Available once the proof of payment and SAWT acknowledgement are saved.",
+    );
+  });
+});

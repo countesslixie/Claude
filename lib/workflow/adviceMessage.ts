@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getFilingSheet, hasSalesRecordedForPeriod } from "@/lib/filingComputation";
-import { extractFormSummary } from "@/lib/tax/compute";
+import { buildSummaryLines } from "@/lib/workflow/summaryLines";
 import { clientPaymentDueDate } from "@/lib/tax/deadlines";
 import { buildClientTaxAdviceMessage } from "@/lib/workflow/clientTaxAdviceMessage";
 
@@ -26,8 +26,6 @@ export async function buildLiveAdviceMessageForFiling(
 
   const sheet = await getFilingSheet(filingId); // D83: the frozen return once filed, live before
   if (sheet.formType !== "F1701Q" && sheet.formType !== "F1701A") return null;
-
-  const summaryFigures = extractFormSummary(sheet);
 
   const [clientTaxYear, ruleSet, holidays] = await Promise.all([
     prisma.clientTaxYear.findUnique({
@@ -57,12 +55,8 @@ export async function buildLiveAdviceMessageForFiling(
     period: filing.period,
     taxableYear: filing.taxableYear,
     formType: sheet.formType,
-    grossSalesCents: summaryFigures.grossSalesCents,
-    taxDueCents: summaryFigures.taxDueCents,
-    totalCreditsCents: summaryFigures.totalCreditsCents,
-    taxPayableCents: sheet.taxPayableCents,
+    summary: buildSummaryLines(sheet),
     isOverpayment: sheet.isOverpayment,
-    overpaymentCents: sheet.overpaymentCents,
     clientDueDate,
     yearEndCreditElection: clientTaxYear?.yearEndCreditElection,
   });

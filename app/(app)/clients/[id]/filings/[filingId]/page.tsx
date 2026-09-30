@@ -643,12 +643,6 @@ export default async function FilingDetailPage({
         <CardHeader className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-ink">Workflow ({visibleSteps.length}/{allSteps.length} steps shown)</h2>
           <div className="flex items-center gap-3">
-            <a
-              href={`/api/filings/${filing.id}/package`}
-              className="text-xs text-ink-secondary underline hover:text-ink"
-            >
-              Download period package
-            </a>
             {naCount > 0 && (
               <Link
                 href={

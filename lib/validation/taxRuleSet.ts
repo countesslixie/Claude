@@ -10,8 +10,11 @@ const pesos = z
   .trim()
   .regex(/^\d+(,\d{3})*(\.\d{1,2})?$/, "Enter a non-negative peso amount, e.g. 3,000,000.00");
 
-const optionalBps = z
-  .union([z.coerce.number().int().min(0).max(100000), z.literal("")])
+// D105/D110-era plain wording (brief #5t): rates are typed as percentages ("8" or "8.00") and
+// converted to basis points at the action boundary (lib/money.ts's percentToBps).
+const percentText = z.string().trim().regex(/^\d+(\.\d{1,2})?$/, "Enter a percent, e.g. 8 or 8.00");
+const optionalPercent = z
+  .union([percentText, z.literal("")])
   .optional()
   .transform((v) => (v === "" || v === undefined ? undefined : v));
 
@@ -24,7 +27,7 @@ export const taxRuleSetSchema = z.object({
     .optional()
     .transform((v) => (v === "" ? undefined : v)),
 
-  incomeTaxRateBps: z.coerce.number().int().min(0).max(10000),
+  incomeTaxRatePercent: percentText.refine((v) => Number(v) <= 100, "Enter a percent between 0 and 100"),
   vatThreshold: pesos,
   allowableDeduction: pesos,
 
@@ -35,13 +38,13 @@ export const taxRuleSetSchema = z.object({
 
   sawtDeadlineOffsetDays: z.coerce.number().int().min(0).max(365),
   eafsDeadlineOffsetDays: z.coerce.number().int().min(0).max(365),
-  // D87 (brief #5o) — the BIR eSubmission address step 12's email draft goes to.
+  // D87 (brief #5o) — the BIR eSubmission address the DAT-file email draft goes to.
   eSubmissionEmail: z.string().trim().email("Enter an email address"),
   // D106 (brief #5s) — the day of the month after each period ends by which the client sends documents (her engagement letter).
   clientDocsDueDay: z.coerce.number().int().min(1).max(28),
 
-  surchargeRateBps: optionalBps,
-  interestRateBpsPerAnnum: optionalBps,
+  surchargeRatePercent: optionalPercent,
+  interestRatePercentPerAnnum: optionalPercent,
 
   notes: z
     .string()

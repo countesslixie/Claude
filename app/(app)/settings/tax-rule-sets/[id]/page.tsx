@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { TaxRuleSetForm } from "@/components/tax-rule-set-form";
 import { updateTaxRuleSet } from "@/lib/actions/taxRuleSets";
 import { toManilaDateInputValue } from "@/lib/dates";
-import { centsToPesos } from "@/lib/money";
+import { centsToPesos, bpsToPercentLabel } from "@/lib/money";
 
 export default async function EditTaxRuleSetPage({
   params,
@@ -20,7 +20,7 @@ export default async function EditTaxRuleSetPage({
     taxableYear: String(ruleSet.taxableYear),
     effectiveFrom: toManilaDateInputValue(ruleSet.effectiveFrom),
     effectiveTo: toManilaDateInputValue(ruleSet.effectiveTo),
-    incomeTaxRateBps: String(ruleSet.incomeTaxRateBps),
+    incomeTaxRatePercent: bpsToPercentLabel(ruleSet.incomeTaxRateBps).replace("%", ""),
     vatThreshold: centsToPesos(ruleSet.vatThresholdCents),
     allowableDeduction: centsToPesos(ruleSet.allowableDeductionCents),
     q1DueMonthDay: ruleSet.q1DueMonthDay,
@@ -31,9 +31,9 @@ export default async function EditTaxRuleSetPage({
     eafsDeadlineOffsetDays: String(ruleSet.eafsDeadlineOffsetDays),
     eSubmissionEmail: ruleSet.eSubmissionEmail,
     clientDocsDueDay: String(ruleSet.clientDocsDueDay),
-    surchargeRateBps: ruleSet.surchargeRateBps != null ? String(ruleSet.surchargeRateBps) : "",
-    interestRateBpsPerAnnum:
-      ruleSet.interestRateBpsPerAnnum != null ? String(ruleSet.interestRateBpsPerAnnum) : "",
+    surchargeRatePercent: ruleSet.surchargeRateBps != null ? bpsToPercentLabel(ruleSet.surchargeRateBps).replace("%", "") : "",
+    interestRatePercentPerAnnum:
+      ruleSet.interestRateBpsPerAnnum != null ? bpsToPercentLabel(ruleSet.interestRateBpsPerAnnum).replace("%", "") : "",
     notes: ruleSet.notes ?? "",
   };
 
