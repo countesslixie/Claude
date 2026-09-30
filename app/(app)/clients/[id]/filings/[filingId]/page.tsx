@@ -20,7 +20,6 @@ import { StatusBadge } from "@/components/status-badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { CopyTextarea } from "@/components/copy-textarea";
 import { AdviceMessageCard } from "@/components/advice-message-card";
 import { WorkflowStepCard, type StepCardData } from "@/components/workflow-step-card";
 import { WorkflowGroupCard } from "@/components/workflow-group-card";
@@ -54,10 +53,10 @@ import {
 import { parseDocSlots, type DocSlotDef, type WorkflowStepStatus } from "@/lib/workflow/types";
 import { computeFilingCompleteness } from "@/lib/workflow/completeness";
 import { buildESubmissionEmail } from "@/lib/workflow/eSubmissionEmail";
-import { buildClientPackageEmail } from "@/lib/workflow/clientPackageEmail";
+import { buildClientPackageEmailForFiling } from "@/lib/workflow/clientPackageEmailData";
+import { ClientPackageStepCard } from "@/components/client-package-step-card";
 import { buildLiveAdviceMessageForFiling } from "@/lib/workflow/adviceMessage";
-import { ALL_PERIODS, ownSalesQuarterOf, periodToSingleQuarterCovered, quarterNumberDateRange } from "@/lib/tax/periods";
-import { extractFormSummary } from "@/lib/tax/compute";
+import { ownSalesQuarterOf, periodToSingleQuarterCovered, quarterNumberDateRange } from "@/lib/tax/periods";
 import { changedItems } from "@/lib/tax/amendment";
 import type { FilingComputationResult } from "@/lib/tax/types";
 
@@ -170,17 +169,6 @@ export default async function FilingDetailPage({
   // quarter, the same range addCertificate falls back to if it were ever
   // left blank (it no longer can be — see lib/validation/form2307.ts).
   const defaultCertificatePeriod = quarterNumberDateRange(filing.taxableYear, periodToSingleQuarterCovered(filing.period));
-
-  // Step 16's email draft needs to know the next filing in this taxable
-  // year, if one already exists (rework brief #2 §5) — omitted when there
-  // isn't one (e.g. ANNUAL is the last period of its taxable year).
-  const nextPeriodIndex = ALL_PERIODS.indexOf(filing.period) + 1;
-  const nextPeriod = nextPeriodIndex < ALL_PERIODS.length ? ALL_PERIODS[nextPeriodIndex] : null;
-  const nextFiling = nextPeriod
-    ? await prisma.filing.findUnique({
-        where: { clientId_taxableYear_period: { clientId: filing.clientId, taxableYear: filing.taxableYear, period: nextPeriod } },
-      })
-    : null;
 
   const ruleSetForEmail = await prisma.taxRuleSet.findUnique({ where: { taxableYear: filing.taxableYear } });
 
@@ -300,7 +288,8 @@ export default async function FilingDetailPage({
     SAWT_VALIDATION: validationDependencyReason,
     PREPARE_RETURN: prepareBlockReason,
     ADVISE_CLIENT: adviseBlockReason,
-    FILE_RETURN: filingOrderReason,
+    // D100 (brief #5r) — Prepare's reason wins over the filing-order reason when both apply.
+    FILE_RETURN: stepLockReason("FILE_RETURN", filing.workflowSteps, filingOrderReason),
   };
 
 
@@ -353,23 +342,10 @@ export default async function FilingDetailPage({
   // cumulative one); extractFormSummary normalizes the figures either
   // shape needs for a client-facing message, including a pre-#5d frozen
   // snapshot that predates the new shape despite sharing a formType.
-  const summaryFigures = extractFormSummary(sheet);
-  const clientFirstName = filing.client.registeredName.trim().split(/\s+/)[0] ?? filing.client.registeredName;
-  const clientEmail = buildClientPackageEmail({
-    clientRegisteredName: filing.client.registeredName,
-    clientFirstName,
-    period: filing.period,
-    taxableYear: filing.taxableYear,
-    filedAt: filing.filedAt,
-    grossSalesCents: summaryFigures.grossSalesCents,
-    taxDueCents: summaryFigures.taxDueCents,
-    cwtCents: summaryFigures.cwtCents,
-    isOverpayment: sheet.isOverpayment,
-    finalAmountCents: sheet.isOverpayment ? sheet.overpaymentCents : sheet.taxPayableCents,
-    hasCertificates: summaryFigures.cwtCents > 0,
-    nextPeriodLabel: nextPeriod,
-    nextPeriodDueDate: nextFiling?.adjustedDueDate ?? null,
-  });
+  // D102 (brief #5r) — step 16's email is built from the frozen sheet and
+  // the package's own document list (lib/workflow/clientPackageEmailData.ts),
+  // the same builder markStepDone uses to save it.
+  const clientEmail = await buildClientPackageEmailForFiling(filing.id);
 
   // Item 55 (brief #5f §4) — display-only on step 3, still stored on
   // ClientTaxYear, entered only via the starting figures page.
@@ -493,25 +469,9 @@ export default async function FilingDetailPage({
     />
   ) : null;
 
-  const sendClientPackageExtra = (
-    <div className="flex flex-col gap-3">
-      <a href={`/api/filings/${filing.id}/package`}>
-        <Button type="button" size="sm" variant="secondary">
-          Download package
-        </Button>
-      </a>
-      <div>
-        <p className="mb-1 text-xs font-medium text-ink-secondary">Draft email to client</p>
-        <p className="mb-1 text-xs text-faint">Subject: {clientEmail.subject}</p>
-        <CopyTextarea defaultValue={clientEmail.body} />
-      </div>
-    </div>
-  );
-
   const EXTRA_BY_STEP_CODE: Record<string, React.ReactNode> = {
     PREPARE_RETURN: prepareReturnExtra,
     ADVISE_CLIENT: adviseClientExtra,
-    SEND_CLIENT_PACKAGE: sendClientPackageExtra,
   };
 
   return (
@@ -835,6 +795,34 @@ export default async function FilingDetailPage({
                       />
                     );
                   }
+                  // D101/D102 (brief #5r) — step 16: the client email (To/Subject/Body,
+                  // each copyable), Mark done only, saved and collapsed once Done.
+                  if (step.stepCode === "SEND_CLIENT_PACKAGE" && clientEmail) {
+                    const savedEmail = step.status === "DONE" && filing.clientPackageEmailSavedAt != null;
+                    return (
+                      <ClientPackageStepCard
+                        key={step.id}
+                        stepId={step.id}
+                        clientId={filing.clientId}
+                        sequence={step.sequence}
+                        title={step.title}
+                        status={step.status}
+                        lockedMessage={stepLockReason(step.stepCode, filing.workflowSteps)}
+                        to={savedEmail ? filing.clientPackageEmailTo : clientEmail.to}
+                        subject={savedEmail ? (filing.clientPackageEmailSubject ?? clientEmail.subject) : clientEmail.subject}
+                        body={savedEmail ? (filing.clientPackageEmailBody ?? clientEmail.body) : clientEmail.body}
+                        hasSavedEmail={savedEmail}
+                        doneDateLabel={
+                          filing.workflowSteps.find((x) => x.id === step.id)?.completedAt
+                            ? formatManilaDate(filing.workflowSteps.find((x) => x.id === step.id)!.completedAt!)
+                            : null
+                        }
+                        savedAtLabel={filing.clientPackageEmailSavedAt ? formatManilaDate(filing.clientPackageEmailSavedAt) : null}
+                        skippedReason={step.skippedReason}
+                        downloadHref={`/api/filings/${filing.id}/package`}
+                      />
+                    );
+                  }
                   // D75 (brief #5m §3.2) — step 8 (MAKE_PAYMENT): its own
                   // bespoke card, amount/date/channel fields + Mark done,
                   // locked until File is Done.
@@ -894,7 +882,8 @@ export default async function FilingDetailPage({
                         step.stepCode === "ADVISE_CLIENT" ||
                         step.stepCode === "PREPARE_RETURN" ||
                         step.stepCode === "FILE_RETURN" ||
-                        step.stepCode === "EAFS_SUBMIT"
+                        step.stepCode === "EAFS_SUBMIT" ||
+                        step.stepCode === "SEND_CLIENT_PACKAGE"
                           ? "markDoneOnly"
                           : "full"
                       }

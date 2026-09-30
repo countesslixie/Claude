@@ -16,7 +16,7 @@ import { summarizeGroup, WORKFLOW_GROUPS, FILE_GROUP_NO_START_NO_SKIP, type Grou
 import { checkSendClientPackageReadiness } from "@/lib/workflow/docSlots";
 import { computeFilingCompleteness } from "@/lib/workflow/completeness";
 import { parseDocSlots } from "@/lib/workflow/types";
-import { markEarlierQuartersFiled } from "../helpers/filedEarlier";
+import { markEarlierQuartersFiled, resolvePrepare } from "../helpers/filedEarlier";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
@@ -91,6 +91,7 @@ describe("workflow step actions", () => {
     const fileReturnStep = await prisma.workflowStep.findFirstOrThrow({
       where: { filingId, stepCode: "FILE_RETURN" },
     });
+    await resolvePrepare(fileReturnStep.filingId);
     await markStepDone(fileReturnStep.id);
     for (const [stepCode, slotCode] of [
       ["SAVE_SUBMISSION_SS", "submission_screenshot"],
@@ -188,6 +189,7 @@ describe("workflow step actions", () => {
     const fileReturnStep = await prisma.workflowStep.findFirstOrThrow({
       where: { filingId: filing.id, stepCode: "FILE_RETURN" },
     });
+    await resolvePrepare(fileReturnStep.filingId);
     const trrcStep = await prisma.workflowStep.findFirstOrThrow({
       where: { filingId: filing.id, stepCode: "RECEIVE_TRRC" },
     });
@@ -251,8 +253,10 @@ describe("workflow step actions", () => {
     // (see the dedicated Pay-group test below); D89 (brief #5o) took Skip away
     // from step 15 too, so SEND_CLIENT_PACKAGE (step 16) is the ordinary
     // skippable step used here for the generic reason-required rule.
+    // D101 (brief #5r) took Skip off step 16 as well, so step 2
+    // (RECEIVE_2307) is now the one step left that can be skipped.
     const step = await prisma.workflowStep.findFirstOrThrow({
-      where: { filingId: filing.id, stepCode: "SEND_CLIENT_PACKAGE" },
+      where: { filingId: filing.id, stepCode: "RECEIVE_2307" },
     });
 
     const blocked = await skipStep(step.id, "");
@@ -781,14 +785,15 @@ describe("workflow step actions", () => {
       expect(updated.skippedReason).toBeNull();
     });
 
-    it("unskipStep restores any other skippable step to PENDING", async () => {
+    it("unskipStep restores a step skipped before it lost its Skip button to PENDING", async () => {
       const { filing } = await makeClientWithQ2Filing("p5i-unskip-other-step");
-      // D75 (brief #5m §3) -- MAKE_PAYMENT can no longer be skipped at
-      // all; step 16 is still an ordinary skippable step (D89 took Skip off step 15).
+      // D101 (brief #5r) -- step 16 can no longer be skipped, but a filing
+      // skipped before then may still carry a Skipped step 16 in old data; its
+      // Undo skip must keep working, so put it in that state directly.
       const eafsStep = await prisma.workflowStep.findFirstOrThrow({
         where: { filingId: filing.id, stepCode: "SEND_CLIENT_PACKAGE" },
       });
-      await skipStep(eafsStep.id, "Not required this quarter.");
+      await prisma.workflowStep.update({ where: { id: eafsStep.id }, data: { status: "SKIPPED", skippedReason: "Not required this quarter." } });
 
       const result = await unskipStep(eafsStep.id);
       expect(result.ok).toBe(true);
@@ -871,6 +876,7 @@ describe("workflow step actions", () => {
       const fileReturnStep = await prisma.workflowStep.findFirstOrThrow({
         where: { filingId: filing.id, stepCode: "FILE_RETURN" },
       });
+      await resolvePrepare(fileReturnStep.filingId);
       expect((await markStepDone(fileReturnStep.id)).ok).toBe(true);
     });
 
@@ -901,6 +907,7 @@ describe("workflow step actions", () => {
       const fileReturnStep = await prisma.workflowStep.findFirstOrThrow({
         where: { filingId: filing.id, stepCode: "FILE_RETURN" },
       });
+      await resolvePrepare(fileReturnStep.filingId);
       expect((await markStepDone(fileReturnStep.id)).ok).toBe(true);
 
       for (const [stepCode, slotCode] of [
@@ -927,6 +934,7 @@ describe("workflow step actions", () => {
       const fileReturnStep = await prisma.workflowStep.findFirstOrThrow({
         where: { filingId: filing.id, stepCode: "FILE_RETURN" },
       });
+      await resolvePrepare(fileReturnStep.filingId);
       await markStepDone(fileReturnStep.id);
 
       const step = await prisma.workflowStep.findFirstOrThrow({
@@ -964,6 +972,7 @@ describe("workflow step actions", () => {
       const fileReturnStep = await prisma.workflowStep.findFirstOrThrow({
         where: { filingId: filing.id, stepCode: "FILE_RETURN" },
       });
+      await resolvePrepare(fileReturnStep.filingId);
       await markStepDone(fileReturnStep.id);
 
       const step = await prisma.workflowStep.findFirstOrThrow({
@@ -988,6 +997,7 @@ describe("workflow step actions", () => {
       const fileReturnStep = await prisma.workflowStep.findFirstOrThrow({
         where: { filingId: filing.id, stepCode: "FILE_RETURN" },
       });
+      await resolvePrepare(fileReturnStep.filingId);
       await markStepDone(fileReturnStep.id);
 
       const trrcStep = await prisma.workflowStep.findFirstOrThrow({
@@ -1081,6 +1091,7 @@ describe("workflow step actions", () => {
       const fileReturnStep = await prisma.workflowStep.findFirstOrThrow({
         where: { filingId: filing.id, stepCode: "FILE_RETURN" },
       });
+      await resolvePrepare(fileReturnStep.filingId);
       await markStepDone(fileReturnStep.id);
       const filedAt = (await prisma.workflowStep.findUniqueOrThrow({ where: { id: fileReturnStep.id } })).completedAt;
 
@@ -1107,6 +1118,7 @@ describe("workflow step actions", () => {
       const fileReturnStep = await prisma.workflowStep.findFirstOrThrow({
         where: { filingId: filing.id, stepCode: "FILE_RETURN" },
       });
+      await resolvePrepare(fileReturnStep.filingId);
       await markStepDone(fileReturnStep.id);
 
       const trrcStep = await prisma.workflowStep.findFirstOrThrow({
@@ -1139,6 +1151,7 @@ describe("workflow step actions", () => {
       const fileReturnStep = await prisma.workflowStep.findFirstOrThrow({
         where: { filingId: filing.id, stepCode: "FILE_RETURN" },
       });
+      await resolvePrepare(fileReturnStep.filingId);
       await markStepDone(fileReturnStep.id);
 
       const trrcStep = await prisma.workflowStep.findFirstOrThrow({

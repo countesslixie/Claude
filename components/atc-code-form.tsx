@@ -86,7 +86,7 @@ export function AtcCodeForm({
       {!checked("verifiedAgainstIssuance", false) && (
         <p className="text-xs text-amber">
           Unverified — this code and rate have not been confirmed against the current BIR ATC list. It will
-          still show as unverified wherever it&rsquo;s used (D19).
+          still show as unverified wherever it&rsquo;s used.
         </p>
       )}
 

@@ -553,6 +553,15 @@ model Filing {
   dataEmailBody    String?
   dataEmailSavedAt DateTime?
 
+  // Brief #5r (D101) — step 16's client email, saved exactly as sent when
+  // SEND_CLIENT_PACKAGE is marked Done (same pattern as step 4 and step 12).
+  // Null until then, and stays null for a filing whose step 16 was Done
+  // before this existed — the card then shows "Done [date]" with no email.
+  clientPackageEmailTo      String?
+  clientPackageEmailSubject String?
+  clientPackageEmailBody    String?
+  clientPackageEmailSavedAt DateTime?
+
   // Brief #5f §3 — item 61 (1701Q) / item 63 (1701A), "Other Tax
   // Credits/Payments." One figure PER RETURN now (supersedes brief #5e's
   // year-level ClientTaxYear.otherCreditsCents) — it can change from
@@ -772,6 +781,13 @@ model TaxRuleSet {
   // is addressed to, as given by the bookkeeper (never a literal in code, D4).
   // Editable on the tax rule set screen; confirm it against BIR before live use (D19).
   eSubmissionEmail String @default("esubmission@bir.gov.ph")
+
+  // Brief #5r (D102) — the bookkeeper's own date for receiving a client's
+  // documents for the ANNUAL return, "MM-DD" of the year AFTER the taxable
+  // year. Named in the step 16 email's "Next filing" line. Not the same as
+  // internalFilingTarget (D14, her own filing target); never a literal in
+  // code (D4).
+  annualDocsDueMonthDay String @default("02-15")
 
   // Late filing exposure (informational only — see SPEC.md 3.7)
   surchargeRateBps          Int?

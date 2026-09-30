@@ -70,7 +70,7 @@ No `getUTC*()` extraction; calendar-day comparisons via `manilaCalendarDay()`; e
 
 **D21 — Server Actions rather than REST API routes** *(2026-08)*
 
-**D22 — Filing package manifest is a text file, not PDF** *(2026-08)*
+**D22 — Filing package manifest is a text file, not PDF** *(2026-08)* — **⛔ superseded 2026-09-30 by D103: the package zip has no manifest at all.**
 
 **D23 — Pause building; validate against a live cycle before continuing** *(2026-09)*
 *Vindicated twice.* Two hours of hands-on use produced every finding in D24–D29. No amount of further building would have produced them.
@@ -880,6 +880,34 @@ Neither card has Skip or Start (D33, D51), but `skipStep` did not refuse them. I
 **D99 — The Form 2307 register shows plain status labels** *(2026-09-30, brief #5q; extends D63)*
 
 `form2307StatusLabel` (`lib/workflow/status.ts`, beside `filingStatusLabel`/`stepStatusLabel`): Received, Recorded, Claimed on return, Included in SAWT, Acknowledged, Validated. The register at `/clients/[id]/form-2307` was the only place that rendered the raw enum (confirmed by grep).
+
+**D100 — Step 5 is locked until all of Prepare (steps 1–4) is resolved** *(2026-09-30, brief #5r, her decision)*
+
+Found on Ernesto Villamor's Q3: Prepare was pending and step 5's Mark done was live, so marking it would have filed the return and frozen a snapshot (D83) with no computation behind it. *Rule:* step 1 Done; step 2 Done or Skipped; steps 3 and 4 Done. Wording: "Finish Prepare first."
+
+**✅ BUILT 2026-09-30, brief #5r.** `prepareFinishedBlockReason` (`lib/workflow/groups.ts`) is checked in `markStepDone`'s FILE_RETURN path before the filing-order check (D95) and before anything is written; `stepLockReason` returns it for FILE_RETURN, so the card's greyed-out Mark done carries it as a tooltip (D41). When both locks apply, the Prepare reason is shown — she can act on it on the same filing. Next (D84) and the Next banner (D77) never offer step 5 while it is locked, because `nextActionForFiling` skips locked steps and the open Prepare step comes first in group order. The seed needed no change: every scenario files through the app's own actions, and all six seeded filed returns have Prepare resolved (checked). Existing tests that filed step 5 directly now resolve Prepare first through `resolvePrepare` (`tests/helpers/filedEarlier.ts`).
+
+**D101 — Step 16 is Mark done only, saves its email when done, and collapses** *(2026-09-30, brief #5r, her decision after her first walk of the Client package group)*
+
+No Start, no Skip (and no skip-reason box); `skipStep` and `markStepInProgress` refuse `SEND_CLIENT_PACKAGE` server-side, by adding it to `NO_START_NO_SKIP_STEP_CODES` (D65/D75), and `nextActionModeForStepCode` returns "markDoneOnly" so the Next banner matches the card (D77). Marking it Done saves the exact email on the filing — new `Filing.clientPackageEmailTo/Subject/Body/SavedAt`, the same shape as step 12's (D87), chosen over a shared table because it is what steps 4 and 12 already do — and the card collapses to "Emailed [date]: [subject]" with a Show email link. The email box, Copy buttons and Download package are then hidden (Download was not kept on the collapsed line: the documents still live on their own steps). A filing whose step 16 was Done before this has no saved email and reads "Done [date]" with no Show email — nothing is invented. Step 2 is now the only step left that can be skipped; a step 16 skipped in old data still shows "Skipped" with Undo skip.
+
+**D102 — Step 16's email: a summary that adds up, an attachments list that matches the zip, right names, To/Subject/Body** *(2026-09-30, brief #5r, her decisions)*
+
+*Three errors on Rosario Garcia's Q3:* the summary left out tax paid on earlier quarters (item 56), so ₱26,800 − ₱25,000 did not give ₱8,200; it put one quarter's gross next to a year-to-date tax due; it listed "Form 2307 certificates" for a client with none; and "Next filing: 1701Q for ANNUAL" named the wrong form and a raw code. *Now:* the summary is built from the filing's frozen sheet (`getFilingSheet`, D83), following the return's own lines: gross sales this quarter, taxable income and tax due *year to date*, then each credit as a "Less:" line (excess credit from last year, tax paid on earlier quarters, creditable withholding, other credits — zero lines left out), a "Rounding to whole pesos" line only when the form's whole-peso total differs from the printed lines, and Tax payable or Overpayment last. The Annual (1701A) uses its own lines; Form 1701 and pre-#5d snapshots use the older shape. Tests check that the printed lines reconcile to the final figure for payable, overpayment, rounding, annual and legacy cases. The "attached" list is the package's own document list (`lib/documents/filingPackage.ts`, also what the zip is built from), labelled in plain words ("Filed return", "Proof of payment", "Form 2307 — [payor]"). The next-filing line uses the right form and a plain period ("Annual ITR (1701A)", "Q3 2026"). To / Subject / Body each have a Copy; a client with no email shows one muted line, "Client email missing — add it on the client page", which never blocks (`lib/workflow/clientPackageEmail.ts`, `clientPackageEmailData.ts`).
+
+*Her documents date for the Annual (D4: a setting, not a literal).* When the next filing is the Annual, the line ends "Please send required documents by Feb 15, 2027." New `TaxRuleSet.annualDocsDueMonthDay` (default `02-15`, the year after the taxable year), editable on the tax rule set screen beside the eSubmission address; migration `20260930090000_brief_5r_client_package_email_and_docs_deadline`. It is **not** D14's Mar 31 (`internalFilingTarget`, her own *filing* target), which is untouched. No weekend/holiday shifting: the app's one client-facing date rule (D53/brief #5e's payment lead time) exists to land a *payment* before a due date, which does not apply to a date on which she receives documents. The quarterly next-filing line is unchanged in structure ("Next filing: 1701Q for Q3 2026, due Nov 16, 2026.").
+
+**D103 — The package zip is flat and has no manifest** *(2026-09-30, brief #5r, her decision; supersedes D22)*
+
+Every document sits directly in the zip under its saved name (a short " (2)" suffix if two names collide — never overwritten); the step-code folders and `manifest.txt` are gone. The app's own document records remain the audit trail. The zip is named plainly — "Rosario Garcia - 1701Q Q3 2026.zip" (Annual: "… - 1701A Annual 2026.zip") — where it used to be `[client code]-[year]-[period]-package.zip`.
+
+**D104 — A sticky client bar on the client page and its Income, Form 2307s and Payors pages** *(2026-09-30, brief #5r, her request)*
+
+`components/client-sticky-bar.tsx`, one component on all four pages, modelled on the filing page's bar (D80): shown only once the page header scrolls out of view, beside the menu (never over it), with the client's name (a link to the client page), TIN and the Income, Form 2307s and Payors buttons. It lives on different pages from the filing bar, so the two never appear together.
+
+**D105 — The Form 2307 register opens on the whole year; no internal references in screen text** *(2026-09-30, brief #5r)*
+
+The register defaults to "All periods" (same set as Annual's: quarters 1–4) with the year/period filter kept; before, it opened on Q1, so a client whose certificates were all on Q3 opened on an empty table. Brief numbers, D-numbers, "SPEC.md" and "Phase" labels came off the screen — changed: Settings hub (tax rule sets and ATC cards, the later-features list — "Workflow step template" removed as the app has no custom steps by design; "Backup" kept with no phase label; heading now "Not built yet"), ATC codes page and form, Holidays page, Tax rule sets page, the tax rule set form's three section headings, the Form 2307 register's intro, the election-block error message (`markStepDone`) and two computation-sheet source notes (`lib/tax/compute.ts`; frozen snapshots keep the wording they were written with). Code comments were left alone. *Also in this brief:* the filing board scrolls sideways inside its own area, capped to the window's height so its scrollbar is on screen, with the column names kept in view and columns 224px wide instead of 256px — it cannot fit seven columns at 1280px without squeezing the cards.
 
 ---
 

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ClientStickyBar } from "@/components/client-sticky-bar";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { Button } from "@/components/ui/button";
@@ -33,7 +34,8 @@ export default async function PayorsPage({
 
   return (
     <div className="mx-auto max-w-3xl">
-      <div className="mb-4 flex items-center justify-between">
+      <ClientStickyBar headerId="client-page-header" clientId={id} name={client.registeredName} tin={client.tin} />
+      <div id="client-page-header" className="mb-4 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-ink">
             Payors — {client.registeredName}

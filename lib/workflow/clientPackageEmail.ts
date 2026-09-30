@@ -1,76 +1,166 @@
 import { centsToPesos } from "@/lib/money";
 import { formatManilaDate } from "@/lib/dates";
-import type { Period } from "@/lib/tax/types";
+import { formLabel } from "@/lib/workflow/eSubmissionEmail";
+import type { FilingComputationResult, Period } from "@/lib/tax/types";
 
 /**
- * Step 16's copyable client email draft (rework brief #2 §5). A starting
- * point the bookkeeper edits before sending — she owns the wording, this
- * just fills in what the filing already knows. Lines that don't apply are
- * omitted rather than sent blank (§5: no certificates -> no certificates
- * line; overpayment replaces the tax-paid line rather than sitting beside
- * it).
+ * Step 16's copyable client email (rework brief #2 §5; rebuilt by D102,
+ * brief #5r). A starting point the bookkeeper edits before sending — she
+ * owns the wording, this just fills in what the filing already knows.
+ *
+ * The summary is read straight off the filing's FROZEN sheet (getFilingSheet,
+ * D83), following the return's own lines, and it reconciles: tax due, less
+ * each credit, equals the payable / overpayment printed last. Zero lines
+ * are left out. The "attached" list is the package's own document list
+ * (lib/documents/filingPackage.ts), so it can never name a file the zip
+ * doesn't hold.
  */
+export type SummaryLineKind = "figure" | "credit" | "result";
+
+export interface SummaryLine {
+  kind: SummaryLineKind;
+  label: string;
+  amountCents: number;
+}
+
+/** "Annual ITR" or "Q3 2026" — never a raw period code. */
+export function periodPlainName(period: Period, taxableYear: number): string {
+  return period === "ANNUAL" ? "Annual ITR" : `${period} ${taxableYear}`;
+}
+
+/** "10-15" + 2027 -> "Oct 15, 2027". Straight from the setting; no Date, so no timezone slips. */
+export function formatMonthDayLabel(monthDay: string, year: number): string {
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const [mm, dd] = monthDay.split("-").map((n) => Number(n));
+  return `${months[(mm ?? 1) - 1]} ${dd}, ${year}`;
+}
+
+/**
+ * The email's summary lines from the frozen sheet, in the return's own
+ * order. Credits are positive amounts under "Less:" labels; a "Rounding"
+ * credit (positive or negative) appears only when the sheet's whole-peso
+ * total credits differ from the sum of the printed lines.
+ */
+export function buildSummaryLines(sheet: FilingComputationResult): SummaryLine[] {
+  const lines: SummaryLine[] = [];
+  const figure = (label: string, amountCents: number, always = true) => {
+    if (always || amountCents !== 0) lines.push({ kind: "figure", label, amountCents });
+  };
+  const credit = (label: string, amountCents: number) => {
+    if (amountCents !== 0) lines.push({ kind: "credit", label, amountCents });
+  };
+  const rounding = (totalCreditsCents: number) => {
+    const printed = lines.filter((l) => l.kind === "credit").reduce((sum, l) => sum + l.amountCents, 0);
+    credit("Rounding to whole pesos", totalCreditsCents - printed);
+  };
+
+  if ("item54TaxDueCents" in sheet) {
+    figure("Gross sales this quarter", sheet.item47GrossSalesCents);
+    figure("Other (non-operating) income this quarter", sheet.item48NonOperatingCents, false);
+    figure("Taxable income, year to date", sheet.item53TaxableIncomeCents);
+    figure("Tax due, year to date", sheet.item54TaxDueCents);
+    credit("Less: excess credit from last year", sheet.item55PriorYearExcessCreditCents);
+    credit("Less: tax paid on earlier quarters", sheet.item56PriorPeriodPaymentsCents);
+    credit("Less: creditable withholding (Form 2307)", sheet.item57CwtPriorQuartersCents + sheet.item58CwtThisQuarterCents);
+    credit("Less: other credits", sheet.item61OtherCreditsCents);
+    rounding(sheet.item62TotalCreditsCents);
+  } else if ("item56TaxDueCents" in sheet) {
+    figure("Gross sales for the year", sheet.item47GrossSalesCents);
+    figure("Other (non-operating) income for the year", sheet.item52NonOperatingCents, false);
+    figure("Taxable income for the year", sheet.item55TaxableIncomeCents);
+    figure("Tax due for the year", sheet.item56TaxDueCents);
+    credit("Less: excess credit from last year", sheet.item57PriorYearExcessCreditCents);
+    credit("Less: tax paid on the quarterly returns", sheet.item58PriorPeriodPaymentsCents);
+    credit("Less: creditable withholding (Form 2307)", sheet.item59CwtQ1ToQ3Cents + sheet.item60CwtQ4Cents);
+    credit("Less: other credits", sheet.item63OtherCreditsCents);
+    rounding(sheet.item64TotalCreditsCents);
+  } else {
+    // Legacy shape: Form 1701 (mixed-income annual) and any snapshot frozen before the form-line sheets.
+    figure("Gross sales, year to date", sheet.cumulativeGrossSalesCents);
+    figure("Taxable income, year to date", sheet.taxableBaseCents);
+    figure("Tax due, year to date", sheet.incomeTaxDueCents);
+    credit("Less: excess credit from last year", sheet.priorYearExcessCreditCents);
+    credit("Less: tax paid on earlier returns", sheet.priorPeriodPaymentsCents);
+    credit("Less: creditable withholding (Form 2307)", sheet.cumulativeCwtCents);
+  }
+
+  lines.push(
+    sheet.isOverpayment
+      ? { kind: "result", label: "Overpayment", amountCents: sheet.overpaymentCents }
+      : { kind: "result", label: "Tax payable", amountCents: sheet.taxPayableCents },
+  );
+  return lines;
+}
+
+/** Tax due less every credit — positive is payable, negative is an overpayment. For checking that the printed lines add up. */
+export function signedResultOf(lines: SummaryLine[]): number {
+  const taxDue = lines.filter((l) => l.kind === "figure" && /^Tax due/.test(l.label)).reduce((s, l) => s + l.amountCents, 0);
+  const credits = lines.filter((l) => l.kind === "credit").reduce((s, l) => s + l.amountCents, 0);
+  return taxDue - credits;
+}
+
 export interface ClientPackageEmailInput {
   clientRegisteredName: string;
   clientFirstName: string;
+  /** The client record's email, or null — the To line then reads as missing and never blocks. */
+  clientEmail: string | null;
   period: Period;
   taxableYear: number;
+  /** "F1701Q" | "F1701A" | "F1701" — Filing.formType. */
+  formType: string;
   filedAt: Date | null;
-  grossSalesCents: number;
-  taxDueCents: number;
-  cwtCents: number;
-  isOverpayment: boolean;
-  finalAmountCents: number;
-  hasCertificates: boolean;
-  nextPeriodLabel: Period | null;
-  nextPeriodDueDate: Date | null;
+  /** The filing's frozen sheet (getFilingSheet, D83). */
+  sheet: FilingComputationResult;
+  /** The package's own document list (lib/documents/filingPackage.ts). */
+  attachments: { label: string; filename: string }[];
+  /** The next return of this taxable year, if any. */
+  next: { period: Period; taxableYear: number; formType: string; dueDate: Date } | null;
+  /** Already formatted, e.g. "Feb 15, 2027" — only used when the next filing is the Annual. */
+  annualDocsDueLabel: string | null;
 }
 
-export function buildClientPackageEmail(input: ClientPackageEmailInput): { subject: string; body: string } {
+export interface ClientPackageEmail {
+  /** null when the client has no email on record. */
+  to: string | null;
+  subject: string;
+  body: string;
+}
+
+function money(cents: number): string {
+  return centsToPesos(cents, { withSymbol: true });
+}
+
+export function buildClientPackageEmail(input: ClientPackageEmailInput): ClientPackageEmail {
   const filedDateLabel = input.filedAt ? formatManilaDate(input.filedAt) : "[date filed]";
-  const subject = `${input.clientRegisteredName} — 1701Q ${input.period} ${input.taxableYear}, filed ${filedDateLabel}`;
+  const form = formLabel(input.formType);
+  const periodName = periodPlainName(input.period, input.taxableYear);
+  const returnName = input.period === "ANNUAL" ? `Annual ITR (${form}) for ${input.taxableYear}` : `${form} for ${periodName}`;
+  const subject = `${input.clientRegisteredName} — ${form} ${periodName}${input.period === "ANNUAL" ? ` (${input.taxableYear})` : ""}, filed ${filedDateLabel}`;
 
-  const contentsLines = [
-    "  · Filed return (1701Q)",
-    "  · Proof of payment",
-    "  · BIR confirmation (TRRC)",
-  ];
-  if (input.hasCertificates) contentsLines.push("  · Form 2307 certificates claimed this quarter");
+  const summary = buildSummaryLines(input.sheet);
+  const width = Math.max(...summary.map((l) => l.label.length)) + 2;
+  const summaryLines = summary.map((l) => `  ${l.label.padEnd(width)}${money(l.amountCents)}`);
 
-  const summaryLines = [
-    `  Gross sales/receipts        ${centsToPesos(input.grossSalesCents, { withSymbol: true })}`,
-    `  Tax due                     ${centsToPesos(input.taxDueCents, { withSymbol: true })}`,
-  ];
-  if (input.hasCertificates) {
-    summaryLines.push(`  Less creditable withholding ${centsToPesos(input.cwtCents, { withSymbol: true })}`);
+  const bodyLines = [`Hi ${input.clientFirstName},`, "", `Your ${returnName} has been filed.`, ""];
+
+  if (input.attachments.length > 0) {
+    bodyLines.push("The attached package contains:", "", ...input.attachments.map((a) => `  · ${a.label} — ${a.filename}`), "");
   }
-  summaryLines.push(
-    input.isOverpayment
-      ? `  Overpayment carried forward  ${centsToPesos(input.finalAmountCents, { withSymbol: true })}`
-      : `  Tax paid                     ${centsToPesos(input.finalAmountCents, { withSymbol: true })}`,
-  );
 
-  const bodyLines = [
-    `Hi ${input.clientFirstName},`,
-    "",
-    `Your 1701Q for ${input.period} ${input.taxableYear} has been filed. The attached package contains:`,
-    "",
-    ...contentsLines,
-    "",
-    "Summary for the period:",
-    "",
-    ...summaryLines,
-    "",
-  ];
+  bodyLines.push("Summary:", "", ...summaryLines, "");
 
-  if (input.nextPeriodLabel && input.nextPeriodDueDate) {
-    bodyLines.push(
-      `Next filing: 1701Q for ${input.nextPeriodLabel}, due ${formatManilaDate(input.nextPeriodDueDate)}.`,
-      "",
-    );
+  if (input.next) {
+    const nextForm = formLabel(input.next.formType);
+    const due = formatManilaDate(input.next.dueDate);
+    if (input.next.period === "ANNUAL") {
+      const docs = input.annualDocsDueLabel ? ` Please send required documents by ${input.annualDocsDueLabel}.` : "";
+      bodyLines.push(`Next filing: Annual ITR (${nextForm}), due ${due}.${docs}`, "");
+    } else {
+      bodyLines.push(`Next filing: ${nextForm} for ${periodPlainName(input.next.period, input.next.taxableYear)}, due ${due}.`, "");
+    }
   }
 
   bodyLines.push("Please keep this for your records.");
 
-  return { subject, body: bodyLines.join("\n") };
+  return { to: input.clientEmail?.trim() || null, subject, body: bodyLines.join("\n") };
 }

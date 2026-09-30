@@ -543,10 +543,10 @@ describe("nextActionModeForStepCode (D77)", () => {
     }
   });
 
-  it("D86-D89 (brief #5o): 11 and 13 are go-to-step (self-completing), 12 and 15 Mark done only; only step 16 keeps Start + Mark done", () => {
+  it("D86-D89, D101 (briefs #5o, #5r): 11 and 13 are go-to-step (self-completing); 12, 15 and 16 are Mark done only", () => {
     for (const code of ["ALPHALIST_ENTRY", "SAWT_ACK"]) expect(nextActionModeForStepCode(code)).toBe("goToStep");
     for (const code of ["EMAIL_DAT", "EAFS_SUBMIT"]) expect(nextActionModeForStepCode(code)).toBe("markDoneOnly");
-    expect(nextActionModeForStepCode("SEND_CLIENT_PACKAGE")).toBe("full");
+    expect(nextActionModeForStepCode("SEND_CLIENT_PACKAGE")).toBe("markDoneOnly");
   });
 });
 

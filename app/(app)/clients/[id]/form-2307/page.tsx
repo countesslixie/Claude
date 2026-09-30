@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ClientStickyBar } from "@/components/client-sticky-bar";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { Button } from "@/components/ui/button";
@@ -33,7 +34,10 @@ export default async function Form2307RegisterPage({
   if (!client) notFound();
 
   const taxableYear = year ? Number(year) : currentTaxableYearManila();
-  const period: Period = ALL_PERIODS.includes(periodParam as Period) ? (periodParam as Period) : "Q1";
+  // D105 (brief #5r) — opens on the whole year ("All periods"), not Q1, so a
+  // client whose certificates are all on Q3 doesn't open on an empty table.
+  const selection: Period | "ALL" = ALL_PERIODS.includes(periodParam as Period) ? (periodParam as Period) : "ALL";
+  const period: Period = selection === "ALL" ? "ANNUAL" : selection; // the whole year's certificates are the same set as Annual's
   const quarters = periodToQuarters(period);
 
   const certificates = await prisma.form2307.findMany({
@@ -46,13 +50,14 @@ export default async function Form2307RegisterPage({
 
   return (
     <div className="mx-auto max-w-5xl">
-      <div className="mb-4 flex items-center justify-between">
+      <ClientStickyBar headerId="client-page-header" clientId={id} name={client.registeredName} tin={client.tin} />
+      <div id="client-page-header" className="mb-4 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-ink">
             Form 2307 register — {client.registeredName}
           </h1>
           <p className="text-sm text-faint">
-            Read-only. Certificates are entered under step 2 of the filing they belong to (brief #4b) —
+            Read-only. Certificates are entered under step 2 of the filing they belong to —
             open a filing and go to &quot;Receive Form 2307&quot; to add or remove one. A 2307 is a credit
             record — what one payor paid and withheld. It never contributes to gross sales; declared
             income is entered separately on the{" "}
@@ -78,10 +83,11 @@ export default async function Form2307RegisterPage({
           className="h-8 w-24 rounded-md border border-line px-2 text-sm"
         />
         <label className="text-sm text-ink-secondary">Period</label>
-        <select name="period" defaultValue={period} className="h-8 rounded-md border border-line px-2 text-sm">
+        <select name="period" defaultValue={selection} className="h-8 rounded-md border border-line px-2 text-sm">
+          <option value="ALL">All periods</option>
           {ALL_PERIODS.map((p) => (
             <option key={p} value={p}>
-              {p}
+              {p === "ANNUAL" ? "Annual" : p}
             </option>
           ))}
         </select>

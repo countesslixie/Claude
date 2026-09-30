@@ -6,12 +6,13 @@ import { prisma } from "@/lib/prisma";
 import { uploadDocument } from "@/lib/actions/documents";
 import { markStepDone } from "@/lib/actions/workflowSteps";
 import { generateFilingsForClientYear } from "@/lib/workflow/filingGeneration";
+import { buildClientPackageEmailForFiling } from "@/lib/workflow/clientPackageEmailData";
 import { GET } from "@/app/api/filings/[id]/package/route";
-import { markEarlierQuartersFiled } from "../helpers/filedEarlier";
+import { markEarlierQuartersFiled, resolvePrepare } from "../helpers/filedEarlier";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
-/** SPEC.md §16 item 19: the filing package zip contains every document plus a manifest listing empty slots. */
+/** D103 (brief #5r): the filing package zip is flat, has no manifest, and matches the email's attached list (supersedes SPEC.md §16 item 19's manifest). */
 describe("GET /api/filings/[id]/package", () => {
   const createdClientIds: string[] = [];
   let clientCode = "";
@@ -28,7 +29,7 @@ describe("GET /api/filings/[id]/package", () => {
     }
   });
 
-  it("zips every attached document and lists required slots still empty in the manifest", async () => {
+  it("zips every attached document flat, with no manifest, matching the email's list", async () => {
     clientCode = `p3-pkg-test-${Date.now()}`;
     const client = await prisma.client.create({
       data: {
@@ -64,6 +65,7 @@ describe("GET /api/filings/[id]/package", () => {
     const fileReturnStep = await prisma.workflowStep.findFirstOrThrow({
       where: { filingId: filing.id, stepCode: "FILE_RETURN" },
     });
+    await resolvePrepare(fileReturnStep.filingId);
     await markStepDone(fileReturnStep.id);
 
     // Attach a document to SAVE_FORM_COPY (step 7)...
@@ -78,7 +80,6 @@ describe("GET /api/filings/[id]/package", () => {
     const uploadResult = await uploadDocument(formData);
     expect(uploadResult.ok).toBe(true);
 
-    // ...but leave SAVE_PROOF_PAYMENT (step 9) empty, so it shows in the manifest's empty-slots section.
 
     const response = await GET(new Request(`http://localhost/api/filings/${filing.id}/package`), {
       params: Promise.resolve({ id: filing.id }),
@@ -89,12 +90,17 @@ describe("GET /api/filings/[id]/package", () => {
     const arrayBuffer = await response.arrayBuffer();
     const zip = await JSZip.loadAsync(arrayBuffer);
 
+    // D103 (brief #5r) -- flat, no folders, no manifest, saved names kept.
     const zipFilenames = Object.keys(zip.files);
-    expect(zipFilenames.some((f) => f.includes("filed-form.pdf"))).toBe(true);
-    expect(zipFilenames).toContain("manifest.txt");
+    expect(zipFilenames).toEqual(["filed-form.pdf"]);
+    expect(zipFilenames.some((f) => f.includes("/"))).toBe(false);
+    expect(zipFilenames).not.toContain("manifest.txt");
+    expect(response.headers.get("Content-Disposition")).toContain(`Phase 3 Package Test Client - 1701Q Q2 2026.zip`);
 
-    const manifestText = await zip.file("manifest.txt")!.async("string");
-    expect(manifestText).toContain("SAVE_FORM_COPY / filed_form — filed-form.pdf");
-    expect(manifestText).toContain("SAVE_PROOF_PAYMENT / proof — Payment confirmation"); // listed as empty
+    // The email's "attached" list comes from the same source as the zip, so the two agree.
+    const email = await buildClientPackageEmailForFiling(filing.id);
+    expect(email).not.toBeNull();
+    const listed = [...email!.body.matchAll(/^ {2}· .* — (.+)$/gm)].map((m) => m[1]);
+    expect(listed.sort()).toEqual(zipFilenames.sort());
   });
 });

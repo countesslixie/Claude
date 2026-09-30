@@ -8,6 +8,8 @@ import { markStepDone, skipStep } from "@/lib/actions/workflowSteps";
 import { assembleAndComputeFiling, effectiveOtherCreditsFor } from "@/lib/filingComputation";
 import { generateFilingsForClientYear } from "@/lib/workflow/filingGeneration";
 
+import { resolvePrepare } from "../helpers/filedEarlier";
+
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 /**
@@ -142,6 +144,7 @@ describe("updateFilingOtherCredits", () => {
   it("is locked once this filing's own step 5 (FILE_RETURN) is Done, enforced server-side", async () => {
     const client = await makeClientWithYear("oc-locked-after-filed");
     const q1Filing = await prepareFiling(client.id, "Q1", "300000");
+    await resolvePrepare(q1Filing.id);
     await markStepDone(
       (await prisma.workflowStep.findFirstOrThrow({ where: { filingId: q1Filing.id, stepCode: "FILE_RETURN" } })).id,
     );

@@ -7,6 +7,8 @@ import { markStepDone, skipStep } from "@/lib/actions/workflowSteps";
 import { saveQuarterlySales } from "@/lib/actions/quarterlySales";
 import { generateFilingsForClientYear } from "@/lib/workflow/filingGeneration";
 
+import { resolvePrepare } from "../helpers/filedEarlier";
+
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 /**
@@ -174,6 +176,7 @@ describe("saveStartingFigures", () => {
     await markStepDone(
       (await prisma.workflowStep.findFirstOrThrow({ where: { filingId: q3.id, stepCode: "PREPARE_RETURN" } })).id,
     );
+    await resolvePrepare(q3.id);
     await markStepDone(
       (await prisma.workflowStep.findFirstOrThrow({ where: { filingId: q3.id, stepCode: "FILE_RETURN" } })).id,
     );

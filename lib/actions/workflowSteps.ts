@@ -11,6 +11,7 @@ import { missingRequiredSlots, checkSendClientPackageReadiness } from "@/lib/wor
 import { parseDocSlots } from "@/lib/workflow/types";
 import {
   prepareGroupBlockReason,
+  prepareFinishedBlockReason,
   adviseClientBlockReason,
   payGroupBlockReason,
   NO_START_NO_SKIP_STEP_CODES,
@@ -22,6 +23,7 @@ import {
 } from "@/lib/workflow/groups";
 import { loadFilingOrderBlockReason } from "@/lib/workflow/filingOrderData";
 import { buildESubmissionEmail } from "@/lib/workflow/eSubmissionEmail";
+import { buildClientPackageEmailForFiling } from "@/lib/workflow/clientPackageEmailData";
 import { buildLiveAdviceMessageForFiling } from "@/lib/workflow/adviceMessage";
 import { Prisma } from "@prisma/client";
 import { getFilingSheet, readFilingSheet } from "@/lib/filingComputation";
@@ -80,7 +82,7 @@ export async function markStepDone(stepId: string): Promise<StepActionResult> {
     return {
       ok: false,
       error:
-        "8% election for this taxable year is not confirmed Elected — Q1 steps cannot be marked done until this is resolved (SPEC.md 3.1: an unconfirmed election may default to graduated rates, making this filing's computation wrong).",
+        "8% election for this taxable year is not confirmed Elected — Q1 steps cannot be marked done until this is resolved (an unconfirmed election may default to graduated rates, making this filing's computation wrong).",
     };
   }
 
@@ -105,6 +107,9 @@ export async function markStepDone(stepId: string): Promise<StepActionResult> {
   // before anything is written (including D83's snapshot transaction below),
   // so it holds when the action is called directly.
   if (step.stepCode === "FILE_RETURN") {
+    // D100 (brief #5r) — step 5 waits for all of Prepare; shown ahead of the filing-order reason.
+    const prepareReason = prepareFinishedBlockReason(step.filing.workflowSteps);
+    if (prepareReason) return { ok: false, error: prepareReason };
     const reason = await loadFilingOrderBlockReason(step.filing);
     if (reason) return { ok: false, error: reason };
   }
@@ -273,10 +278,28 @@ export async function markStepDone(stepId: string): Promise<StepActionResult> {
     }
   }
 
+  // D101 (brief #5r) — step 16's email is saved exactly as it stood when she
+  // marked it Done (D51's pattern), so the collapsed card shows what was sent.
+  if (step.stepCode === "SEND_CLIENT_PACKAGE") await saveClientPackageEmail(step.filingId);
+
   revalidatePath(`/clients/${step.filing.clientId}/filings/${step.filingId}`);
   revalidatePath("/filings");
 
   return { ok: true };
+}
+
+async function saveClientPackageEmail(filingId: string): Promise<void> {
+  const email = await buildClientPackageEmailForFiling(filingId);
+  if (!email) return;
+  await prisma.filing.update({
+    where: { id: filingId },
+    data: {
+      clientPackageEmailTo: email.to,
+      clientPackageEmailSubject: email.subject,
+      clientPackageEmailBody: email.body,
+      clientPackageEmailSavedAt: new Date(),
+    },
+  });
 }
 
 /**

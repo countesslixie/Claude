@@ -175,7 +175,7 @@ export default async function FilingsBoardPage({
       {filings.length === 0 ? (
         <p className="text-sm text-faint">No filings match these filters.</p>
       ) : (
-        <div className="flex gap-3 overflow-x-auto pb-4">
+        <div className="flex max-h-[calc(100vh-14rem)] gap-3 overflow-auto pb-2">
           {columns.map((col) => (
             <BoardColumn key={col.code} title={col.title} filings={col.filings} />
           ))}
@@ -206,8 +206,8 @@ function BoardColumn({
   }>;
 }) {
   return (
-    <div className="w-64 flex-shrink-0">
-      <div className="mb-2 flex items-center justify-between px-1">
+    <div className="w-56 flex-shrink-0">
+      <div className="sticky top-0 z-10 mb-2 flex items-center justify-between bg-background px-1 pb-1">
         <h2 className="text-xs font-semibold uppercase tracking-wide text-faint">{title}</h2>
         <span className="text-xs text-faint">{filings.length}</span>
       </div>

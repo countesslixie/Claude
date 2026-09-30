@@ -5,6 +5,8 @@ import { markStepDone, markStepInProgress, skipStep } from "@/lib/actions/workfl
 import { stepLockReason } from "@/lib/workflow/groups";
 import { loadFilingOrderBlockReason } from "@/lib/workflow/filingOrderData";
 
+import { resolvePrepare } from "../helpers/filedEarlier";
+
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 /** D95 (brief #5q) — step 5 refused while an earlier return of the same client-year is unfiled; D98 — steps 1 and 4 can't be skipped or started. */
@@ -46,7 +48,10 @@ describe("filing order guard (D95) and steps 1/4 (D98)", () => {
   }
   const filingOf = (clientId: string, period: "Q1" | "Q2" | "Q3" | "ANNUAL") =>
     prisma.filing.findUniqueOrThrow({ where: { clientId_taxableYear_period: { clientId, taxableYear: 2026, period } } });
-  const step5 = async (filingId: string) => prisma.workflowStep.findFirstOrThrow({ where: { filingId, stepCode: "FILE_RETURN" } });
+  const step5 = async (filingId: string) => {
+    await resolvePrepare(filingId); // D100: step 5 also waits for Prepare; these tests are about the filing-order guard
+    return prisma.workflowStep.findFirstOrThrow({ where: { filingId, stepCode: "FILE_RETURN" } });
+  };
   const stepOf = (filingId: string, stepCode: string) => prisma.workflowStep.findFirstOrThrow({ where: { filingId, stepCode } });
 
   it("Q2 is refused while Q1 is unfiled — and the refused call writes nothing", async () => {
@@ -103,6 +108,7 @@ describe("filing order guard (D95) and steps 1/4 (D98)", () => {
     const q3 = await filingOf(client.id, "Q3");
     const reason = await loadFilingOrderBlockReason(q3);
     expect(reason).toBe("File Q1 and Q2 2026 first.");
+    await resolvePrepare(q3.id); // D100: with Prepare unfinished, that reason would win instead
     const steps = await prisma.workflowStep.findMany({ where: { filingId: q3.id } });
     expect(stepLockReason("FILE_RETURN", steps, reason)).toBe("File Q1 and Q2 2026 first.");
   });

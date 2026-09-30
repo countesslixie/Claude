@@ -1,51 +1,234 @@
 import { describe, it, expect } from "vitest";
-import { buildClientPackageEmail, type ClientPackageEmailInput } from "@/lib/workflow/clientPackageEmail";
+import {
+  buildClientPackageEmail,
+  buildSummaryLines,
+  signedResultOf,
+  formatMonthDayLabel,
+  periodPlainName,
+  type ClientPackageEmailInput,
+} from "@/lib/workflow/clientPackageEmail";
+import type { AnnualFormComputationResult, LegacyFilingComputationResult, QuarterlyFormComputationResult } from "@/lib/tax/types";
 
 /**
- * Rework brief #2 §5 / #3 item 3b — the step 16 client email draft. D89
- * (brief #5o) — step 15 has no document at all now, so the email neither
- * asks the client to forward an eAFS confirmation nor lists one.
+ * D102 (brief #5r) — step 16's client email. Invented figures only. The
+ * point of most of these: the printed summary adds up line by line to the
+ * payable / overpayment on the last line.
  */
-function baseInput(overrides: Partial<ClientPackageEmailInput> = {}): ClientPackageEmailInput {
+function quarterly(overrides: Partial<QuarterlyFormComputationResult> = {}): QuarterlyFormComputationResult {
   return {
-    clientRegisteredName: "Juan Dela Cruz",
-    clientFirstName: "Juan",
-    period: "Q2",
-    taxableYear: 2026,
-    filedAt: new Date("2026-08-17T00:00:00.000Z"),
-    grossSalesCents: 1_050_000_00,
-    taxDueCents: 64_000_00,
-    cwtCents: 52_500_00,
-    isOverpayment: false,
-    finalAmountCents: 11_500_00,
-    hasCertificates: true,
-    nextPeriodLabel: "Q3",
-    nextPeriodDueDate: new Date("2026-11-16T00:00:00.000Z"),
+    formType: "F1701Q",
+    item47GrossSalesCents: 200_000_00,
+    item48NonOperatingCents: 0,
+    item49TotalIncomeCents: 200_000_00,
+    item50PreviousCumulativeCents: 0,
+    item51CumulativeTaxableIncomeCents: 600_000_00,
+    item52AllowableDeductionCents: 250_000_00,
+    item53TaxableIncomeCents: 335_000_00,
+    item54TaxDueCents: 26_800_00,
+    item55PriorYearExcessCreditCents: 0,
+    item56PriorPeriodPaymentsCents: 10_000_00,
+    item57CwtPriorQuartersCents: 15_000_00,
+    item58CwtThisQuarterCents: 10_000_00,
+    item61OtherCreditsCents: 0,
+    item62TotalCreditsCents: 35_000_00,
+    item63PayableCents: 0,
+    taxPayableCents: 0,
+    isOverpayment: true,
+    overpaymentCents: 8_200_00,
+    breakdown: [],
     ...overrides,
   };
 }
 
-describe("buildClientPackageEmail", () => {
+function annual(overrides: Partial<AnnualFormComputationResult> = {}): AnnualFormComputationResult {
+  return {
+    formType: "F1701A",
+    item47GrossSalesCents: 900_000_00,
+    item48SalesReturnsCents: 0,
+    item49NetSalesCents: 900_000_00,
+    item52NonOperatingCents: 0,
+    item53TotalTaxableIncomeCents: 900_000_00,
+    item54AllowableDeductionCents: 250_000_00,
+    item55TaxableIncomeCents: 650_000_00,
+    item56TaxDueCents: 52_000_00,
+    item57PriorYearExcessCreditCents: 0,
+    item58PriorPeriodPaymentsCents: 30_000_00,
+    item59CwtQ1ToQ3Cents: 8_000_00,
+    item60CwtQ4Cents: 4_000_00,
+    item63OtherCreditsCents: 0,
+    item64TotalCreditsCents: 42_000_00,
+    item65PayableCents: 10_000_00,
+    taxPayableCents: 10_000_00,
+    isOverpayment: false,
+    overpaymentCents: 0,
+    breakdown: [],
+    ...overrides,
+  };
+}
+
+function baseInput(overrides: Partial<ClientPackageEmailInput> = {}): ClientPackageEmailInput {
+  return {
+    clientRegisteredName: "Juan Dela Cruz",
+    clientFirstName: "Juan",
+    clientEmail: "juan@example.com",
+    period: "Q3",
+    taxableYear: 2026,
+    formType: "F1701Q",
+    filedAt: new Date("2026-11-13T00:00:00.000Z"),
+    sheet: quarterly(),
+    attachments: [
+      { label: "Filed return", filename: "filed-form.pdf" },
+      { label: "Proof of payment", filename: "proof.pdf" },
+    ],
+    next: { period: "ANNUAL", taxableYear: 2026, formType: "F1701A", dueDate: new Date("2027-04-15T00:00:00.000Z") },
+    annualDocsDueLabel: "Feb 15, 2027",
+    ...overrides,
+  };
+}
+
+const resultOf = (sheet: Parameters<typeof buildSummaryLines>[0]) => (sheet.isOverpayment ? -sheet.overpaymentCents : sheet.taxPayableCents);
+
+describe("summary lines reconcile to the final figure (D102)", () => {
+  it("quarterly overpayment: tax due less earlier-quarter tax paid and withholding is the overpayment", () => {
+    const lines = buildSummaryLines(quarterly());
+    expect(signedResultOf(lines)).toBe(-8_200_00);
+    expect(lines.at(-1)).toEqual({ kind: "result", label: "Overpayment", amountCents: 8_200_00 });
+    expect(lines.some((l) => /earlier quarters/.test(l.label) && l.amountCents === 10_000_00)).toBe(true);
+  });
+
+  it("quarterly payable", () => {
+    const sheet = quarterly({
+      item54TaxDueCents: 40_000_00,
+      item56PriorPeriodPaymentsCents: 10_000_00,
+      item57CwtPriorQuartersCents: 2_000_00,
+      item58CwtThisQuarterCents: 3_000_00,
+      item62TotalCreditsCents: 15_000_00,
+      item63PayableCents: 25_000_00,
+      taxPayableCents: 25_000_00,
+      isOverpayment: false,
+      overpaymentCents: 0,
+    });
+    const lines = buildSummaryLines(sheet);
+    expect(signedResultOf(lines)).toBe(25_000_00);
+    expect(lines.at(-1)).toEqual({ kind: "result", label: "Tax payable", amountCents: 25_000_00 });
+  });
+
+  it("whole-peso rounding of the credits shows as its own line so the lines still add up", () => {
+    const sheet = quarterly({
+      item54TaxDueCents: 40_000_00,
+      item56PriorPeriodPaymentsCents: 0,
+      item57CwtPriorQuartersCents: 0,
+      item58CwtThisQuarterCents: 16_646_70,
+      item62TotalCreditsCents: 16_647_00,
+      taxPayableCents: 23_353_00,
+      isOverpayment: false,
+      overpaymentCents: 0,
+    });
+    const lines = buildSummaryLines(sheet);
+    expect(lines.find((l) => l.label === "Rounding to whole pesos")?.amountCents).toBe(30);
+    expect(signedResultOf(lines)).toBe(resultOf(sheet));
+  });
+
+  it("annual (1701A) reconciles with its own lines and labels", () => {
+    const sheet = annual();
+    const lines = buildSummaryLines(sheet);
+    expect(lines[0].label).toBe("Gross sales for the year");
+    expect(signedResultOf(lines)).toBe(resultOf(sheet));
+  });
+
+  it("annual overpayment reconciles", () => {
+    const sheet = annual({ item58PriorPeriodPaymentsCents: 60_000_00, item64TotalCreditsCents: 72_000_00, item65PayableCents: 0, taxPayableCents: 0, isOverpayment: true, overpaymentCents: 20_000_00 });
+    expect(signedResultOf(buildSummaryLines(sheet))).toBe(-20_000_00);
+  });
+
+  it("legacy shape (Form 1701 / pre-form-line snapshots) reconciles", () => {
+    const sheet: LegacyFilingComputationResult = {
+      formType: "F1701",
+      cumulativeGrossSalesCents: 800_000_00,
+      cumulativeNonOperatingCents: 0,
+      cumulativeGrossCents: 800_000_00,
+      allowableDeductionCents: 0,
+      taxableBaseCents: 800_000_00,
+      incomeTaxDueCents: 64_000_00,
+      cumulativeCwtCents: 12_000_00,
+      priorPeriodPaymentsCents: 20_000_00,
+      priorYearExcessCreditCents: 4_000_00,
+      taxPayableCents: 28_000_00,
+      isOverpayment: false,
+      overpaymentCents: 0,
+      breakdown: [],
+    };
+    expect(signedResultOf(buildSummaryLines(sheet))).toBe(28_000_00);
+  });
+
+  it("leaves out zero credit lines and labels the year-to-date figures", () => {
+    const lines = buildSummaryLines(quarterly({ item56PriorPeriodPaymentsCents: 0, item57CwtPriorQuartersCents: 0, item58CwtThisQuarterCents: 0, item62TotalCreditsCents: 0, item54TaxDueCents: 5_000_00, taxPayableCents: 5_000_00, isOverpayment: false, overpaymentCents: 0 }));
+    expect(lines.filter((l) => l.kind === "credit")).toHaveLength(0);
+    expect(lines.map((l) => l.label)).toEqual(["Gross sales this quarter", "Taxable income, year to date", "Tax due, year to date", "Tax payable"]);
+  });
+});
+
+describe("buildClientPackageEmail (D102)", () => {
+  it("prints the summary, with the credits the client would look for", () => {
+    const { body } = buildClientPackageEmail(baseInput());
+    expect(body).toContain("Less: tax paid on earlier quarters");
+    expect(body).toContain("Less: creditable withholding (Form 2307)");
+    expect(body).toContain("Overpayment");
+    expect(body).toContain("₱8,200.00");
+  });
+
+  it("lists only the documents it is given — no certificates line unless a certificate is attached", () => {
+    const none = buildClientPackageEmail(baseInput());
+    expect(none.body).not.toMatch(/Form 2307 certificates/);
+    expect(none.body).toContain("· Filed return — filed-form.pdf");
+    const withCert = buildClientPackageEmail(baseInput({ attachments: [{ label: "Form 2307 — Sample Payor Inc.", filename: "2307-scan.pdf" }] }));
+    expect(withCert.body).toContain("· Form 2307 — Sample Payor Inc. — 2307-scan.pdf");
+  });
+
   it("never mentions eAFS: no forwarding request and no package line (D89)", () => {
     const email = buildClientPackageEmail(baseInput());
     expect(email.body).not.toMatch(/eAFS/i);
-    expect(email.body).not.toContain("please forward it");
   });
 
-  it("omits the certificates line and the withholding line when there are no certificates", () => {
-    const email = buildClientPackageEmail(baseInput({ hasCertificates: false, cwtCents: 0 }));
-    expect(email.body).not.toContain("Form 2307 certificates claimed");
-    expect(email.body).not.toContain("Less creditable withholding");
+  it("Annual next filing: right form, plain period name, and her documents date (her wording)", () => {
+    const { body } = buildClientPackageEmail(baseInput());
+    expect(body).toContain("Next filing: Annual ITR (1701A), due Apr 15, 2027. Please send required documents by Feb 15, 2027.");
+    expect(body).not.toContain("1701Q for ANNUAL");
+    expect(body).not.toMatch(/\bANNUAL\b/);
   });
 
-  it("shows overpayment carried forward instead of tax paid when the filing overpaid", () => {
-    const email = buildClientPackageEmail(baseInput({ isOverpayment: true, finalAmountCents: 5_000_00 }));
-    expect(email.body).toContain("Overpayment carried forward");
-    expect(email.body).not.toContain("Tax paid");
+  it("quarterly next filing keeps its form and reads a plain period; no documents date", () => {
+    const { body } = buildClientPackageEmail(
+      baseInput({ period: "Q2", next: { period: "Q3", taxableYear: 2026, formType: "F1701Q", dueDate: new Date("2026-11-16T00:00:00.000Z") } }),
+    );
+    expect(body).toContain("Next filing: 1701Q for Q3 2026, due Nov 16, 2026.");
+    expect(body).not.toContain("send required documents");
   });
 
-  it("omits the next-filing line when there is no next period", () => {
-    const email = buildClientPackageEmail(baseInput({ nextPeriodLabel: null, nextPeriodDueDate: null }));
-    expect(email.body).not.toContain("Next filing");
+  it("omits the next-filing line when there is no next filing", () => {
+    expect(buildClientPackageEmail(baseInput({ next: null })).body).not.toContain("Next filing");
+  });
+
+  it("an Annual return's own email names the Annual ITR and its form", () => {
+    const email = buildClientPackageEmail(baseInput({ period: "ANNUAL", formType: "F1701A", sheet: annual(), next: null }));
+    expect(email.subject).toContain("1701A Annual ITR (2026)");
+    expect(email.body).toContain("Your Annual ITR (1701A) for 2026 has been filed.");
+  });
+
+  it("To comes from the client record; missing email is null, never an empty string", () => {
+    expect(buildClientPackageEmail(baseInput()).to).toBe("juan@example.com");
+    expect(buildClientPackageEmail(baseInput({ clientEmail: null })).to).toBeNull();
+    expect(buildClientPackageEmail(baseInput({ clientEmail: "  " })).to).toBeNull();
+  });
+});
+
+describe("plain names", () => {
+  it("period names", () => {
+    expect(periodPlainName("ANNUAL", 2026)).toBe("Annual ITR");
+    expect(periodPlainName("Q1", 2027)).toBe("Q1 2027");
+  });
+  it("month-day setting to a plain date, no timezone maths", () => {
+    expect(formatMonthDayLabel("02-15", 2027)).toBe("Feb 15, 2027");
+    expect(formatMonthDayLabel("12-01", 2027)).toBe("Dec 1, 2027");
   });
 });

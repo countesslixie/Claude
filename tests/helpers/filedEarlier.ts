@@ -16,3 +16,19 @@ export async function markEarlierQuartersFiled(clientId: string, taxableYear: nu
     data: { status: "DONE", completedAt: new Date() },
   });
 }
+
+/**
+ * D100 (brief #5r) — step 5 waits for all of Prepare. Tests that file a
+ * return directly put steps 1-4 in their finished state the way the app
+ * leaves them, without running each through its own screen.
+ */
+export async function resolvePrepare(filingId: string): Promise<void> {
+  await prisma.workflowStep.updateMany({
+    where: { filingId, stepCode: { in: ["RECORD_SALES", "PREPARE_RETURN", "ADVISE_CLIENT"] } },
+    data: { status: "DONE", completedAt: new Date() },
+  });
+  await prisma.workflowStep.updateMany({
+    where: { filingId, stepCode: "RECEIVE_2307", status: { notIn: ["DONE", "SKIPPED", "NA"] } },
+    data: { status: "DONE", completedAt: new Date() },
+  });
+}

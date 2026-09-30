@@ -97,7 +97,7 @@ export function computeFiling(input: LegacyFilingComputationInput): LegacyFiling
       sourceNote:
         input.taxpayerType === "PURELY_SELF_EMPLOYED"
           ? "PHP 250,000, applied in full from Q1 (not prorated)"
-          : "None — mixed income earner (SPEC.md 3.2)",
+          : "None — mixed income earner",
     },
     {
       label: "Taxable base",
@@ -127,7 +127,7 @@ export function computeFiling(input: LegacyFilingComputationInput): LegacyFiling
     {
       label: overpaymentCents > 0 ? "Overpayment" : "Tax payable",
       amountCents: overpaymentCents > 0 ? overpaymentCents : taxPayableCents,
-      sourceNote: "This is a preparation aid. The filed return and BIR's own assessment govern (SPEC.md 17.6).",
+      sourceNote: "This is a preparation aid. The filed return and BIR's own assessment govern.",
     },
   ];
 

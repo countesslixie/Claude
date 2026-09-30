@@ -185,6 +185,8 @@ export const NO_START_NO_SKIP_STEP_CODES: readonly string[] = [
   "EMAIL_DAT",
   "SAWT_ACK",
   "EAFS_SUBMIT",
+  // D101 (brief #5r) — step 16 is Mark done only, like steps 4 and 12.
+  "SEND_CLIENT_PACKAGE",
 ];
 
 /**
@@ -198,10 +200,10 @@ export const NO_START_NO_SKIP_STEP_CODES: readonly string[] = [
  *     step" link instead, which expands the right group and scrolls to
  *     the card.
  *   - "markDoneOnly": the step's only control, full stop, is Mark done
- *     (3, 4, 5 — controlsMode="markDoneOnly" on their WorkflowStepCard).
+ *     (3, 4, 5, 12, 15, 16 — controlsMode="markDoneOnly" on their WorkflowStepCard).
  *     The banner may keep a Mark done button, gated by the same
  *     server-side checks the card's own button uses.
- *   - "full" (the default, every other step: 11-13, 15, 16): the step's
+ *   - "full" (the default, every other step: 11 and 13 are self-completing, so this is now empty in practice): the step's
  *     own card genuinely offers both Start and Mark done (plus Skip/doc
  *     upload, which the banner never offered anyway) — the banner's
  *     existing Start+Mark done pair is a real subset of the card's own
@@ -228,6 +230,7 @@ const NEXT_ACTION_MARK_DONE_ONLY: readonly string[] = [
   "FILE_RETURN",
   "EMAIL_DAT",
   "EAFS_SUBMIT",
+  "SEND_CLIENT_PACKAGE",
 ];
 
 export function nextActionModeForStepCode(stepCode: string): NextActionMode {
@@ -323,6 +326,23 @@ export function adviseClientBlockReason(steps: { stepCode: string; status: Workf
 }
 
 /**
+ * D100 (brief #5r) — step 5 (FILE_RETURN) files the return and freezes its
+ * snapshot (D83), so it waits for all of Prepare: step 1 Done, step 2 Done
+ * or Skipped, steps 3 and 4 Done. Null once Prepare is finished. Enforced
+ * in markStepDone and shown as the card's tooltip via stepLockReason.
+ */
+export function prepareFinishedBlockReason(steps: { stepCode: string; status: WorkflowStepStatus }[]): string | null {
+  const statusOf = (code: string) => steps.find((s) => s.stepCode === code)?.status;
+  const step2 = statusOf("RECEIVE_2307");
+  const finished =
+    statusOf("RECORD_SALES") === "DONE" &&
+    (step2 === undefined || step2 === "DONE" || step2 === "SKIPPED" || step2 === "NA") &&
+    statusOf("PREPARE_RETURN") === "DONE" &&
+    statusOf("ADVISE_CLIENT") === "DONE";
+  return finished ? null : "Finish Prepare first.";
+}
+
+/**
  * D75 (brief #5m §3.1) — Pay (steps 8, 9) opens only once File (steps 5,
  * 6, 7) is Done. Enforced server-side inside step 8's save and step 9's
  * upload, not just by the UI hiding their controls.
@@ -412,7 +432,8 @@ export function stepLockReason(
   const statusOf = (code: string) => steps.find((s) => s.stepCode === code)?.status;
   switch (stepCode) {
     case "FILE_RETURN":
-      return filingOrderReason;
+      // D100 — the Prepare reason wins when both apply: she can act on it on this same filing.
+      return prepareFinishedBlockReason(steps) ?? filingOrderReason;
     case "PREPARE_RETURN":
       return prepareGroupBlockReason(steps);
     case "ADVISE_CLIENT":

@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { saveQuarterlySales } from "@/lib/actions/quarterlySales";
 import { generateFilingsForClientYear } from "@/lib/workflow/filingGeneration";
 import { markStepDone, skipStep } from "@/lib/actions/workflowSteps";
-import { markEarlierQuartersFiled } from "../helpers/filedEarlier";
+import { markEarlierQuartersFiled, resolvePrepare } from "../helpers/filedEarlier";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
@@ -194,6 +194,7 @@ describe("saveQuarterlySales", () => {
     const fileReturnStep = await prisma.workflowStep.findFirstOrThrow({
       where: { filingId: filing.id, stepCode: "FILE_RETURN" },
     });
+    await resolvePrepare(fileReturnStep.filingId);
     await markStepDone(fileReturnStep.id);
 
     const result = await saveQuarterlySales(

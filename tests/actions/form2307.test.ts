@@ -8,7 +8,7 @@ import { markStepDone } from "@/lib/actions/workflowSteps";
 import { uploadDocument, deleteDocument } from "@/lib/actions/documents";
 import { generateFilingsForClientYear } from "@/lib/workflow/filingGeneration";
 import { createPayorInline } from "@/lib/actions/payors";
-import { markEarlierQuartersFiled } from "../helpers/filedEarlier";
+import { markEarlierQuartersFiled, resolvePrepare } from "../helpers/filedEarlier";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
@@ -274,6 +274,7 @@ describe("step 2 — certificate entry (addCertificate/deleteCertificate)", () =
     const fileReturnStep = await prisma.workflowStep.findFirstOrThrow({
       where: { filingId: filing.id, stepCode: "FILE_RETURN" },
     });
+    await resolvePrepare(fileReturnStep.filingId);
     await markStepDone(fileReturnStep.id);
 
     const addResult = await addCertificate(filing.id, {} as CertificateFormState, certFormData({ payorName: "Late Payor" }));

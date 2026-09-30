@@ -8,7 +8,7 @@ import { markStepDone, skipStep, markStepInProgress } from "@/lib/actions/workfl
 import { generateFilingsForClientYear } from "@/lib/workflow/filingGeneration";
 import { isPaymentLocked, assembleAndComputeFiling } from "@/lib/filingComputation";
 import { toManilaDateInputValue } from "@/lib/dates";
-import { markEarlierQuartersFiled } from "../helpers/filedEarlier";
+import { markEarlierQuartersFiled, resolvePrepare } from "../helpers/filedEarlier";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
@@ -73,6 +73,7 @@ describe("savePayment (D75)", () => {
     const own = await prisma.filing.findUniqueOrThrow({ where: { id: filingId } });
     await markEarlierQuartersFiled(own.clientId, own.taxableYear, own.period);
     const fileReturnStep = await prisma.workflowStep.findFirstOrThrow({ where: { filingId, stepCode: "FILE_RETURN" } });
+    await resolvePrepare(fileReturnStep.filingId);
     await markStepDone(fileReturnStep.id);
     for (const [stepCode, slotCode] of [
       ["SAVE_SUBMISSION_SS", "submission_screenshot"],

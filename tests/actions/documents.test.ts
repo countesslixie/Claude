@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { uploadDocument } from "@/lib/actions/documents";
 import { markStepDone } from "@/lib/actions/workflowSteps";
 import { generateFilingsForClientYear } from "@/lib/workflow/filingGeneration";
-import { markEarlierQuartersFiled } from "../helpers/filedEarlier";
+import { markEarlierQuartersFiled, resolvePrepare } from "../helpers/filedEarlier";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
@@ -64,6 +64,7 @@ describe("uploadDocument", () => {
     const fileReturnStep = await prisma.workflowStep.findFirstOrThrow({
       where: { filingId: filing.id, stepCode: "FILE_RETURN" },
     });
+    await resolvePrepare(fileReturnStep.filingId);
     await markStepDone(fileReturnStep.id);
     for (const [stepCode, slotCode] of [
       ["SAVE_SUBMISSION_SS", "submission_screenshot"],

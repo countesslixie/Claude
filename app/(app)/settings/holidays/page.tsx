@@ -16,7 +16,7 @@ export default async function HolidaysPage() {
       <h1 className="text-2xl font-semibold text-ink">Holidays</h1>
       <p className="mt-1 text-sm text-faint">
         Business-day due-date shifting reads this table only — holidays are never computed
-        algorithmically (SPEC.md section 3.6).
+        algorithmically.
       </p>
 
       <div className="mt-4 rounded-lg border border-line bg-surface p-4">

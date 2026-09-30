@@ -21,7 +21,7 @@ export default async function AtcCodesPage() {
           <h1 className="text-2xl font-semibold text-ink">ATC codes</h1>
           <p className="mt-1 text-sm text-faint">
             The rate is a property of the code — the certificate form fills it in once a code is chosen.
-            Never invent a code or a rate here (D19); leave it unverified until confirmed against the
+            Never invent a code or a rate here; leave it unverified until confirmed against the
             current BIR ATC list.
           </p>
         </div>

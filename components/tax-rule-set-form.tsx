@@ -70,7 +70,7 @@ export function TaxRuleSetForm({
 
       <fieldset className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <legend className="col-span-full text-sm font-semibold text-ink">
-          Computation constants (SPEC.md 3.2)
+          Computation constants
         </legend>
         <Field
           name="incomeTaxRateBps"
@@ -99,7 +99,7 @@ export function TaxRuleSetForm({
 
       <fieldset className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <legend className="col-span-full text-sm font-semibold text-ink">
-          Statutory due dates (SPEC.md 3.6 — confirm against current BIR issuance)
+          Statutory due dates (confirm against the current BIR issuance)
         </legend>
         <Field name="q1DueMonthDay" label="Q1 (1701Q) due" defaultValue={v("q1DueMonthDay") || "04-15"} errors={errs("q1DueMonthDay")} required hint="MM-DD" />
         <Field name="q2DueMonthDay" label="Q2 (1701Q) due" defaultValue={v("q2DueMonthDay") || "08-15"} errors={errs("q2DueMonthDay")} required hint="MM-DD" />
@@ -143,11 +143,19 @@ export function TaxRuleSetForm({
           required
           hint="As given by the bookkeeper — confirm against BIR before live use"
         />
+        <Field
+          name="annualDocsDueMonthDay"
+          label="Client documents due for the Annual return"
+          defaultValue={v("annualDocsDueMonthDay") || "02-15"}
+          errors={errs("annualDocsDueMonthDay")}
+          required
+          hint="MM-DD, of the FOLLOWING year — named in the step 16 email to the client"
+        />
       </fieldset>
 
       <fieldset className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <legend className="col-span-full text-sm font-semibold text-ink">
-          Late filing exposure — informational only (SPEC.md 3.7)
+          Late filing exposure — informational only
         </legend>
         <Field
           name="surchargeRateBps"
