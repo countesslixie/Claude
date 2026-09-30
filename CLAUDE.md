@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 *Instructions for Claude Code working on this repository.*
-*Last reconciled: 2026-09-29 — brief #5p, the documentation pass, checked against the tree at brief #5o's tip (`2792436`). Each rule is stated once, as it stands, with decision numbers (DECISIONS.md holds the history).*
+*Last reconciled: 2026-09-30 — brief #5u, the documentation pass, checked against the tree at brief #5t's tip (`f2bdbe1`), covering briefs #5q–#5t (D95–D114). Each rule is stated once, as it stands, with decision numbers (DECISIONS.md holds the history).*
 
 ---
 
@@ -11,7 +11,7 @@ A local-first Next.js application used by **one bookkeeper** to manage Philippin
 
 **It is a filing manager, not an accounting system.** It generates no books of accounts. There is no ledger — only a declared-income record sufficient to compute the return.
 
-`PROJECT_MASTER.md` (the rules), `CURRENT_STATE.md` (what is built, the sixteen-step table, sample data, what's next) and `DECISIONS.md` (the history) are current as of 2026-09-29. **`SPEC.md` is not** — it is the original design, kept as history, and contradicts the build in places; its dated banner says which sections a decision supersedes. Where SPEC.md disagrees with the other three, they win, and say so rather than following SPEC.md quietly. `AGENTS.md` is written by `next dev`; leave it.
+`PROJECT_MASTER.md` (the rules), `CURRENT_STATE.md` (what is built, the sixteen-step table, sample data, what's next) and `DECISIONS.md` (the history) are current as of 2026-09-30. **`SPEC.md` is not** — it is the original design, kept as history, and contradicts the build in places; its dated banner says which sections a decision supersedes. Where SPEC.md disagrees with the other three, they win, and say so rather than following SPEC.md quietly. `AGENTS.md` is written by `next dev`; leave it.
 
 ## Trust the tree, not a brief's account of it
 
@@ -43,7 +43,7 @@ Next.js 15 App Router · TypeScript strict · Prisma + SQLite (`data/app.db`) ·
                                 filings/[filingId] (the filing page), tax-years/[taxYearId]/{edit,
                                 starting-figures}}, settings/ {atc-codes, holidays, tax-rule-sets}
 /app/api/                      clients/[id]/sawt-worksheet (xlsx), documents/[id]/download,
-                                filings/[id]/package (zip + text manifest)
+                                filings/[id]/package (flat client zip, standard file names, no manifest — D103/D108/D111)
 /app/fonts/                    Plus Jakarta Sans, loaded via next/font/local — never next/font/google (D58)
 /middleware.ts                 single-password session gate
 /next.config.ts               serverActions.bodySizeLimit 25mb (D64)
@@ -66,7 +66,9 @@ Next.js 15 App Router · TypeScript strict · Prisma + SQLite (`data/app.db`) ·
   docSlots.ts, completeness.ts, election.ts, dueDate.ts, types.ts
   clientTaxAdviceMessage.ts + adviceMessage.ts   step 4's message (D51)
   eSubmissionEmail.ts            step 12's email draft (D87)
-  clientPackageEmail.ts          step 16's email draft
+  clientPackageEmail.ts          step 16's email draft (D102, D110, D112); clientPackageEmailData.ts loads its inputs
+  summaryLines.ts                buildSummaryLines — the ONE year-to-date summary both steps 4 and 16 print (D114)
+  filingOrder.ts + filingOrderData.ts   the filing-order guard for step 5 (D95)
 /lib/actions/                  Server Actions — the I/O boundary
   workflowSteps.ts               markStepDone (freeze at step 5 D83, auto-waits via startGatedBirWaits, D76 NA, draft save
                                  at step 12), skip/start/waiting refusals, reopenPreparedFiling, unskipStep,
@@ -74,17 +76,20 @@ Next.js 15 App Router · TypeScript strict · Prisma + SQLite (`data/app.db`) ·
   filings.ts                     generateFilingsAction, savePayment (D75), updateFilingOtherCredits, setAllCertificatesReceived, alerts
   quarterlySales.ts, form2307.ts, documents.ts (25 MB check, unlock gates), startingFigures.ts,
   payors.ts, atcCodes.ts, clients.ts, clientTaxYears.ts, holidays.ts, taxRuleSets.ts, sawt.ts, auth.ts
-/lib/documents/                storage.ts (naming, SHA-256), computationSheet.ts (+ computationSheetHtml.ts)
+/lib/documents/                storage.ts (naming, SHA-256), computationSheet.ts (+ computationSheetHtml.ts),
+                                filingPackage.ts (planPackageDocuments — the five document kinds, the zip's standard names, and
+                                the email's attachment list, all from one source: D108/D110/D111)
 /lib/sawt/                     keying worksheet assembly and export
 /lib/validation/               Zod schemas, one per form
 /lib/startingFigures.ts, reconciliation.ts, vatThreshold.ts, dates.ts, money.ts, upload.ts, prisma.ts, actor.ts, activityLog.ts, auth.ts, utils.ts
-/components/                   next-action-control, filing-sticky-bar, go-to-step (shared "Go to step"), workflow-group-card,
+/components/                   next-action-control, filing-sticky-bar, client-sticky-bar (D104), client-package-step-card (step 16, D101), go-to-step (shared "Go to step"), workflow-group-card,
                                 workflow-step-card (generic), file-group-doc-step-card (self-completing upload steps, one or
                                 more slots), email-dat-step-card (step 12), make-payment-step-card (step 8), record-sales-step-card,
                                 receive-2307-step-card, certificate-form, advice-message-card, computation-sheet-panel, other-credits-form,
                                 starting-figures-form, generate-filings-form, payor-*, atc-code-*, tax-rule-set-form, client-form, client-tax-year-form, holiday-form, clickable-row, print-button, nav, status-badge, copy-textarea, ui/
-/prisma/                       schema.prisma, migrations/, seed.ts (reference data), seedScenarios.ts (the eight sample clients, D82)
-/tests/                        actions/ filingComputation/ documents/ reconciliation/ sawt/ seed/ tax/ workflow/  (429 tests, 44 files)
+/prisma/                       schema.prisma, migrations/, seed.ts (reference data), seedScenarios.ts (the eight sample clients, D82),
+                                backfills.ts (idempotent seed-run corrections: D96 step titles, D97 filing status, D106 document dates)
+/tests/                        actions/ filingComputation/ documents/ reconciliation/ sawt/ seed/ tax/ workflow/  (503 tests, 50 files)
 /storage/  /data/              gitignored document vault and SQLite database
 ```
 
@@ -108,7 +113,7 @@ Next.js 15 App Router · TypeScript strict · Prisma + SQLite (`data/app.db`) ·
 
 ## Frozen returns (D6/D83/D94)
 
-**Marking step 5 (`FILE_RETURN`) Done writes the full computation to `Filing.computationSnapshot` (and `filedAt`) in the same transaction, never rewritten** (`markStepDone`; only `workflowSteps.ts` writes the field — a test enforces it). Every reader of a filing's own figures goes through `getFilingSheet`/`readFilingSheet` — the sheet, summary strip, Pay's default, D76's decision, step 4's message, the saved HTML. **Later returns still read real data** (Q3's item 56 is Q1/Q2's actual payments). After any change that could feed a filed return of the year (sales, a payment, a certificate, item 61, starting figures) `checkAndRecordAmendments` raises an `AmendmentAlert`, shown as one amber block with per-item old → new and Dismiss (informational, D11). **The locks that keep this rare are kept on purpose (D94):** payment editable until the next return is filed (`isPaymentLocked`); certificates and item 61 lock at their own step 5; starting figures once the first in-app return is filed. **Filing order (D95): step 5 will be refused until every earlier quarter is filed — agreed, not yet built.**
+**Marking step 5 (`FILE_RETURN`) Done writes the full computation to `Filing.computationSnapshot` (and `filedAt`) in the same transaction, never rewritten** (`markStepDone`; only `workflowSteps.ts` writes the field — a test enforces it). Every reader of a filing's own figures goes through `getFilingSheet`/`readFilingSheet` — the sheet, summary strip, Pay's default, D76's decision, step 4's message, the saved HTML. **Later returns still read real data** (Q3's item 56 is Q1/Q2's actual payments). After any change that could feed a filed return of the year (sales, a payment, a certificate, item 61, starting figures) `checkAndRecordAmendments` raises an `AmendmentAlert`, shown as one amber block with per-item old → new and Dismiss (informational, D11). **The locks that keep this rare are kept on purpose (D94):** payment editable until the next return is filed (`isPaymentLocked`); certificates and item 61 lock at their own step 5; starting figures once the first in-app return is filed. **Filing order (D95, built brief #5q): step 5 is refused until every earlier quarter of the year is filed** (filed outside the app counts) — "File Q1 2026 first." `filingOrder.ts`, checked in `markStepDone` before anything is written.
 
 ## The blocking rule — read this before touching the workflow
 
@@ -124,13 +129,15 @@ There is no third category: step 15's optional slot and step 16's forwarding lin
 - **Step 2 (D35)** is Done only when `certificatesAllReceivedAt` is set and every certificate has its scan (`recomputeReceive2307Status`); a two-way toggle. While "all received" is ticked, Add/Remove are hidden and refused server-side (D47). Step 2's own doc slot is `[]` — do not re-add one.
 - **Steps 6, 7, 9, 10, 11, 13, 14 are self-completing behind a lock (D67/D71/D75/D86/D88):** upload box shown directly once the gating step is Done, no Attach link; the upload completes the step (`recomputeFileGroupDocStepStatus` — step 11 needs **both** files); a new upload is a one-for-one Replace; the lock is enforced in `saveDocumentForStep`, not just the UI. Removing the only file reverts to Pending — except 10, 13, 14, which return to Waiting.
 - **Steps 10, 13 and 14 wait on BIR automatically (D68/D71/D88):** `startGatedBirWaits` moves the gated step from Pending to Waiting, `waitingSince` = that instant, when step 5 (→10), 12 (→13) or 13 (→14) is Done; after a file removal `waitingSince` resets to the gating step's `completedAt`. **No manual Mark waiting and no Log follow-up on any BIR wait (D72)**, refused server-side. One "Waiting on BIR · Nd" pill — amber, red past twice the expected days, never green. Step 13 blocks step 14 (D29): one explicit edge, never generalised.
-- **Steps 5–15 have no Start and no Skip (D65/D75/D86–D89)**, refused server-side (`NO_START_NO_SKIP_STEP_CODES`); step 3 cannot be skipped either (D54). Steps 11 and 13 also have no Mark done. Steps 1 and 2 are self-completing.
-- **Step 3** is Mark done only, gated on steps 1/2 resolved. **Step 4** is Mark done only, gated on step 3 Done (D51), message saved as sent.
+- **Steps 5–16 have no Start and no Skip (D65/D75/D86–D89, D101)**, refused server-side (`NO_START_NO_SKIP_STEP_CODES`); step 3 cannot be skipped either (D54), and steps 1 and 4 are refused Start and Skip server-side too (D98). Steps 11 and 13 also have no Mark done. Steps 1 and 2 are self-completing.
+- **Step 5 has two locks (D100, D95), both enforced in `markStepDone` and shown as the greyed Mark done's hover tooltip:** all of Prepare must be resolved first — step 1 Done, step 2 Done or Skipped, steps 3 and 4 Done ("Finish Prepare first.") — and every earlier quarter must be filed ("File Q1 2026 first."). When both apply the Prepare reason shows. Q1 also needs the 8% election confirmed.
+- **Step 16 (D101–D113) is Mark done only, no Start and no Skip.** It unlocks when steps 7, 9, 10 and 13 are each saved or NA — **not step 14**, which is never sent to the client (D109). Its lock message names only what is still missing, in step order ("Available once the TRRC is saved.", D113). Mark done saves the exact email (`Filing.clientPackageEmailTo/Subject/Body/SavedAt`) and the card collapses to "Emailed [date]: [subject]". The package holds five kinds of document only (D108), attached under standard names in a flat zip with no manifest (D103/D111); the email's list names documents, not files (D110); it opens "Hi [first name],", closes "Thank you!" (D112), and its summary is step 4's, from the frozen sheet (D114).
+- **Step 3** is Mark done only, gated on steps 1/2 resolved. **Step 4** is Mark done only, gated on step 3 Done (D51), message saved as sent; its payable version no longer offers an advance (D107) and prints the shared year-to-date summary (D114).
 - **Pay (D75/D76):** opens only once all of File is Done. Step 8 = amount/date/paid-through in one save that marks it Done; step 9 unlocks on 8 and never waits. **An overpayment or ₱0-payable return sets 8 and 9 NA the instant step 5 is Done**, read from the frozen sheet.
 - **eAFS (D85–D89, D93):** locked until File and Pay are Done (Pay counts as done when NA), enforced server-side for every action (`stepLockReason`). Step 12 is Mark done only and shows the eSubmission draft (`eSubmissionEmail.ts`; address = `TaxRuleSet.eSubmissionEmail`); Mark done saves the exact draft on the filing (`Filing.dataEmail*`) and the card collapses to "Emailed …". Step 15 has no document. **With no Form 2307 on the filing, steps 11–15 (and 14) are NA** — following the live certificate list until step 5, then fixed (`recomputeRequiresSawt`).
 - **The election check is the one other hard block** (`isElectionBlocked`): a Q1 filing whose election isn't confirmed `ELECTED` can't be marked Done on any step.
 - **A change to the figures behind a prepared computation reopens steps 3 and 4 while unfiled (D50/D61)** — `reopenPreparedFiling`, after a figures-changing final save of step 1, a draft save of a previously-final step 1, a certificate add/remove, a saved item 61, a saved payment, or a starting-figures change; the same step-1 saves un-skip a Skipped step 2; a filed filing is never reopened.
-- **Skipped steps stay visible in place with Undo skip (D60);** in practice only steps 2 and 16 offer Skip.
+- **Skipped steps stay visible in place with Undo skip (D60);** in practice **only step 2** offers Skip (step 16 lost it in D101; a step 16 skipped in old data still shows Skipped with Undo).
 - **A document belongs to its step's card, not the page. Never expose a raw step code** in a label.
 - **A disabled control explains itself on hover, not with standing text (D41).** No standing red/amber block-reason paragraph. The short amber "waiting on …" beside a group name stays; one narrow exception: the line under step 2's ticked checkbox (D47).
 - **The filing page has two answers to "what do I do now"**: the next-action banner + summary strip at the top, and everything belonging to a step inside its own card. Keep both.
@@ -146,7 +153,7 @@ There is no third category: step 15's optional slot and step 16's forwarding lin
 | 5 | BIR Confirmations | 10 Save TRRC email (D90) · 14 Validation email |
 | 6 | Client package | 16 Email package to client |
 
-Step titles in the tree: step 13 "Receive & save acknowledgement email", step 14 "Save eAFS validation email" (D92). **D96 (agreed, not built): "Save SAWT acknowledgement email" / "Save SAWT validation email"; the BIR short names (`BIR_WAIT_SHORT_NAME`) go back to "SAWT validation".**
+Step titles in the tree (D96, built): step 13 **"Save SAWT acknowledgement email"**, step 14 **"Save SAWT validation email"**; `BIR_WAIT_SHORT_NAME` (`lib/workflow/aging.ts`) reads "TRRC", "SAWT acknowledgement", "SAWT validation", so the board tag is "SAWT validation · 8d". A seed backfill renames existing rows.
 
 - **Grouping only changes reporting, not what any step requires.** Membership is a fixed lookup in `groups.ts`, **never `category` repurposed** (`category` would put step 10 in File and step 4 with step 16).
 - **Step numbers are never renumbered to make groups contiguous — do not "fix" it.** File and Pay sit ahead of BIR Confirmations numerically though it's a later group. A filing waiting only on the TRRC or validation email after everything else is done is normal and raises no warning.
@@ -200,6 +207,7 @@ Step titles in the tree: step 13 "Receive & save acknowledgement email", step 14
 14. Starting figures replace outside quarters, not a `Filing` row (D56); `engagedSince` never excludes one (D78)
 15. Fonts and other static assets live in the repo (D58)
 16. Six groups, never renumbered (D70); no group-level Mark done (D62); eAFS only with certificates (D93)
+17. **The client's document deadline is the 20th of the month after the period ends (D106)** — Q1 Apr 20, Q2 Jul 20, Q3 Oct 20, Annual Jan 20. A `TaxRuleSet.clientDocsDueDay` setting (1–28, default 20), no weekend or holiday shift, stored on `Filing.certificatesExpectedBy` (on screen "documents due from client"), and separate from `internalFilingTarget` (D14), which is untouched. The tax rate is now typed as a percentage on the rule set screen (8.00%) but is still stored as basis points.
 
 ## Never invent BIR specifics
 
@@ -209,7 +217,9 @@ ATC codes, penalty rates, compromise schedules, form field orders, the eSubmissi
 
 Centered container ~1100px. Tables with aligned columns. Row text 14px, secondary 13px. Empty panels collapse to one muted line. Rows navigate to detail with a hover state. **Status colours: grey pending, purple in progress, amber waiting, red overdue, green done (D58).**
 
-- **A status pill always goes through a label helper, never a raw enum (D63)** — `filingStatusLabel()`/`stepStatusLabel()`. (`Form2307`'s own status codes still render raw on the register page — a separate enum, out of scope.)
+- **A status pill always goes through a label helper, never a raw enum (D63)** — `filingStatusLabel()`/`stepStatusLabel()`, and `form2307StatusLabel()` for the Form 2307 register ("Received", "Recorded", "Claimed on return", … D99). **The filing pill reads "In progress" while any of her own work remains and "Waiting on BIR" only when nothing of hers is left (D97)** — it agrees with Next by construction.
+- **No internal references in screen text (D105):** no brief numbers, D-numbers, "SPEC.md", "Phase" labels, "bps" or step-number cross-references on any screen. Code comments may keep them.
+- **A sticky client bar (`components/client-sticky-bar.tsx`, D104)** on the client page and its Income, Form 2307s and Payors pages: appears once the page header scrolls away, beside the menu, with the client's name (a link), TIN and buttons for those three pages. The filing page has its own slim bar (D80); the two never appear together. The Form 2307 register opens on "All periods" (D105).
 - **A left-side menu (`components/nav.tsx`, D58):** Dashboard; Work (Filings, Clients); Settings (Tax rule sets, Holidays, ATC codes), the heading linking to the hub. Icons from `lucide-react` only.
 - **Colours are CSS variable tokens (`app/globals.css`), never a hard-coded hex on a screen** — the generated computation-sheet HTML (an archive document) is the one exception.
 - **Plus Jakarta Sans, loaded locally.** Tabular figures on money columns.
@@ -240,13 +250,14 @@ Will hold real TINs and income data under the Data Privacy Act from November 202
 
 - `Start Bookkeeping App.bat` and `_test-files/` (disposable dummy documents) live at her repo root, untracked.
 - `npm install` writes an `allowScripts` block into `package.json` (machine-local; she stashes before switching branches) and regenerates the Prisma Client (D57).
+- **The plain seed (`npx tsx prisma/seed.ts`) never deletes** — it upserts reference data, builds the samples only when none exist, and runs three idempotent corrections on existing rows: the D96 step-title rename, the D97 filing-status recompute, and **the D106 date correction on unfiled filings** (filed returns keep the date they were worked to).
+- **A clean typecheck needs Next's generated route types.** `app/layout.tsx` uses `LayoutProps<"/">`, which Next generates into `.next/types`; on a fresh checkout `npx tsc --noEmit` reports one `LayoutProps` error until `npx next typegen` (or any `next dev`/`next build`) has run once. It is an environment artefact, not a code error.
 - **The update routine after pulling:** close the app · `git stash` · `git pull` · `npm install` · `npx prisma migrate deploy` (only when a brief added migrations) · `npx prisma migrate reset --force` (only when a clean reseed is wanted — it DROPS the database including every client added by hand, then re-applies the migrations and runs the seed).
 
 ## Current priorities
 
-See `CURRENT_STATE.md`. In short:
-1. **Next code brief:** D95 (filing-order guard) and D96 (steps 13 and 14 renamed). Then walk the Client package group (step 16), the last one not yet walked.
-2. **Before November:** back up `data/app.db`, `storage/` and `.env`, and decide how. Old test uploads in `storage/` may include real client documents.
-3. **Go-live setup:** add client → tax year → starting figures → generate (D78 enforces the order). 1701Q due **November 16, 2026**. Excel stays the master until she switches.
-4. Confirm ATC codes at `/settings/atc-codes` and the eSubmission address.
-5. After go-live: the document archive browse view, then the calendar.
+See `CURRENT_STATE.md`. All six groups are now walked and closed. In short:
+1. **Back up** `data/app.db`, `storage/` and `.env`, and decide how, before real data arrives. Old test uploads in `storage/` may include real client documents.
+2. **Go-live setup:** add client → tax year → starting figures → generate (D78 enforces the order). 1701Q due **November 16, 2026**. Excel stays the master until she switches.
+3. **Confirm the ATC codes** at `/settings/atc-codes` **and the eSubmission address** (`TaxRuleSet.eSubmissionEmail`).
+4. After go-live, in this order: the **document archive browse view**, then the **calendar**, then the **Annual overpayment carry-over** (2026→2027).
