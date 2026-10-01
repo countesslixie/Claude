@@ -64,7 +64,7 @@ export function OtherCreditsForm({
     return (
       <div className="rounded border border-line bg-background p-2">
         <div className="flex items-center justify-between gap-2">
-          <p className="text-xs font-medium text-ink-secondary">
+          <p className="text-xs font-semibold text-ink">
             Other tax credits/payments (item 61): {centsToPesos(pesosStrToCentsSafe(savedValues.otherCredits), { withSymbol: true })}
             {savedValues.otherCreditsDescription ? ` — ${savedValues.otherCreditsDescription}` : ""}
             {!savedNow && sourceLabel && <span className="ml-1 text-faint">(from {sourceLabel})</span>}
@@ -81,11 +81,8 @@ export function OtherCreditsForm({
 
   return (
     <form key={formKey} action={formAction} className="flex flex-col gap-2 rounded border border-line p-2">
-      <p className="text-xs font-medium text-ink-secondary">Other tax credits/payments (item 61)</p>
+      <p className="text-xs font-semibold text-ink">Other tax credits/payments (item 61)</p>
       {state.error && <p className="text-xs text-red">{state.error}</p>}
-      {!hasSavedValue && sourceLabel && (
-        <p className="text-xs text-faint">Pre-filled from {sourceLabel} — edit and Save to set this filing&apos;s own figure.</p>
-      )}
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <div className="flex flex-col gap-1">
           <Label htmlFor="otherCredits" className="text-xs">

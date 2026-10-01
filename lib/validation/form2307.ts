@@ -48,7 +48,6 @@ export const certificateEntrySchema = z.object({
   taxWithheld: pesos,
   periodFrom: z.string().trim().min(1, "Required"),
   periodTo: z.string().trim().min(1, "Required"),
-  withholdingRatePercent: optionalPercent,
   notes: optionalText,
 });
 

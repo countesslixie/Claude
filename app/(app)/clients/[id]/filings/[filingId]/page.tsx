@@ -40,6 +40,7 @@ import { formatManilaDate, formatManilaDateLong, toManilaDateInputValue } from "
 import { formLabel } from "@/lib/workflow/eSubmissionEmail";
 import { FilingSummaryStrip } from "@/components/filing-summary-strip";
 import { deriveStepAging, BIR_WAIT_SHORT_NAME } from "@/lib/workflow/aging";
+import { eafsHeaderDisplay } from "@/lib/workflow/eafsHeader";
 import { filingStatusLabel } from "@/lib/workflow/status";
 import {
   WORKFLOW_GROUPS,
@@ -236,6 +237,13 @@ export default async function FilingDetailPage({
     summary: summarizeGroup(def, groupStepInputs),
     steps: visibleSteps.filter((s) => def.stepCodes.includes(s.stepCode)),
   }));
+
+  // D134 — eAFS's header while there is no Form 2307: Pending until step 2 is settled, then grey Not applicable.
+  const eafsHeader = eafsHeaderDisplay({
+    step2Status: filing.workflowSteps.find((s) => s.stepCode === "RECEIVE_2307")?.status,
+    certificateCount: certificates.length,
+    applicableStepCount: groupSections.find((g) => g.def.code === "EAFS")?.summary.totalCount ?? 0,
+  });
 
   // §4.2 — the page's primary job: what to do next, in words, with the
   // action adjacent. currentStepCode is the same "earliest unresolved
@@ -645,11 +653,12 @@ export default async function FilingDetailPage({
                 noteLabel={
                   def.code === "PAY"
                     ? payNothingToPayLabel
-                    : def.code === "EAFS" && summary.totalCount === 0
-                      ? "Not applicable — no Form 2307" // D93: eAFS applies only when there are certificates
+                    : def.code === "EAFS" && eafsHeader
+                      ? eafsHeader.text // D93/D134: eAFS applies only when there are certificates
                       : null
                 }
-                notApplicable={summary.totalCount === 0 && steps.length === 0}
+                pillOverride={def.code === "EAFS" ? (eafsHeader?.pillLabel ?? null) : null}
+                notApplicable={(def.code === "EAFS" && eafsHeader !== null) || (summary.totalCount === 0 && steps.length === 0)}
                 defaultOpen={def.code === activeGroupCode}
                 stepCodes={def.stepCodes}
               >

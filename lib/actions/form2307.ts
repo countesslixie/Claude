@@ -6,7 +6,7 @@ import { certificateEntrySchema } from "@/lib/validation/form2307";
 import { getActorId } from "@/lib/actor";
 import { logActivity } from "@/lib/activityLog";
 import { manilaDateInputToJsDate, nowManila } from "@/lib/dates";
-import { pesosToCents, percentToBps } from "@/lib/money";
+import { pesosToCents } from "@/lib/money";
 import { periodToSingleQuarterCovered } from "@/lib/tax/periods";
 import { recomputeRequiresSawt } from "@/lib/workflow/filingGeneration";
 import { recomputeReceive2307Status, reopenPreparedFiling } from "@/lib/actions/workflowSteps";
@@ -30,7 +30,6 @@ const FIELDS = [
   "atcCode",
   "incomePayment",
   "taxWithheld",
-  "withholdingRatePercent",
   "notes",
 ] as const;
 
@@ -116,10 +115,9 @@ export async function addCertificate(
   }
 
   const quarterCovered = periodToSingleQuarterCovered(filing.period);
-  const withholdingRateBps = parsed.data.withholdingRatePercent
-    ? percentToBps(parsed.data.withholdingRatePercent)
-    : atcCode.rateBps;
-  const rateOverridden = withholdingRateBps !== atcCode.rateBps;
+  // D132 — no Rate field: the certificate's rate is the chosen ATC code's.
+  const withholdingRateBps = atcCode.rateBps;
+  const rateOverridden = false;
 
   const documentDateRaw = String(formData.get("documentDate") ?? "");
   const documentDate = documentDateRaw ? manilaDateInputToJsDate(documentDateRaw) : nowManila().startOf("day").toJSDate(); // D122 — the form has no scan date; the upload day (Manila). The seed may still pass one.

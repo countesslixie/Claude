@@ -1014,6 +1014,22 @@ Every table sorts by due date then client name. "Annual" is title case on the da
 
 "Due" for a client wait was step-clock arithmetic (the step's start + expected days, e.g. Oct 10 for a filing generated Oct 1), not a deadline. It is now the documents-due-from-client date (`Filing.certificatesExpectedBy`, D106). A filing appears under Waiting on client only once its period has ended (`periodHasEnded`): the Annual from January 1. Step 1's own waiting state, the board and the Next banner are unchanged.
 
+**D131 — Certificate form layout** *(2026-10-01, brief #5x, her decision)*
+
+Rows: payor name · payor address · TIN + ATC code · income + tax withheld · period from + to · scan (with the D120 Choose File button). One column below 640px. `CertificateForm` is the only certificate form (step 2 add; the Form 2307 register has none of its own); saved-payor autofill and the D48 fill-back offers are unchanged.
+
+**D132 — No Rate field** *(2026-10-01, brief #5x, her decision)*
+
+`addCertificate` stores the chosen ATC code's rate (`AtcCode.rateBps` is a required column, so every code has one) and `rateOverridden` false. Readers of a certificate's rate are display and pass-through only (the step 2 row detail, the register column, the SAWT worksheet rows); tax withheld is validated and summed as typed, never from the rate. Existing certificates, including any flagged overridden, are untouched.
+
+**D133 — Item 61 heading; no "Show explanations"** *(2026-10-01, brief #5x, her decision)*
+
+Step 3's "Other tax credits/payments (item 61)" is normal ink, semibold, with no pre-fill note (the pre-fill itself is unchanged, D55). The computation sheet shows form lines and figures only, on step 3's preview and the "(Filed)" sheet; newly saved sheet files drop the explanation column too. Display only: snapshots and saved files are untouched. This supersedes D121's display filter, which is removed.
+
+**D134 — eAFS header until step 2 is settled** *(2026-10-01, brief #5x, her decision)*
+
+With no Form 2307 on the filing, the eAFS header (`lib/workflow/eafsHeader.ts`) is a grey "Pending" with "Depends on Form 2307s (step 2)" while step 2 is open, then a grey "Not applicable" with "No Form 2307" once step 2 is Done or Skipped — never green Done; no counter, nothing to expand. Undoing the skip returns it to Pending. Display only: D93's NA storage is unchanged.
+
 ---
 
 **Documentation reconciled through brief #5t** (brief #5u, this pass; earlier passes: #5m, #5o's light additions D83–D93, #5p) — see the "Last reconciled" line at the top of this file, CURRENT_STATE.md, PROJECT_MASTER.md and CLAUDE.md.

@@ -247,7 +247,6 @@ export async function seedScenarios(prisma: PrismaClient, actorId: string): Prom
         atcCode: cert.atc,
         incomePayment: cert.income,
         taxWithheld: cert.withheld,
-        withholdingRatePercent: "",
         notes: "",
         documentDate: docDate,
         file: sampleFile(caption, "SAMPLE_2307.pdf"),

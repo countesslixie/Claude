@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import { DASHBOARD_SECTIONS, sortByDueThenClient } from "@/lib/workflow/dashboardRows";
 import { agingPillTone } from "@/lib/workflow/aging";
 import { clientWaitDueDate, periodHasEnded } from "@/lib/workflow/clientWait";
-import { displaySourceNote } from "@/lib/sheetText";
 import { periodLabel } from "@/lib/periodLabel";
 import { filingStatusLabel } from "@/lib/workflow/status";
 
@@ -63,11 +62,6 @@ describe("client waits (D130)", () => {
 });
 
 describe("display wording", () => {
-  it("drops the preparation-aid sentence but keeps the rest of a note (D121)", () => {
-    expect(displaySourceNote("This is a preparation aid. The filed return and BIR's own assessment govern.")).toBe("");
-    expect(displaySourceNote("54 - 62. This is a preparation aid — the filed return and BIR's own assessment govern.")).toBe("54 - 62.");
-    expect(displaySourceNote("53 × 8.00%")).toBe("53 × 8.00%");
-  });
   it("Annual in title case; Complete without a skipped count (D129, D124)", () => {
     expect(periodLabel("ANNUAL")).toBe("Annual");
     expect(periodLabel("Q3")).toBe("Q3");

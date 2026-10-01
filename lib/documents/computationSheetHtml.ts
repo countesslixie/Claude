@@ -1,6 +1,5 @@
 import { centsToPesos, formatBreakdownAmount } from "@/lib/money";
 import { formatManilaDate } from "@/lib/dates";
-import { displaySourceNote } from "@/lib/sheetText";
 import { formLabel } from "@/lib/workflow/eSubmissionEmail";
 import type { FilingComputationResult } from "@/lib/tax/types";
 
@@ -39,7 +38,6 @@ export function renderComputationSheetHtml(input: ComputationSheetHtmlInput): st
       (line) => `      <tr>
         <td>${escapeHtml(line.label)}</td>
         <td class="amount">${escapeHtml(formatBreakdownAmount(line.amountCents, line.isOverpaymentLine))}</td>
-        <td class="note">${escapeHtml(displaySourceNote(line.sourceNote))}</td>
       </tr>`,
     )
     .join("\n");

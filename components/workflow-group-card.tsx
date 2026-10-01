@@ -44,6 +44,7 @@ export function WorkflowGroupCard({
   defaultOpen,
   stepCodes,
   notApplicable = false,
+  pillOverride = null,
   children,
 }: {
   name: string;
@@ -64,6 +65,8 @@ export function WorkflowGroupCard({
    * the header is plain text with no Expand link and no empty box under it.
    */
   notApplicable?: boolean;
+  /** D134 — replaces the Done/Pending pill with a grey one (eAFS: "Pending" / "Not applicable"). */
+  pillOverride?: string | null;
   children: React.ReactNode;
 }) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
@@ -80,7 +83,9 @@ export function WorkflowGroupCard({
 
   // D116 — summary text on the left (it wraps, never widening the columns), then
   // the status pill column, then the Expand/Collapse column.
-  const pill = isComplete ? (
+  const pill = pillOverride ? (
+    <StatusBadge tone="pending">{pillOverride}</StatusBadge>
+  ) : isComplete ? (
     <StatusBadge tone="done">Done</StatusBadge>
   ) : notApplicable ? null : (
     <span title={unresolvedSummary ?? undefined}>

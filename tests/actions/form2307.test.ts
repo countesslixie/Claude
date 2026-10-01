@@ -225,7 +225,7 @@ describe("step 2 — certificate entry (addCertificate/deleteCertificate)", () =
     expect(deleteAfterUntick.ok).toBe(true);
   });
 
-  it("brief #5a: rate fills from the ATC code by default, and a typed override is kept and flagged", async () => {
+  it("D132: the certificate's rate is its ATC code's, even if a rate is posted", async () => {
     const { filing } = await makeClientWithQ2Filing("f2307-rate-fill");
     const wi010 = await prisma.atcCode.findUniqueOrThrow({ where: { code: "WI010" } });
 
@@ -238,13 +238,13 @@ describe("step 2 — certificate entry (addCertificate/deleteCertificate)", () =
     await addCertificate(
       filing.id,
       {} as CertificateFormState,
-      certFormData({ payorName: "Overridden Payor", withholdingRatePercent: "7.5" }),
+      certFormData({ payorName: "Ignored Rate Payor", withholdingRatePercent: "7.5" }),
     );
-    const overridden = await prisma.form2307.findFirstOrThrow({
-      where: { claimedOnFilingId: filing.id, deletedAt: null, payorName: "Overridden Payor" },
+    const again = await prisma.form2307.findFirstOrThrow({
+      where: { claimedOnFilingId: filing.id, deletedAt: null, payorName: "Ignored Rate Payor" },
     });
-    expect(overridden.withholdingRateBps).toBe(750);
-    expect(overridden.rateOverridden).toBe(true);
+    expect(again.withholdingRateBps).toBe(wi010.rateBps);
+    expect(again.rateOverridden).toBe(false);
   });
 
   it("brief #5a: payor TIN, payor address and ATC code are required server-side, not only in the form", async () => {

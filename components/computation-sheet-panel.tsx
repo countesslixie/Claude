@@ -1,22 +1,15 @@
 "use client";
 
-import { displaySourceNote } from "@/lib/sheetText";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import { Checkbox } from "@/components/ui/checkbox";
 import { centsToPesos, formatBreakdownAmount } from "@/lib/money";
 import type { BreakdownLine } from "@/lib/tax/types";
-
-const SHOW_EXPLANATIONS_KEY = "computationSheet.showExplanations";
 
 /**
  * §4.4 — the computation sheet's content is correct and unchanged; only
  * the presentation moves. Collapsed by default with a one-line summary
- * (§4.2's ordering: this is derived output, not the work). The
- * per-row explanatory sentences are teaching material shown on every
- * visit, so they're behind a "show explanations" toggle whose setting is
- * remembered (this is a per-browser display preference, not data — a
- * plain localStorage read/write is exactly what it's for).
+ * (§4.2's ordering: this is derived output, not the work). D133 — the
+ * per-row explanations are gone: form lines and figures only.
  */
 export function ComputationSheetPanel({
   breakdown,
@@ -41,27 +34,6 @@ export function ComputationSheetPanel({
   incomeHref: string;
 }) {
   const [open, setOpen] = useState(false);
-  const [showExplanations, setShowExplanations] = useState(false);
-
-  useEffect(() => {
-    try {
-      setShowExplanations(window.localStorage.getItem(SHOW_EXPLANATIONS_KEY) === "1");
-    } catch {
-      // localStorage unavailable (private window, blocked storage) — default stays off.
-    }
-  }, []);
-
-  function toggleExplanations() {
-    setShowExplanations((prev) => {
-      const next = !prev;
-      try {
-        window.localStorage.setItem(SHOW_EXPLANATIONS_KEY, next ? "1" : "0");
-      } catch {
-        // best-effort only
-      }
-      return next;
-    });
-  }
 
   const summaryLabel = !hasSalesRecorded
     ? `No sales recorded for ${period} ${taxableYear}`
@@ -94,10 +66,6 @@ export function ComputationSheetPanel({
               .
             </p>
           )}
-          <label className="mb-2 flex items-center gap-1.5 text-xs text-faint">
-            <Checkbox checked={showExplanations} onChange={toggleExplanations} />
-            Show explanations
-          </label>
           <table className="w-full border-collapse text-sm">
             <tbody>
               {breakdown.map((line) => (
@@ -106,7 +74,6 @@ export function ComputationSheetPanel({
                   <td className="py-1 pr-2 text-right tabular-nums">
                     {formatBreakdownAmount(line.amountCents, line.isOverpaymentLine)}
                   </td>
-                  {showExplanations && <td className="py-1 text-xs text-faint">{displaySourceNote(line.sourceNote)}</td>}
                 </tr>
               ))}
             </tbody>

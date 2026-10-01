@@ -9,7 +9,6 @@ import { PayorDetailsDialog } from "@/components/payor-details-dialog";
 import { AtcCodeSelect, type SelectableAtcCode } from "@/components/atc-code-select";
 import type { CertificateFormState } from "@/lib/actions/form2307";
 import type { SavedPayor } from "@/lib/actions/payors";
-import { bpsToPercentLabel } from "@/lib/money";
 import { fileTooLargeMessage } from "@/lib/upload";
 
 /**
@@ -18,9 +17,8 @@ import { fileTooLargeMessage } from "@/lib/upload";
  * form (payor TIN/address, ATC code), so the disclosure is gone
  * entirely. The scan is part of this same save, not a separate action
  * afterward (D35 is now satisfied by construction). Picking a saved
- * payor fills TIN/address/ATC (and therefore the rate); picking an ATC
- * code fills the rate from it — both stay editable, and typing a
- * different rate is kept as an override rather than silently replaced.
+ * payor fills TIN/address/ATC. D132 — there is no Rate field: the
+ * certificate's rate is its ATC code's.
  */
 export function CertificateForm({
   action,
@@ -60,7 +58,6 @@ export function CertificateForm({
   const [payorTin, setPayorTin] = useState("");
   const [payorAddress, setPayorAddress] = useState("");
   const [atcCode, setAtcCode] = useState("");
-  const [ratePercent, setRatePercent] = useState("");
   // Brief #5b — "Save … to payors" opens the shared dialog; null = closed.
   const [dialogName, setDialogName] = useState<string | null>(null);
   // Brief #5b — per-field "Not now" on the fill-back offer, keyed by the
@@ -100,30 +97,16 @@ export function CertificateForm({
     setPayorTin(state.values.payorTin ?? "");
     setPayorAddress(state.values.payorAddress ?? "");
     setAtcCode(state.values.atcCode ?? "");
-    setRatePercent(state.values.withholdingRatePercent ?? "");
   }, [state.values]);
 
   useEffect(() => {
     if (state.saved) onSaved();
   }, [state.saved, onSaved]);
 
-  function rateFromCode(code: string): string {
-    const found = atcCodes.find((c) => c.code === code);
-    return found ? bpsToPercentLabel(found.rateBps).replace("%", "") : "";
-  }
-
   function handleSelectSavedPayor(p: SavedPayor) {
     if (p.tin) setPayorTin(p.tin);
     if (p.address) setPayorAddress(p.address);
-    if (p.usualAtcCode) {
-      setAtcCode(p.usualAtcCode);
-      setRatePercent(rateFromCode(p.usualAtcCode));
-    }
-  }
-
-  function handleAtcChange(code: string) {
-    setAtcCode(code);
-    setRatePercent(rateFromCode(code));
+    if (p.usualAtcCode) setAtcCode(p.usualAtcCode);
   }
 
   async function handleDialogSave(draft: {
@@ -187,8 +170,9 @@ export function CertificateForm({
     <form action={formAction} onSubmit={handleSubmit} className="mt-1 flex flex-col gap-2 rounded border border-line p-2">
       {state.error && <p className="text-xs text-red">{state.error}</p>}
 
-      <div className="grid grid-cols-2 gap-2">
-        <div className="flex flex-col gap-0.5 col-span-2">
+      {/* D131 — rows: payor name · address · TIN + ATC · income + tax withheld · period from + to · scan. One column below 640px. */}
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <div className="flex flex-col gap-0.5 sm:col-span-2">
           <Label htmlFor="cert-payorName">Payor name</Label>
           <PayorNameField
             id="cert-payorName"
@@ -205,6 +189,22 @@ export function CertificateForm({
               {e}
             </p>
           ))}
+        </div>
+        <div className="flex flex-col gap-0.5 sm:col-span-2">
+          <Label htmlFor="cert-payorAddress">Payor address</Label>
+          <Input
+            id="cert-payorAddress"
+            name="payorAddress"
+            value={payorAddress}
+            onChange={(e) => setPayorAddress(e.target.value)}
+            required
+          />
+          {errs("payorAddress")?.map((e) => (
+            <p key={e} className="text-xs text-red">
+              {e}
+            </p>
+          ))}
+          {fillBackOffer("address", "address", payorAddress)}
         </div>
         <div className="flex flex-col gap-0.5">
           <Label htmlFor="cert-payorTin">Payor TIN</Label>
@@ -223,40 +223,14 @@ export function CertificateForm({
           {fillBackOffer("tin", "TIN", payorTin)}
         </div>
         <div className="flex flex-col gap-0.5">
-          <Label htmlFor="cert-payorAddress">Payor address</Label>
-          <Input
-            id="cert-payorAddress"
-            name="payorAddress"
-            value={payorAddress}
-            onChange={(e) => setPayorAddress(e.target.value)}
-            required
-          />
-          {errs("payorAddress")?.map((e) => (
-            <p key={e} className="text-xs text-red">
-              {e}
-            </p>
-          ))}
-          {fillBackOffer("address", "address", payorAddress)}
-        </div>
-        <div className="flex flex-col gap-0.5 col-span-2">
           <Label htmlFor="cert-atcCode">ATC code</Label>
-          <AtcCodeSelect id="cert-atcCode" name="atcCode" atcCodes={atcCodes} value={atcCode} onChange={handleAtcChange} required />
+          <AtcCodeSelect id="cert-atcCode" name="atcCode" atcCodes={atcCodes} value={atcCode} onChange={setAtcCode} required />
           {errs("atcCode")?.map((e) => (
             <p key={e} className="text-xs text-red">
               {e}
             </p>
           ))}
           {fillBackOffer("usualAtcCode", "usual ATC code", atcCode)}
-        </div>
-        <div className="flex flex-col gap-0.5">
-          <Label htmlFor="cert-withholdingRatePercent">Rate (%)</Label>
-          <Input
-            id="cert-withholdingRatePercent"
-            name="withholdingRatePercent"
-            placeholder="e.g. 5 or 5.00"
-            value={ratePercent}
-            onChange={(e) => setRatePercent(e.target.value)}
-          />
         </div>
         <div className="flex flex-col gap-0.5">
           <Label htmlFor="cert-incomePayment">Income amount (₱)</Label>
@@ -296,7 +270,7 @@ export function CertificateForm({
             required
           />
         </div>
-        <div className="flex flex-col gap-0.5">
+        <div className="flex flex-col gap-0.5 sm:col-span-2">
           <Label htmlFor="cert-file">Scan</Label>
           <Input id="cert-file" name="file" type="file" required className="h-9 text-xs" onChange={handleFileChange} />
           {fileSizeError && <p className="text-xs text-red">{fileSizeError}</p>}
