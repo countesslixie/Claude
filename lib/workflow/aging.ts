@@ -63,6 +63,17 @@ export function birWaitTone(agingTone: AgingTone | null | undefined): "waiting" 
 }
 
 /**
+ * D129 — the one pill-colour rule for a waiting step's aging pill, on the
+ * filing page and the dashboard: a BIR wait (steps 10, 13, 14) is amber, then
+ * red past twice the expected days, never green (D72); any other wait keeps
+ * green / amber / red.
+ */
+export function agingPillTone(stepCode: string, agingTone: AgingTone): "done" | "waiting" | "overdue" {
+  if (["RECEIVE_TRRC", "SAWT_ACK", "SAWT_VALIDATION"].includes(stepCode)) return birWaitTone(agingTone);
+  return agingTone === "red" ? "overdue" : agingTone === "amber" ? "waiting" : "done";
+}
+
+/**
  * The short plain name of each BIR wait, used by the board tag (D79), the
  * BIR Confirmations/eAFS header text (D73), and the Next banner/bar (D84).
  * D96 (brief #5q) — step 14 is "SAWT validation" again (D92's "eAFS

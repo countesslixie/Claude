@@ -1,3 +1,4 @@
+import { periodLabel } from "@/lib/periodLabel";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
@@ -35,11 +36,11 @@ import { FilingStickyBar } from "@/components/filing-sticky-bar";
 import { ComputationSheetPanel } from "@/components/computation-sheet-panel";
 import { OtherCreditsForm } from "@/components/other-credits-form";
 import { centsToPesos } from "@/lib/money";
-import { formatManilaDate, formatManilaDateDotted, toManilaDateInputValue } from "@/lib/dates";
+import { formatManilaDate, formatManilaDateLong, toManilaDateInputValue } from "@/lib/dates";
 import { formLabel } from "@/lib/workflow/eSubmissionEmail";
 import { FilingSummaryStrip } from "@/components/filing-summary-strip";
 import { deriveStepAging, BIR_WAIT_SHORT_NAME } from "@/lib/workflow/aging";
-import { countSkippedSteps, filingStatusLabel } from "@/lib/workflow/status";
+import { filingStatusLabel } from "@/lib/workflow/status";
 import {
   WORKFLOW_GROUPS,
   currentGroupCode,
@@ -206,7 +207,6 @@ export default async function FilingDetailPage({
       agingTone: aging?.tone ?? null,
     };
   });
-  const skippedCount = countSkippedSteps(filing.workflowSteps);
   // Brief #5i §1 — a Skipped step is a decision she made, not a step that
   // doesn't apply, so it's never hidden like an NA one: it renders in its
   // group, in step order, always. Only NA steps are optionally hidden now
@@ -477,17 +477,17 @@ export default async function FilingDetailPage({
     <div className="mx-auto max-w-3xl">
       <FilingStickyBar
         headerId="filing-page-header"
-        title={`${filing.client.registeredName} — TY${filing.taxableYear} ${filing.period}`}
+        title={`${filing.client.registeredName} — TY${filing.taxableYear} ${periodLabel(filing.period)}`}
         next={nextStep ? { stepCode: nextStep.stepCode, sequence: nextStep.sequence, title: nextStep.title } : null}
         waitingText={birWaitText}
       />
       <div id="filing-page-header" className="mb-2 flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-ink">
-            {filing.client.registeredName} — TY{filing.taxableYear} {filing.period}
+            {filing.client.registeredName} — TY{filing.taxableYear} {periodLabel(filing.period)}
           </h1>
           <p className="mt-0.5 text-sm text-ink-secondary">
-            {formLabel(filing.formType)} - due {formatManilaDateDotted(filing.adjustedDueDate)}
+            {formLabel(filing.formType)} - due {formatManilaDateLong(filing.adjustedDueDate)}
           </p>
         </div>
         <Link href={`/clients/${id}`}>
@@ -550,7 +550,7 @@ export default async function FilingDetailPage({
             : `${formatDays(Math.abs(daysToAdjustedDue))} past adjusted due date`
         }
         statusTone={STATUS_TONE[filing.status] ?? "pending"}
-        statusLabel={filingStatusLabel(filing.status, skippedCount)}
+        statusLabel={filingStatusLabel(filing.status)}
       />
 
       {completenessGaps.length > 0 && (
@@ -639,7 +639,6 @@ export default async function FilingDetailPage({
                 name={def.name}
                 doneCount={summary.doneCount}
                 totalCount={summary.totalCount}
-                skippedCount={summary.skippedCount}
                 isComplete={summary.isComplete}
                 unresolvedSummary={summary.unresolvedSummary}
                 outstandingLabel={summary.outstandingLabel}

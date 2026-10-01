@@ -37,7 +37,6 @@ export function WorkflowGroupCard({
   name,
   doneCount,
   totalCount,
-  skippedCount,
   isComplete,
   unresolvedSummary,
   outstandingLabel,
@@ -50,7 +49,6 @@ export function WorkflowGroupCard({
   name: string;
   doneCount: number;
   totalCount: number;
-  skippedCount: number;
   isComplete: boolean;
   /** Brief #5i §3 — the Pending label's tooltip, e.g. "Step 3 and step 4 not done." */
   unresolvedSummary: string | null;
@@ -69,7 +67,7 @@ export function WorkflowGroupCard({
   children: React.ReactNode;
 }) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
-  const counter = groupCounterLabel(doneCount, totalCount, skippedCount);
+  const counter = groupCounterLabel(doneCount, totalCount);
 
   useEffect(() => {
     function onOpenStep(e: Event) {

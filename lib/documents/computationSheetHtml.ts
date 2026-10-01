@@ -1,5 +1,6 @@
 import { centsToPesos, formatBreakdownAmount } from "@/lib/money";
 import { formatManilaDate } from "@/lib/dates";
+import { displaySourceNote } from "@/lib/sheetText";
 import { formLabel } from "@/lib/workflow/eSubmissionEmail";
 import type { FilingComputationResult } from "@/lib/tax/types";
 
@@ -38,7 +39,7 @@ export function renderComputationSheetHtml(input: ComputationSheetHtmlInput): st
       (line) => `      <tr>
         <td>${escapeHtml(line.label)}</td>
         <td class="amount">${escapeHtml(formatBreakdownAmount(line.amountCents, line.isOverpaymentLine))}</td>
-        <td class="note">${escapeHtml(line.sourceNote)}</td>
+        <td class="note">${escapeHtml(displaySourceNote(line.sourceNote))}</td>
       </tr>`,
     )
     .join("\n");
@@ -89,7 +90,7 @@ ${rows}
       ? "Frozen — this reflects the figures as filed."
       : "Live preview — not yet filed. This file reflects figures as of generation time."
   }</p>
-  <p class="footer">Generated automatically by the practice manager. This is a preparation aid — the filed return and BIR&#39;s own assessment govern.</p>
+  <p class="footer">Generated automatically by the practice manager.</p>
 </body>
 </html>
 `;

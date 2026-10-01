@@ -559,18 +559,17 @@ describe("all-NA group header (D81, brief #5n §4)", () => {
     const summary = summarizeGroup(pay, naSteps(["MAKE_PAYMENT", "SAVE_PROOF_PAYMENT"]));
     expect(summary.isComplete).toBe(true);
     expect(summary.totalCount).toBe(0);
-    expect(groupCounterLabel(summary.doneCount, summary.totalCount, summary.skippedCount)).toBeNull();
+    expect(groupCounterLabel(summary.doneCount, summary.totalCount)).toBeNull();
   });
 
   it("applies to any group, not just Pay (eAFS with 11-13 and 15 all NA)", () => {
     const summary = summarizeGroup(eafs, naSteps(["ALPHALIST_ENTRY", "EMAIL_DAT", "SAWT_ACK", "EAFS_SUBMIT"]));
-    expect(groupCounterLabel(summary.doneCount, summary.totalCount, summary.skippedCount)).toBeNull();
+    expect(groupCounterLabel(summary.doneCount, summary.totalCount)).toBeNull();
   });
 
   it("an ordinary group still shows its counter, with the skipped suffix", () => {
-    expect(groupCounterLabel(4, 4, 0)).toBe("4 of 4");
-    expect(groupCounterLabel(4, 4, 1)).toBe("4 of 4 · 1 skipped");
-    expect(groupCounterLabel(0, 1, 0)).toBe("0 of 1");
+    expect(groupCounterLabel(4, 4)).toBe("4 of 4");
+    expect(groupCounterLabel(0, 1)).toBe("0 of 1");
   });
 
   it("Nothing to pay shows the amount for an overpayment, plain for exactly zero", () => {

@@ -173,26 +173,21 @@ describe("countSkippedSteps", () => {
 });
 
 describe("filingStatusLabel", () => {
-  it("COMPLETE with skipped steps renders the skip count", () => {
-    expect(filingStatusLabel("COMPLETE", 1)).toBe("Complete (1 step skipped)");
-    expect(filingStatusLabel("COMPLETE", 3)).toBe("Complete (3 steps skipped)");
-  });
-
   it("COMPLETE with no skipped steps renders a plain label, not the raw code (brief #5i §5)", () => {
-    expect(filingStatusLabel("COMPLETE", 0)).toBe("Complete");
+    expect(filingStatusLabel("COMPLETE")).toBe("Complete");
   });
 
   it("every other status renders its own plain label, never the raw code (brief #5i §5)", () => {
-    expect(filingStatusLabel("NOT_STARTED", 0)).toBe("Not started");
-    expect(filingStatusLabel("IN_PROGRESS", 0)).toBe("In progress");
-    expect(filingStatusLabel("BLOCKED", 2)).toBe("Blocked");
-    expect(filingStatusLabel("WAITING_CLIENT", 0)).toBe("Waiting on client");
-    expect(filingStatusLabel("WAITING_BIR", 0)).toBe("Waiting on BIR");
+    expect(filingStatusLabel("NOT_STARTED")).toBe("Not started");
+    expect(filingStatusLabel("IN_PROGRESS")).toBe("In progress");
+    expect(filingStatusLabel("BLOCKED")).toBe("Blocked");
+    expect(filingStatusLabel("WAITING_CLIENT")).toBe("Waiting on client");
+    expect(filingStatusLabel("WAITING_BIR")).toBe("Waiting on BIR");
   });
 
   it("every FilingStatus value the type allows maps to a non-raw label -- a new enum value fails this test until labeled", () => {
     for (const status of ALL_FILING_STATUSES) {
-      const label = filingStatusLabel(status, 0);
+      const label = filingStatusLabel(status);
       expect(label, `status ${status} rendered its own raw code`).not.toBe(status);
       expect(label.length).toBeGreaterThan(0);
     }
@@ -238,7 +233,7 @@ describe("deriveFilingStatus — Waiting on BIR agrees with Next (D97)", () => {
     const steps = build(FILED);
     expect(nextActionForFiling(steps).kind).toBe("work");
     expect(derive(steps)).toBe("IN_PROGRESS");
-    expect(filingStatusLabel(derive(steps), 0)).toBe("In progress");
+    expect(filingStatusLabel(derive(steps))).toBe("In progress");
   });
 
   it("BIR waiting and nothing of hers open -> Waiting on BIR", () => {

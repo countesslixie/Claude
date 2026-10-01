@@ -144,12 +144,12 @@ export function ClientPackageStepCard({
         </div>
       )}
 
-      {isDone && !hasSavedEmail && <p className="mt-1 text-xs text-ink-secondary">Done{doneDateLabel ? ` ${doneDateLabel}` : ""}</p>}
+      {isDone && !hasSavedEmail && <p className="mt-1 text-xs text-ink-secondary">Done{doneDateLabel ? ` on ${doneDateLabel}` : ""}</p>}
 
       {isDone && hasSavedEmail && (
         <div className="mt-1 flex flex-col gap-1">
           <p className="text-xs text-ink-secondary">
-            Emailed {savedAtLabel}: {subject}{" "}
+            Emailed on {savedAtLabel}: {subject}{" "}
             <button type="button" onClick={() => setShow((v) => !v)} className="text-faint underline hover:text-ink">
               {show ? "Hide email" : "Show email"}
             </button>

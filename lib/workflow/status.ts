@@ -92,17 +92,12 @@ export const ALL_FILING_STATUSES: FilingStatus[] = Object.keys(FILING_STATUS_LAB
 /**
  * The label to render for a filing's status, everywhere one shows (the
  * summary strip, the board, the client page, the dashboard). COMPLETE
- * with one or more skipped steps renders as "Complete (N steps skipped)"
- * so a skip stays visible at the point COMPLETE is shown, rather than
- * looking identical to a filing with no skips at all (SPEC.md 7.2). Every
- * other status renders its plain label (see FILING_STATUS_LABELS above) —
+ * renders as plain "Complete" (D124 — the old "(N steps skipped)" suffix is
+ * gone; a skipped step shows Skipped on its own card). Every status renders its plain label (see FILING_STATUS_LABELS above) —
  * brief #5i §5, replacing the bare enum value (`IN_PROGRESS`, `BLOCKED`, …)
  * this used to fall through to.
  */
-export function filingStatusLabel(status: FilingStatus, skippedCount: number): string {
-  if (status === "COMPLETE" && skippedCount > 0) {
-    return `Complete (${skippedCount} step${skippedCount === 1 ? "" : "s"} skipped)`;
-  }
+export function filingStatusLabel(status: FilingStatus): string {
   return FILING_STATUS_LABELS[status];
 }
 

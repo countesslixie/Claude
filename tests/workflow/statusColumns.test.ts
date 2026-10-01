@@ -3,7 +3,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { WorkflowGroupCard } from "@/components/workflow-group-card";
 import { FilingSummaryStrip } from "@/components/filing-summary-strip";
-import { formatManilaDateDotted } from "@/lib/dates";
+import { formatManilaDateLong } from "@/lib/dates";
 
 function group(over: Record<string, unknown>) {
   return renderToStaticMarkup(
@@ -60,10 +60,9 @@ describe("status / action columns (D116)", () => {
   });
 });
 
-describe("filing page subtitle date (D115)", () => {
-  it("dots the month, except May", () => {
-    expect(formatManilaDateDotted(new Date("2026-11-15T16:00:00Z"))).toBe("Nov. 16, 2026");
-    expect(formatManilaDateDotted(new Date("2026-08-14T16:00:00Z"))).toBe("Aug. 15, 2026");
-    expect(formatManilaDateDotted(new Date("2026-05-14T16:00:00Z"))).toBe("May 15, 2026");
+describe("filing page subtitle date (D123)", () => {
+  it("writes the month out in full", () => {
+    expect(formatManilaDateLong(new Date("2026-11-15T16:00:00Z"))).toBe("November 16, 2026");
+    expect(formatManilaDateLong(new Date("2026-05-14T16:00:00Z"))).toBe("May 15, 2026");
   });
 });

@@ -8,6 +8,7 @@ import { markStepDone } from "@/lib/actions/workflowSteps";
 import { uploadDocument, deleteDocument } from "@/lib/actions/documents";
 import { generateFilingsForClientYear } from "@/lib/workflow/filingGeneration";
 import { createPayorInline } from "@/lib/actions/payors";
+import { manilaCalendarDay, nowManila } from "@/lib/dates";
 import { markEarlierQuartersFiled, resolvePrepare } from "../helpers/filedEarlier";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
@@ -93,6 +94,15 @@ describe("step 2 — certificate entry (addCertificate/deleteCertificate)", () =
     expect(cert.claimedOnFilingId).toBe(filing.id);
     expect(cert.quarterCovered).toBe(2);
     expect(cert.status).toBe("RECORDED");
+  });
+
+  it("D122: a certificate saved with no scan date stores today's Manila date", async () => {
+    const { client, filing } = await makeClientWithQ2Filing("f2307-scan-date");
+    const result = await addCertificate(filing.id, {} as CertificateFormState, certFormData());
+    expect(result.saved).toBe(true);
+    const cert = await prisma.form2307.findFirstOrThrow({ where: { clientId: client.id, deletedAt: null } });
+    const scan = await prisma.document.findFirstOrThrow({ where: { form2307Id: cert.id, deletedAt: null } });
+    expect(manilaCalendarDay(scan.documentDate)).toBe(nowManila().toFormat("yyyy-MM-dd"));
   });
 
   it("step 2 is Done once 'all received' is ticked, since the scan is already attached by construction", async () => {

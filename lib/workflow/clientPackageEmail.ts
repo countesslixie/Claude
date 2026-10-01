@@ -52,7 +52,7 @@ export function buildClientPackageEmail(input: ClientPackageEmailInput): ClientP
   const form = formLabel(input.formType);
   const periodName = periodPlainName(input.period, input.taxableYear);
   const returnName = input.period === "ANNUAL" ? `Annual ITR (${form}) for ${input.taxableYear}` : `${form} for ${periodName}`;
-  const subject = `${input.clientRegisteredName} — ${form} ${periodName}${input.period === "ANNUAL" ? ` (${input.taxableYear})` : ""}, filed ${filedDateLabel}`;
+  const subject = `${input.clientRegisteredName} — ${form} ${periodName}${input.period === "ANNUAL" ? ` (${input.taxableYear})` : ""}, filed on ${filedDateLabel}`;
 
   const summary = buildSummaryLines(input.sheet);
   const summaryLines = formatSummaryLines(summary);

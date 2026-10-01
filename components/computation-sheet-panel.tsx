@@ -1,5 +1,6 @@
 "use client";
 
+import { displaySourceNote } from "@/lib/sheetText";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -76,7 +77,7 @@ export function ComputationSheetPanel({
         className="flex w-full items-center justify-between px-4 py-2.5 text-left"
       >
         <span className="text-sm font-semibold text-ink">
-          Computation sheet {isFrozen ? "(frozen — as filed)" : "(live preview — not yet filed)"}
+          Computation sheet {isFrozen ? "(Filed)" : "(live preview — not yet filed)"}
         </span>
         <span className="text-sm text-ink-secondary">
           {summaryLabel} <span className="ml-2 text-xs text-faint">{open ? "Hide" : "Show"}</span>
@@ -105,7 +106,7 @@ export function ComputationSheetPanel({
                   <td className="py-1 pr-2 text-right tabular-nums">
                     {formatBreakdownAmount(line.amountCents, line.isOverpaymentLine)}
                   </td>
-                  {showExplanations && <td className="py-1 text-xs text-faint">{line.sourceNote}</td>}
+                  {showExplanations && <td className="py-1 text-xs text-faint">{displaySourceNote(line.sourceNote)}</td>}
                 </tr>
               ))}
             </tbody>

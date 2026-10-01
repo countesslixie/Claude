@@ -974,6 +974,46 @@ The date input is gone from every step-card upload box; `uploadDocument` dates t
 
 One rule in `app/globals.css` styles `input[type="file"]` and its `::file-selector-button` (white, bordered, rounded, like Upload) for every upload control.
 
+**D121 — Sheet heading "Computation sheet (Filed)"; no preparation-aid sentence** *(2026-10-01, brief #5w, her decision)*
+
+The filed sheet's heading reads "Computation sheet (Filed)" (the live heading is unchanged). The "preparation aid" sentence is filtered out at display time (`lib/sheetText.ts`): in "Show explanations" and in newly saved sheet files, including the file's footer. Frozen snapshots and the engine's own notes are untouched; no figure changes.
+
+**D122 — Certificate form has no Scan date** *(2026-10-01, brief #5w, her decision)*
+
+The upload day (today, Manila) is recorded. The scan date is read by nothing but the stored file name; the credit-period rule (D34) uses the certificate's period covered, and the register, client package and SAWT worksheet never read it. The server still accepts an optional date (the seed).
+
+**D123 — Filing subtitle uses full month names** *(2026-10-01, brief #5w, replaces D115's "Nov.")*
+
+"1701Q - due November 16, 2026" (`formatManilaDateLong`, that line only; `formatManilaDateDotted` is removed).
+
+**D124 — "Complete" with no skipped count** *(2026-10-01, brief #5w, her decision)*
+
+`filingStatusLabel(status)` and `groupCounterLabel(done, total)` no longer take or print a skipped count. A skipped step still counts toward "N of N" (D60) and its own card keeps Skipped, its reason and Undo skip.
+
+**D125 — "Emailed on …"** *(2026-10-01, brief #5w, her decision)*
+
+Step 16 reads "Emailed on [date]: …", step 12 "Emailed on [date] — …", the old-filing fallback "Done on [date]". A new step 16 subject ends "filed on [date]"; saved emails are unchanged. The zip name and email body do not use the subject.
+
+**D126 — Dashboard sections** *(2026-10-01, brief #5w, her decision)*
+
+In order: Needs my action now, Waiting on client, Waiting on BIR, Missing documents, Threshold & election alerts (`lib/workflow/dashboardRows.ts`). Each is collapsible (chevron); open when it has entries, closed when empty, with the normal header and "Nothing here right now." when opened. Upcoming deadlines is removed.
+
+**D127 — One centred column layout** *(2026-10-01, brief #5w, her decision)*
+
+Client · Period · Step · Due · Aging at fixed widths in every table; Missing documents (Missing spans Due and Aging) and alerts (text spans the rest) follow the same grid. Tables scroll sideways inside their card, never the page.
+
+**D128 — No Log follow-up on the dashboard** *(2026-10-01, brief #5w, her decision)*
+
+It appeared nowhere else on screen. `logFollowUp` (a client wait only; refused on BIR waits, D72) and `WorkflowStep.followUpCount` remain in the code with no screen using them.
+
+**D129 — Dashboard sort, "Annual", aging colours** *(2026-10-01, brief #5w, her decision)*
+
+Every table sorts by due date then client name. "Annual" is title case on the dashboard, board, client page and filing title (`periodLabel`). BIR aging pills are amber, red past twice the expected days, never green, via `agingPillTone` (client waits keep green/amber/red).
+
+**D130 — Client waits: Due and when a filing first appears** *(2026-10-01, brief #5w, built after investigation)*
+
+"Due" for a client wait was step-clock arithmetic (the step's start + expected days, e.g. Oct 10 for a filing generated Oct 1), not a deadline. It is now the documents-due-from-client date (`Filing.certificatesExpectedBy`, D106). A filing appears under Waiting on client only once its period has ended (`periodHasEnded`): the Annual from January 1. Step 1's own waiting state, the board and the Next banner are unchanged.
+
 ---
 
 **Documentation reconciled through brief #5t** (brief #5u, this pass; earlier passes: #5m, #5o's light additions D83–D93, #5p) — see the "Last reconciled" line at the top of this file, CURRENT_STATE.md, PROJECT_MASTER.md and CLAUDE.md.

@@ -1,3 +1,4 @@
+import { periodLabel } from "@/lib/periodLabel";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { Card, CardBody } from "@/components/ui/card";
@@ -5,7 +6,7 @@ import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { StatusBadge, type StatusTone } from "@/components/status-badge";
 import { formatManilaDate } from "@/lib/dates";
-import { countSkippedSteps, filingStatusLabel } from "@/lib/workflow/status";
+import { filingStatusLabel } from "@/lib/workflow/status";
 import { WORKFLOW_GROUPS, currentGroupCode, summarizeGroup } from "@/lib/workflow/groups";
 import { deriveStepAging, birWaitTags, type BirWaitTag } from "@/lib/workflow/aging";
 import type { FilingStatus, WorkflowStepStatus } from "@/lib/workflow/types";
@@ -153,7 +154,7 @@ export default async function FilingsBoardPage({
                 <option value="">All statuses</option>
                 {Object.keys(FILING_STATUS_TONE).map((s) => (
                   <option key={s} value={s}>
-                    {filingStatusLabel(s as FilingStatus, 0)}
+                    {filingStatusLabel(s as FilingStatus)}
                   </option>
                 ))}
               </Select>
@@ -217,11 +218,11 @@ function BoardColumn({
             <div className="rounded-md border border-line bg-surface p-2 text-sm hover:border-separator">
               <p className="font-medium text-ink">{f.client.registeredName}</p>
               <p className="text-xs text-faint">
-                TY{f.taxableYear} {f.period}
+                TY{f.taxableYear} {periodLabel(f.period)}
               </p>
               <div className="mt-1 flex items-center justify-between">
                 <StatusBadge tone={FILING_STATUS_TONE[f.status] ?? "pending"}>
-                  {filingStatusLabel(f.status, countSkippedSteps(f.workflowSteps))}
+                  {filingStatusLabel(f.status)}
                 </StatusBadge>
                 <span className="text-xs text-faint">{formatManilaDate(f.adjustedDueDate)}</span>
               </div>

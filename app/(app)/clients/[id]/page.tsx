@@ -1,3 +1,4 @@
+import { periodLabel } from "@/lib/periodLabel";
 import Link from "next/link";
 import { ClientStickyBar } from "@/components/client-sticky-bar";
 import { notFound } from "next/navigation";
@@ -9,7 +10,7 @@ import { GenerateFilingsForm } from "@/components/generate-filings-form";
 import { formatManilaDate, currentTaxableYearManila } from "@/lib/dates";
 import { bpsToPercentLabel } from "@/lib/money";
 import { formLabel } from "@/lib/workflow/eSubmissionEmail";
-import { countSkippedSteps, filingStatusLabel } from "@/lib/workflow/status";
+import { filingStatusLabel } from "@/lib/workflow/status";
 
 // Brief #5i §5 — matches app/(app)/filings/page.tsx's own FILING_STATUS_TONE
 // exactly, so a filing's pill reads the same colour wherever it shows.
@@ -258,7 +259,7 @@ export default async function ClientDetailPage({
                       return (
                         <tr key={f.id}>
                           <td>{f.taxableYear}</td>
-                          <td>{f.period}</td>
+                          <td>{periodLabel(f.period)}</td>
                           <td>{formLabel(f.formType)}</td>
                           <td>—</td>
                           <td colSpan={2} className="text-faint">
@@ -270,12 +271,12 @@ export default async function ClientDetailPage({
                     return (
                       <tr key={f.id}>
                         <td>{f.taxableYear}</td>
-                        <td>{f.period}</td>
+                        <td>{periodLabel(f.period)}</td>
                         <td>{formLabel(f.formType)}</td>
                         <td>{formatManilaDate(f.adjustedDueDate)}</td>
                         <td>
                           <StatusBadge tone={FILING_STATUS_TONE[f.status] ?? "pending"}>
-                            {filingStatusLabel(f.status, countSkippedSteps(f.workflowSteps))}
+                            {filingStatusLabel(f.status)}
                           </StatusBadge>
                         </td>
                         <td>

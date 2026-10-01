@@ -740,14 +740,15 @@ export function summarizeGroup(group: WorkflowGroupDef, steps: GroupStepInput[])
 }
 
 /**
- * D81 (brief #5n §4) — the "4 of 4 · 1 skipped" counter beside a group's
+ * D81 (brief #5n §4) — the "4 of 4" counter beside a group's
  * name. Null when the group has no applicable step at all (every step NA):
  * "0 of 0" said nothing, and the Done pill plus the group's note are enough.
  * Applies to any group, not just Pay.
  */
-export function groupCounterLabel(doneCount: number, totalCount: number, skippedCount: number): string | null {
+export function groupCounterLabel(doneCount: number, totalCount: number): string | null {
   if (totalCount === 0) return null;
-  return `${doneCount} of ${totalCount}${skippedCount > 0 ? ` · ${skippedCount} skipped` : ""}`;
+  // D124 — a skipped step still counts toward N of N, but the count is no longer spelled out.
+  return `${doneCount} of ${totalCount}`;
 }
 
 /**

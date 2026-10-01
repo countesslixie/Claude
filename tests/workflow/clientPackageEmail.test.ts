@@ -216,6 +216,11 @@ describe("buildClientPackageEmail (D102)", () => {
     expect(body).toContain("Next filing: 1701Q for Q3 2026, due Nov 16, 2026. Please send required documents by Oct 20, 2026.");
   });
 
+  it("the subject reads 'filed on [date]' (D125)", () => {
+    const { subject } = buildClientPackageEmail(baseInput());
+    expect(subject).toMatch(/, filed on [A-Z][a-z]{2} \d{1,2}, \d{4}$/);
+  });
+
   it("omits the next-filing line when there is no next filing", () => {
     expect(buildClientPackageEmail(baseInput({ next: null })).body).not.toContain("Next filing");
   });

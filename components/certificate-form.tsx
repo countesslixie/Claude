@@ -306,15 +306,6 @@ export function CertificateForm({
             </p>
           ))}
         </div>
-        <div className="flex flex-col gap-0.5">
-          <Label htmlFor="cert-documentDate">Scan date</Label>
-          <Input
-            id="cert-documentDate"
-            name="documentDate"
-            type="date"
-            defaultValue={new Date().toISOString().split("T")[0]}
-          />
-        </div>
       </div>
 
       <div className="flex items-center gap-2">

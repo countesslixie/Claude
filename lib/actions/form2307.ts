@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { certificateEntrySchema } from "@/lib/validation/form2307";
 import { getActorId } from "@/lib/actor";
 import { logActivity } from "@/lib/activityLog";
-import { manilaDateInputToJsDate } from "@/lib/dates";
+import { manilaDateInputToJsDate, nowManila } from "@/lib/dates";
 import { pesosToCents, percentToBps } from "@/lib/money";
 import { periodToSingleQuarterCovered } from "@/lib/tax/periods";
 import { recomputeRequiresSawt } from "@/lib/workflow/filingGeneration";
@@ -122,7 +122,7 @@ export async function addCertificate(
   const rateOverridden = withholdingRateBps !== atcCode.rateBps;
 
   const documentDateRaw = String(formData.get("documentDate") ?? "");
-  const documentDate = documentDateRaw ? manilaDateInputToJsDate(documentDateRaw) : new Date();
+  const documentDate = documentDateRaw ? manilaDateInputToJsDate(documentDateRaw) : nowManila().startOf("day").toJSDate(); // D122 — the form has no scan date; the upload day (Manila). The seed may still pass one.
 
   const actorId = await getActorId();
   const cert = await prisma.form2307.create({
