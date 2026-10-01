@@ -8,6 +8,7 @@ import { StatusBadge, type StatusTone } from "@/components/status-badge";
 import { GenerateFilingsForm } from "@/components/generate-filings-form";
 import { formatManilaDate, currentTaxableYearManila } from "@/lib/dates";
 import { bpsToPercentLabel } from "@/lib/money";
+import { formLabel } from "@/lib/workflow/eSubmissionEmail";
 import { countSkippedSteps, filingStatusLabel } from "@/lib/workflow/status";
 
 // Brief #5i §5 — matches app/(app)/filings/page.tsx's own FILING_STATUS_TONE
@@ -258,7 +259,7 @@ export default async function ClientDetailPage({
                         <tr key={f.id}>
                           <td>{f.taxableYear}</td>
                           <td>{f.period}</td>
-                          <td>{f.formType}</td>
+                          <td>{formLabel(f.formType)}</td>
                           <td>—</td>
                           <td colSpan={2} className="text-faint">
                             Filed outside the app
@@ -270,7 +271,7 @@ export default async function ClientDetailPage({
                       <tr key={f.id}>
                         <td>{f.taxableYear}</td>
                         <td>{f.period}</td>
-                        <td>{f.formType}</td>
+                        <td>{formLabel(f.formType)}</td>
                         <td>{formatManilaDate(f.adjustedDueDate)}</td>
                         <td>
                           <StatusBadge tone={FILING_STATUS_TONE[f.status] ?? "pending"}>

@@ -22,7 +22,6 @@ export function ComputationSheetPanel({
   isOverpayment,
   overpaymentCents,
   taxPayableCents,
-  formType,
   isFrozen,
   hasSalesRecorded,
   period,
@@ -33,7 +32,6 @@ export function ComputationSheetPanel({
   isOverpayment: boolean;
   overpaymentCents: number;
   taxPayableCents: number;
-  formType: string;
   isFrozen: boolean;
   /** False when this filing's own quarter has no declared sales yet (rework brief #2 §3.1). */
   hasSalesRecorded: boolean;
@@ -112,9 +110,6 @@ export function ComputationSheetPanel({
               ))}
             </tbody>
           </table>
-          <p className="mt-2 text-xs text-faint">
-            Form {formType}. This is a preparation aid; the filed return and BIR&apos;s own assessment govern.
-          </p>
         </div>
       )}
     </div>

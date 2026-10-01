@@ -12,6 +12,8 @@ import { missingRequiredSlots } from "@/lib/workflow/docSlots";
 import { parseDocSlots } from "@/lib/workflow/types";
 import { logFollowUpAction } from "@/lib/actions/workflowSteps";
 import { cumulativeGrossForThreshold } from "@/lib/vatThreshold";
+import { formatDays } from "@/lib/formatDays";
+import { formLabel } from "@/lib/workflow/eSubmissionEmail";
 
 const AGING_BADGE_TONE: Record<AgingTone, StatusTone> = { green: "done", amber: "waiting", red: "overdue" };
 
@@ -226,7 +228,7 @@ export default async function DashboardPage() {
     // This row is specifically the statutory/adjusted deadline calendar,
     // unlike the rows above — filing.adjustedDueDate is correct here, not
     // a bug.
-    stepTitle: f.formType,
+    stepTitle: formLabel(f.formType),
     dueDate: f.adjustedDueDate,
   }));
 
@@ -364,7 +366,7 @@ function FilingRowsTable({ rows }: { rows: FilingTableRow[] }) {
               <td className="px-3 py-2 text-[14px] text-ink-secondary">{r.stepTitle}</td>
               <td className="px-3 py-2 text-[13px] text-faint">{formatManilaDate(r.dueDate)}</td>
               <td className="px-3 py-2">
-                {r.aging && <StatusBadge tone={AGING_BADGE_TONE[r.aging.tone]}>{r.aging.daysWaiting}d</StatusBadge>}
+                {r.aging && <StatusBadge tone={AGING_BADGE_TONE[r.aging.tone]}>{formatDays(r.aging.daysWaiting)}</StatusBadge>}
               </td>
               {r.action ? <ActionCell>{r.action}</ActionCell> : <td className="px-3 py-2" />}
             </ClickableRow>

@@ -142,3 +142,37 @@ table.data-table tbody tr:hover {
     break-before: page;
   }
 }
+
+/*
+ * D120 — a file picker reads as a bordered button (white, rounded, same look
+ * as the Upload button beside it), with "No file chosen" / the chosen name in
+ * muted text next to it. Applies to every <input type="file"> in the app; the
+ * input's own box is dropped so only the button has a border.
+ */
+input[type="file"] {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: var(--faint);
+  cursor: pointer;
+}
+
+input[type="file"]:focus {
+  box-shadow: none;
+}
+
+input[type="file"]::file-selector-button {
+  margin-right: 0.5rem;
+  padding: 0.25rem 0.625rem;
+  border: 1px solid var(--line);
+  border-radius: 0.375rem;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+input[type="file"]::file-selector-button:hover {
+  background: var(--purple-wash);
+}

@@ -9,13 +9,13 @@ import { birWaitTone } from "@/lib/workflow/aging";
 import { stepStatusLabel } from "@/lib/workflow/status";
 import { fileTooLargeMessage } from "@/lib/upload";
 import type { WorkflowStepStatus } from "@/lib/workflow/types";
+import { formatDays } from "@/lib/formatDays";
 
 const AGING_TONE: Record<string, StatusTone> = { green: "done", amber: "waiting", red: "overdue" };
 
 export interface FileGroupDoc {
   id: string;
   originalFilename: string;
-  documentDate: string;
 }
 
 /**
@@ -43,7 +43,7 @@ export interface FileGroupDoc {
  * manual click — there is no Mark waiting button anywhere on this card for
  * any of the five steps it's used for. D72 (brief #5m §2) — no Log
  * follow-up either: she can't follow up with BIR on any of these, so the
- * only thing a waiting state shows is a single "Waiting on BIR · Nd" pill,
+ * only thing a waiting state shows is a single "Waiting on BIR · N days" pill,
  * coloured by the aging thresholds (amber while waiting, red once past
  * twice the expected response days — never green on a waiting step),
  * replacing what used to be three separate pieces (grey "waiting on"
@@ -128,11 +128,11 @@ export function FileGroupDocStepCard({
         <div className="flex items-center gap-1.5">
           {isWaitingOnBir ? (
             <StatusBadge tone={birWaitTone(agingTone)}>
-              Waiting on BIR{agingDaysWaiting != null ? ` · ${agingDaysWaiting}d` : ""}
+              Waiting on BIR{agingDaysWaiting != null ? ` · ${formatDays(agingDaysWaiting)}` : ""}
             </StatusBadge>
           ) : (
             <>
-              {agingTone && <StatusBadge tone={AGING_TONE[agingTone]}>{agingDaysWaiting}d</StatusBadge>}
+              {agingTone && <StatusBadge tone={AGING_TONE[agingTone]}>{formatDays(agingDaysWaiting ?? 0)}</StatusBadge>}
               <StatusBadge tone={isDone ? "done" : isWaiting ? "waiting" : "pending"}>
                 {stepStatusLabel(status as WorkflowStepStatus)}
               </StatusBadge>
@@ -157,8 +157,7 @@ export function FileGroupDocStepCard({
                     <li key={d.id} className="text-xs">
                       <a href={`/api/documents/${d.id}/download`} className="text-ink-secondary underline hover:text-ink">
                         {d.originalFilename}
-                      </a>{" "}
-                      <span className="text-faint">({d.documentDate})</span>
+                      </a>
                     </li>
                   ))}
                 </ul>
@@ -167,12 +166,6 @@ export function FileGroupDocStepCard({
                 <form action={(fd) => handleUpload(slot.slotCode, fd)} className="mt-1 flex items-center gap-1.5">
                   <p className="sr-only">{slot.label}</p>
                   <Input type="file" name="file" required className="h-8 text-xs" />
-                  <Input
-                    type="date"
-                    name="documentDate"
-                    defaultValue={new Date().toISOString().split("T")[0]}
-                    className="h-8 w-36 text-xs"
-                  />
                   <Button type="submit" size="sm" variant="secondary" disabled={isPending}>
                     {hasFile ? "Replace" : "Upload"}
                   </Button>

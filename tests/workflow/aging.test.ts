@@ -106,7 +106,7 @@ describe("birWaitTags (D79)", () => {
 
   it("names step 10 and step 14 with days waiting", () => {
     const tags = birWaitTags([step("RECEIVE_TRRC", 2), step("SAWT_VALIDATION", 8)], null, NOW);
-    expect(tags.map((t) => t.text)).toEqual(["TRRC · 2d", "SAWT validation · 8d"]);
+    expect(tags.map((t) => t.text)).toEqual(["TRRC · 2 days", "SAWT validation · 8 days"]);
   });
 
   it("amber while waiting, red at twice expectedResponseDays — the pill's own thresholds", () => {

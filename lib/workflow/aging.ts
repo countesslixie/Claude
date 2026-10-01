@@ -1,4 +1,5 @@
 import type { WorkflowStepStatus } from "./types";
+import { formatDays } from "@/lib/formatDays";
 
 /**
  * Waiting-step aging (SPEC.md 7.2): green < expectedResponseDays, amber
@@ -87,8 +88,8 @@ export interface BirWaitTag {
 
 /**
  * D79 — tags for a board card sitting outside BIR Confirmations: one per
- * step 10 / step 14 that is WAITING_EXTERNAL right now, "TRRC · 2d" /
- * "SAWT validation · 8d". Days and colour come from deriveStepAging, the
+ * step 10 / step 14 that is WAITING_EXTERNAL right now, "TRRC · 2 days" /
+ * "SAWT validation · 8 days". Days and colour come from deriveStepAging, the
  * same function the step pill uses.
  */
 export function birWaitTags(
@@ -107,7 +108,7 @@ export function birWaitTags(
     if (!step) continue;
     const aging = deriveStepAging({ ...step, certificatesExpectedBy, now });
     if (!aging) continue;
-    tags.push({ stepCode, text: `${label} · ${aging.daysWaiting}d`, tone: birWaitTone(aging.tone) });
+    tags.push({ stepCode, text: `${label} · ${formatDays(aging.daysWaiting)}`, tone: birWaitTone(aging.tone) });
   }
   return tags;
 }

@@ -23,7 +23,7 @@ export function FilingStickyBar({
   /** e.g. "Rosario Garcia — TY2026 Q3" */
   title: string;
   next: { stepCode: string; sequence: number; title: string } | null;
-  /** D84 — when nothing of hers is left but a BIR wait: "waiting on BIR — TRRC, 3d". No link. */
+  /** D84 — when nothing of hers is left but a BIR wait: "waiting on BIR — TRRC, 3 days". No link. */
   waitingText?: string | null;
 }) {
   const [visible, setVisible] = useState(false);

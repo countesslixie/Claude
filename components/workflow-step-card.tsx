@@ -17,6 +17,7 @@ import { birWaitTone } from "@/lib/workflow/aging";
 import { stepStatusLabel } from "@/lib/workflow/status";
 import { fileTooLargeMessage } from "@/lib/upload";
 import type { WorkflowStepStatus } from "@/lib/workflow/types";
+import { formatDays } from "@/lib/formatDays";
 
 const STEP_STATUS_TONE: Record<string, StatusTone> = {
   PENDING: "pending",
@@ -33,7 +34,6 @@ export interface StepCardDoc {
   id: string;
   docSlotCode: string | null;
   originalFilename: string;
-  documentDate: string;
 }
 
 export interface StepCardSlot {
@@ -149,7 +149,7 @@ export function WorkflowStepCard({
 
   // D72 (brief #5m §2) — a step waiting on BIR (currently only step 13,
   // SAWT_ACK, on this generic card — steps 10/14 use the bespoke
-  // FileGroupDocStepCard) shows ONE pill, "Waiting on BIR · Nd", never
+  // FileGroupDocStepCard) shows ONE pill, "Waiting on BIR · N days", never
   // the grey "waiting on" text plus a separate aging pill plus a separate
   // status pill all at once. No green: amber while waiting, red once
   // past twice expectedResponseDays.
@@ -170,12 +170,12 @@ export function WorkflowStepCard({
         <div className="flex items-center gap-1.5">
           {isWaitingOnBir ? (
             <StatusBadge tone={birWaitTone(step.agingTone)}>
-              Waiting on BIR{step.agingDaysWaiting != null ? ` · ${step.agingDaysWaiting}d` : ""}
+              Waiting on BIR{step.agingDaysWaiting != null ? ` · ${formatDays(step.agingDaysWaiting)}` : ""}
             </StatusBadge>
           ) : (
             <>
               {step.agingTone && (
-                <StatusBadge tone={AGING_TONE[step.agingTone]}>{step.agingDaysWaiting}d</StatusBadge>
+                <StatusBadge tone={AGING_TONE[step.agingTone]}>{formatDays(step.agingDaysWaiting ?? 0)}</StatusBadge>
               )}
               <StatusBadge tone={STEP_STATUS_TONE[step.status] ?? "pending"}>
                 {stepStatusLabel(step.status as WorkflowStepStatus)}
@@ -226,8 +226,7 @@ export function WorkflowStepCard({
                           className="text-ink-secondary underline hover:text-ink"
                         >
                           {d.originalFilename}
-                        </a>{" "}
-                        <span className="text-faint">({d.documentDate})</span>
+                        </a>
                       </li>
                     ))}
                   </ul>
@@ -240,12 +239,6 @@ export function WorkflowStepCard({
                     className="mt-1 flex items-center gap-1.5"
                   >
                     <Input type="file" name="file" required className="h-8 text-xs" />
-                    <Input
-                      type="date"
-                      name="documentDate"
-                      defaultValue={new Date().toISOString().split("T")[0]}
-                      className="h-8 w-36 text-xs"
-                    />
                     <Button type="submit" size="sm" variant="secondary" disabled={isPending}>
                       Upload
                     </Button>
@@ -292,8 +285,7 @@ export function WorkflowStepCard({
                           className="text-ink-secondary underline hover:text-ink"
                         >
                           {d.originalFilename}
-                        </a>{" "}
-                        <span className="text-faint">({d.documentDate})</span>
+                        </a>
                       </li>
                     ))}
                   </ul>
@@ -304,12 +296,6 @@ export function WorkflowStepCard({
                     className="mt-1 flex items-center gap-1.5"
                   >
                     <Input type="file" name="file" required className="h-8 text-xs" />
-                    <Input
-                      type="date"
-                      name="documentDate"
-                      defaultValue={new Date().toISOString().split("T")[0]}
-                      className="h-8 w-36 text-xs"
-                    />
                     <Button type="submit" size="sm" variant="secondary" disabled={isPending}>
                       Upload
                     </Button>

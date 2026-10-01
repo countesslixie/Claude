@@ -234,7 +234,7 @@ describe("summarizeGroup", () => {
       { stepCode: "SAWT_VALIDATION", status: "NA" },
     ];
     const summary = summarizeGroup(birConfirmations, steps);
-    expect(summary.outstandingLabel).toBe("waiting on TRRC, 12d");
+    expect(summary.outstandingLabel).toBe("waiting on TRRC, 12 days");
   });
 
   it("D70/D71 -- BIR Confirmations' outstanding label reads 'waiting on SAWT validation, <N>d' for step 14 waiting", () => {
@@ -243,7 +243,7 @@ describe("summarizeGroup", () => {
       { stepCode: "SAWT_VALIDATION", status: "WAITING_EXTERNAL", waitingOnLabel: "BIR", agingDaysWaiting: 3 },
     ];
     const summary = summarizeGroup(birConfirmations, steps);
-    expect(summary.outstandingLabel).toBe("waiting on SAWT validation, 3d");
+    expect(summary.outstandingLabel).toBe("waiting on SAWT validation, 3 days");
   });
 
   it("D70/D71 -- both steps 10 and 14 waiting at once combine with a single 'waiting on'", () => {
@@ -252,7 +252,7 @@ describe("summarizeGroup", () => {
       { stepCode: "SAWT_VALIDATION", status: "WAITING_EXTERNAL", waitingOnLabel: "BIR", agingDaysWaiting: 2 },
     ];
     const summary = summarizeGroup(birConfirmations, steps);
-    expect(summary.outstandingLabel).toBe("waiting on TRRC, 0d · SAWT validation, 2d");
+    expect(summary.outstandingLabel).toBe("waiting on TRRC, 0 days · SAWT validation, 2 days");
   });
 
   it("D73 -- BIR Confirmations shows no text while neither step has started waiting (both still locked/PENDING)", () => {
@@ -296,7 +296,7 @@ describe("summarizeGroup", () => {
       { stepCode: "EAFS_SUBMIT", status: "PENDING" },
     ];
     const summary = summarizeGroup(eafs, steps);
-    expect(summary.outstandingLabel).toBe("waiting on SAWT acknowledgement, 4d");
+    expect(summary.outstandingLabel).toBe("waiting on SAWT acknowledgement, 4 days");
   });
 
   it("D73 -- eAFS shows no text for steps not yet reached (no missing-document fallback)", () => {

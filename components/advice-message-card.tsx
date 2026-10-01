@@ -44,7 +44,7 @@ export function AdviceMessageCard({
   return (
     <div className="flex flex-col gap-1">
       <p className="text-xs text-ink-secondary">
-        Advised {savedAtLabel} · {isOverpayment ? "Overpayment" : "Amount payable"} {amountLabel}
+        Advised on {savedAtLabel} · {isOverpayment ? "Overpayment" : "Amount payable"} {amountLabel}
         {" — "}
         <button
           type="button"

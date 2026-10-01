@@ -3,6 +3,7 @@ import { missingRequiredSlots, SEND_CLIENT_PACKAGE_DEPENDENCIES, type AttachedDo
 import type { WorkflowStepStatus } from "./types";
 import { centsToPesos } from "@/lib/money";
 import { BIR_WAIT_SHORT_NAME } from "./aging";
+import { formatDays } from "@/lib/formatDays";
 
 /**
  * Brief #4a — the sixteen steps wrapped in groups. This changes nothing
@@ -547,7 +548,7 @@ export interface GroupSummary {
   isComplete: boolean;
   /** No longer surfaced by the group card (brief #5i §3 removed the group-level "Mark done" it justified) but still computed and still tested — the same rule prepareGroupBlockReason/payGroupBlockReason enforce server-side. Reflects the required-doc-slot rule (D27) for the groups without their own block reason. Never the election check, the step 13->14 dependency, or SEND_CLIENT_PACKAGE's package-readiness check, all of which are unaffected and still surface as they did before this pass. */
   blockReason: string | null;
-  /** §3 — what a collapsed group shows as outstanding, e.g. "waiting on proof of payment" or "waiting on TRRC, 12d". null once the group is complete or nothing is outstanding yet. D75: for Pay specifically, this MAY be non-null even while isComplete (the "nothing to pay" case, set by the page layer, not this function — see summarizeGroup). */
+  /** §3 — what a collapsed group shows as outstanding, e.g. "waiting on proof of payment" or "waiting on TRRC, 12 days". null once the group is complete or nothing is outstanding yet. D75: for Pay specifically, this MAY be non-null even while isComplete (the "nothing to pay" case, set by the page layer, not this function — see summarizeGroup). */
   outstandingLabel: string | null;
   /** Brief #5i §3 — the Pending label's tooltip, e.g. "Step 3 and step 4 not done." Null once the group is complete. */
   unresolvedSummary: string | null;
@@ -598,7 +599,7 @@ function fileGroupOutstandingLabel(groupSteps: GroupStepInput[]): string | null 
  * has actually started waiting (WAITING_EXTERNAL, set automatically the
  * instant its own predecessor step is Done — D68/D71) — a locked step
  * (PENDING) is not a waiting one, the same distinction File already
- * draws. "waiting on TRRC, Nd", "waiting on SAWT validation, Nd", or both
+ * draws. "waiting on TRRC, N days", "waiting on SAWT validation, N days", or both
  * joined with " · " (one "waiting on," stated once).
  */
 const BIR_CONFIRMATIONS_SHORT_NAMES: Record<string, string> = {
@@ -612,7 +613,7 @@ function birConfirmationsOutstandingLabel(groupSteps: GroupStepInput[]): string 
     const step = groupSteps.find((s) => s.stepCode === stepCode);
     if (step?.status !== "WAITING_EXTERNAL") continue;
     const name = BIR_CONFIRMATIONS_SHORT_NAMES[stepCode];
-    const withAging = step.agingDaysWaiting != null ? `${name}, ${step.agingDaysWaiting}d` : name;
+    const withAging = step.agingDaysWaiting != null ? `${name}, ${formatDays(step.agingDaysWaiting)}` : name;
     parts.push(parts.length > 0 ? withAging : `waiting on ${withAging}`);
   }
   return parts.length > 0 ? parts.join(" · ") : null;
@@ -651,7 +652,7 @@ function eafsGroupOutstandingLabel(groupSteps: GroupStepInput[]): string | null 
   const ackStep = groupSteps.find((s) => s.stepCode === "SAWT_ACK");
   if (ackStep?.status !== "WAITING_EXTERNAL") return null;
   return ackStep.agingDaysWaiting != null
-    ? `waiting on SAWT acknowledgement, ${ackStep.agingDaysWaiting}d`
+    ? `waiting on SAWT acknowledgement, ${formatDays(ackStep.agingDaysWaiting)}`
     : "waiting on SAWT acknowledgement";
 }
 

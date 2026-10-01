@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { StatusBadge } from "@/components/status-badge";
 import { OPEN_STEP_EVENT } from "@/components/go-to-step";
 import { groupCounterLabel } from "@/lib/workflow/groups";
+import { STATUS_GRID } from "@/components/status-columns";
 
 /**
  * Brief #4a — a collapsed group shows its name, progress, and what's
@@ -79,13 +80,31 @@ export function WorkflowGroupCard({
     return () => window.removeEventListener(OPEN_STEP_EVENT, onOpenStep);
   }, [stepCodes]);
 
+  // D116 — summary text on the left (it wraps, never widening the columns), then
+  // the status pill column, then the Expand/Collapse column.
+  const pill = isComplete ? (
+    <StatusBadge tone="done">Done</StatusBadge>
+  ) : notApplicable ? null : (
+    <span title={unresolvedSummary ?? undefined}>
+      <StatusBadge tone="pending">Pending</StatusBadge>
+    </span>
+  );
+  const summaryText = (
+    <>
+      <span className="text-sm font-medium text-ink">{name}</span>
+      {!notApplicable && counter && <span className="text-xs text-faint">{counter}</span>}
+      {noteLabel && <span className="text-xs text-faint">{noteLabel}</span>}
+      {!notApplicable && outstandingLabel && <span className="text-xs text-amber">{outstandingLabel}</span>}
+    </>
+  );
+
   if (notApplicable) {
     return (
       <div className="rounded-lg border border-line">
-        <div className="flex flex-wrap items-center gap-2 p-3">
-          <span className="text-sm font-medium text-ink">{name}</span>
-          {isComplete && <StatusBadge tone="done">Done</StatusBadge>}
-          {noteLabel && <span className="text-xs text-faint">{noteLabel}</span>}
+        <div className={`${STATUS_GRID} p-3`}>
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">{summaryText}</div>
+          <div data-cell="status" className="whitespace-nowrap">{pill}</div>
+          <div data-cell="action" />
         </div>
       </div>
     );
@@ -93,24 +112,24 @@ export function WorkflowGroupCard({
 
   return (
     <div className="rounded-lg border border-line">
-      <div className="flex flex-wrap items-center justify-between gap-2 p-3">
+      <div className={`${STATUS_GRID} p-3`}>
         <button
           type="button"
           onClick={() => setIsOpen((o) => !o)}
-          className="flex flex-1 flex-wrap items-center gap-2 text-left"
+          className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-left"
         >
-          <span className="text-sm font-medium text-ink">{name}</span>
-          {counter && <span className="text-xs text-faint">{counter}</span>}
-          {isComplete && <StatusBadge tone="done">Done</StatusBadge>}
-          {noteLabel && <span className="text-xs text-faint">{noteLabel}</span>}
-          {outstandingLabel && <span className="text-xs text-amber">{outstandingLabel}</span>}
-          <span className="ml-auto text-xs text-faint underline">{isOpen ? "Collapse" : "Expand"}</span>
+          {summaryText}
         </button>
-        {!isComplete && (
-          <span title={unresolvedSummary ?? undefined}>
-            <StatusBadge tone="pending">Pending</StatusBadge>
-          </span>
-        )}
+        <div data-cell="status" className="whitespace-nowrap">{pill}</div>
+        <div data-cell="action" className="text-right">
+          <button
+            type="button"
+            onClick={() => setIsOpen((o) => !o)}
+            className="text-xs text-faint underline"
+          >
+            {isOpen ? "Collapse" : "Expand"}
+          </button>
+        </div>
       </div>
 
       {isOpen && <div className="flex flex-col gap-2 border-t border-line p-3">{children}</div>}

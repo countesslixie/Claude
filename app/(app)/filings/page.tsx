@@ -64,7 +64,7 @@ export default async function FilingsBoardPage({
   // §2, §5 — a card sits in its earliest incomplete GROUP (group order,
   // not raw step sequence — group 2/File isn't contiguous), carrying that
   // group's waiting state so a filing awaiting only the TRRC reads as
-  // "File — waiting on BIR, 12d" rather than looking unfiled.
+  // "File — waiting on BIR, 12 days" rather than looking unfiled.
   const now = new Date();
   const cards = filings.map((f) => {
     const groupCode = currentGroupCode(f.workflowSteps);

@@ -31,6 +31,20 @@ export function formatManilaDate(value: Date | string | null | undefined): strin
 }
 
 /**
+ * D115 — the filing page subtitle's date, e.g. "Nov. 16, 2026": the 3-letter
+ * month followed by a full stop ("May" has none). Used on that one line only.
+ */
+export function formatManilaDateDotted(value: Date | string | null | undefined): string {
+  if (!value) return "—";
+  const dt =
+    typeof value === "string"
+      ? DateTime.fromISO(value, { zone: "utc" }).setZone(MANILA_ZONE)
+      : DateTime.fromJSDate(value, { zone: "utc" }).setZone(MANILA_ZONE);
+  if (!dt.isValid) return "—";
+  return dt.toFormat(dt.month === 5 ? "MMM d, yyyy" : "MMM. d, yyyy");
+}
+
+/**
  * Same as formatManilaDate, but with the full month name, e.g.
  * "November 6, 2026" — used where a date is written out to the client
  * (brief #5e §9's advice message), never for the app's own internal

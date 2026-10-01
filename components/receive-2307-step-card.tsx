@@ -11,7 +11,7 @@ import { skipStep, unskipStep } from "@/lib/actions/workflowSteps";
 import { uploadDocument } from "@/lib/actions/documents";
 import { fileTooLargeMessage } from "@/lib/upload";
 import { centsToPesos, bpsToPercentLabel } from "@/lib/money";
-import { formatManilaDate, manilaDateInputToJsDate } from "@/lib/dates";
+import { formatManilaDate } from "@/lib/dates";
 import type { SavedPayor } from "@/lib/actions/payors";
 import type { SelectableAtcCode } from "@/components/atc-code-select";
 
@@ -158,7 +158,6 @@ export function Receive2307StepCard({
     formData.set("workflowStepId", stepId);
     formData.set("docSlotCode", "form2307_scan");
     formData.set("form2307Id", certId);
-    const documentDateValue = String(formData.get("documentDate") ?? "");
     startTransition(async () => {
       const result = await uploadDocument(formData);
       if (!result.ok) {
@@ -173,7 +172,7 @@ export function Receive2307StepCard({
       // server data (uploadDocument's revalidatePath).
       toggleSet(openScanUpload, setOpenScanUpload, certId);
       if (isReplace) {
-        const label = documentDateValue ? formatManilaDate(manilaDateInputToJsDate(documentDateValue)) : formatManilaDate(new Date());
+        const label = formatManilaDate(new Date());
         setReplacedNotes((prev) => new Map(prev).set(certId, label));
       }
     });
@@ -292,12 +291,6 @@ export function Receive2307StepCard({
                       className="mt-1 flex items-center gap-1.5"
                     >
                       <Input type="file" name="file" required className="h-8 text-xs" />
-                      <Input
-                        type="date"
-                        name="documentDate"
-                        defaultValue={new Date().toISOString().split("T")[0]}
-                        className="h-8 w-36 text-xs"
-                      />
                       <Button type="submit" size="sm" variant="secondary" disabled={isPending}>
                         {c.scans.length > 0 ? "Replace" : "Upload"}
                       </Button>

@@ -1,5 +1,6 @@
 import { centsToPesos, formatBreakdownAmount } from "@/lib/money";
 import { formatManilaDate } from "@/lib/dates";
+import { formLabel } from "@/lib/workflow/eSubmissionEmail";
 import type { FilingComputationResult } from "@/lib/tax/types";
 
 /**
@@ -74,7 +75,7 @@ export function renderComputationSheetHtml(input: ComputationSheetHtmlInput): st
 </head>
 <body>
   <h1>${escapeHtml(input.clientName)} — TIN ${escapeHtml(input.clientTin)}</h1>
-  <p class="meta">TY${input.taxableYear} ${input.period} — Form ${escapeHtml(input.sheet.formType)} — generated ${escapeHtml(
+  <p class="meta">TY${input.taxableYear} ${input.period} — Form ${escapeHtml(formLabel(input.sheet.formType))} — generated ${escapeHtml(
     formatManilaDate(input.generatedAt),
   )}</p>
   <table>

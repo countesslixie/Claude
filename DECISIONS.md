@@ -950,6 +950,30 @@ From steps 7, 9, 10 and 13 — skipping any that are NA, skipped or saved — in
 
 **Also (brief #5t):** the "Download period package" link at the top of the filing page's Workflow card is removed — it duplicated step 16's Download package. Its route (`/api/filings/[id]/package`) stays, because step 16's own button uses it. Her own archive comes from the planned archive browse view. Screen text: the tax rule set form now takes and shows rates as percentages (8.00%, still stored as basis points), and no longer mentions "bps", "step 12's" or "As given by the bookkeeper"; the seed's sample-client notes no longer carry D-numbers (D105 continued).
 
+**D115 — Filing page header** *(2026-10-01, brief #5v, her decision)*
+
+No status pill beside the title (it stays on the tax payable line). The subtitle reads "1701Q - due Nov. 16, 2026" in normal muted text (`formatManilaDateDotted`, this line only: "Sep.", "Nov.", but "May"). The "(details)" link is gone; its two paragraphs (statutory due date when shifted, documents due from client and filing target) appeared nowhere else on the page, so they live under a small "Filing details" link at the bottom. The card heading is "Steps".
+
+**D116 — Fixed status and Expand/Collapse columns** *(2026-10-01, brief #5v)*
+
+Every group header, and the tax payable line (`FilingSummaryStrip`), uses the same grid (`components/status-columns.ts`): summary text on the left (wraps), then the status pill column (left-aligned), then Expand/Collapse (right-aligned). A header with no pill or link keeps the empty cell. Measured identical at 1280/1024/800/600px, no horizontal scroll.
+
+**D117 — Day counts are spelled out everywhere** *(2026-10-01, brief #5v)*
+
+`formatDays` (`lib/formatDays.ts`) is the only source: "0 days", "1 day", "N days" — tax payable line, BIR wait pills, group text, Next banner, slim bar, board tags, dashboard.
+
+**D118 — On-screen form codes, step 3 and step 4 wording** *(2026-10-01, brief #5v)*
+
+Screens say "1701Q", never "F1701Q" (the stored `formType` is unchanged). Step 3's "preparation aid" line is removed (new saved sheets also say "Form 1701Q" in their header). Step 4 reads "Advised on [date] · …".
+
+**D119 — Upload boxes carry no date** *(2026-10-01, brief #5v)*
+
+The date input is gone from every step-card upload box; `uploadDocument` dates the document today (Manila) when none is supplied (it still accepts one — the seed back-dates). The only readers of `Document.documentDate` are the stored file name (YYYYMMDD) and the dates that used to follow file names on step cards (now removed). The certificate form's own "Scan date" is unchanged.
+
+**D120 — "Choose File" is a bordered button** *(2026-10-01, brief #5v)*
+
+One rule in `app/globals.css` styles `input[type="file"]` and its `::file-selector-button` (white, bordered, rounded, like Upload) for every upload control.
+
 ---
 
 **Documentation reconciled through brief #5t** (brief #5u, this pass; earlier passes: #5m, #5o's light additions D83–D93, #5p) — see the "Last reconciled" line at the top of this file, CURRENT_STATE.md, PROJECT_MASTER.md and CLAUDE.md.

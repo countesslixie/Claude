@@ -6,7 +6,7 @@ import { getActorId } from "@/lib/actor";
 import { logActivity } from "@/lib/activityLog";
 import { buildStorageRelativePath, saveDocumentFile } from "@/lib/documents/storage";
 import { computeSha256 } from "@/lib/documents/storage";
-import { manilaDateInputToJsDate, formatManilaDate } from "@/lib/dates";
+import { manilaDateInputToJsDate, formatManilaDate, nowManila } from "@/lib/dates";
 import { recomputeReceive2307Status, recomputeFileGroupDocStepStatus } from "@/lib/actions/workflowSteps";
 import {
   SELF_COMPLETING_DOC_STEP_CODES,
@@ -229,7 +229,8 @@ export async function uploadDocument(formData: FormData): Promise<UploadDocument
     return { ok: false, error: "Missing step or document slot." };
   }
 
-  const documentDate = documentDateInput ? manilaDateInputToJsDate(documentDateInput) : new Date();
+  // D119 — the upload boxes carry no date field: the document is dated the day it is uploaded (Manila). A date may still be passed in (the seed back-dates its sample documents).
+  const documentDate = documentDateInput ? manilaDateInputToJsDate(documentDateInput) : nowManila().startOf("day").toJSDate();
 
   return saveDocumentForStep({ workflowStepId, docSlotCode, file, documentDate, notes, form2307Id });
 }

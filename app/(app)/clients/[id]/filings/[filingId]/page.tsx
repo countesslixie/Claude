@@ -35,7 +35,9 @@ import { FilingStickyBar } from "@/components/filing-sticky-bar";
 import { ComputationSheetPanel } from "@/components/computation-sheet-panel";
 import { OtherCreditsForm } from "@/components/other-credits-form";
 import { centsToPesos } from "@/lib/money";
-import { formatManilaDate, toManilaDateInputValue } from "@/lib/dates";
+import { formatManilaDate, formatManilaDateDotted, toManilaDateInputValue } from "@/lib/dates";
+import { formLabel } from "@/lib/workflow/eSubmissionEmail";
+import { FilingSummaryStrip } from "@/components/filing-summary-strip";
 import { deriveStepAging, BIR_WAIT_SHORT_NAME } from "@/lib/workflow/aging";
 import { countSkippedSteps, filingStatusLabel } from "@/lib/workflow/status";
 import {
@@ -58,6 +60,7 @@ import { ClientPackageStepCard } from "@/components/client-package-step-card";
 import { buildLiveAdviceMessageForFiling } from "@/lib/workflow/adviceMessage";
 import { ownSalesQuarterOf, periodToSingleQuarterCovered, quarterNumberDateRange } from "@/lib/tax/periods";
 import { changedItems } from "@/lib/tax/amendment";
+import { formatDays } from "@/lib/formatDays";
 import type { FilingComputationResult } from "@/lib/tax/types";
 
 const STATUS_TONE: Record<string, "pending" | "progress" | "waiting" | "overdue" | "done"> = {
@@ -198,9 +201,6 @@ export default async function FilingDetailPage({
         id: d.id,
         docSlotCode: d.docSlotCode,
         originalFilename: d.originalFilename,
-        // toManilaDateInputValue, not toISOString().split("T")[0] -- see
-        // the same fix in lib/actions/quarterlySales.ts.
-        documentDate: toManilaDateInputValue(d.documentDate),
       })),
       agingDaysWaiting: aging?.daysWaiting ?? null,
       agingTone: aging?.tone ?? null,
@@ -259,7 +259,7 @@ export default async function FilingDetailPage({
       ? `waiting on BIR — ${nextAction.stepCodes
           .map((code) => {
             const days = allSteps.find((s) => s.stepCode === code)?.agingDaysWaiting;
-            return `${BIR_WAIT_SHORT_NAME[code]}${days != null ? `, ${days}d` : ""}`;
+            return `${BIR_WAIT_SHORT_NAME[code]}${days != null ? `, ${formatDays(days)}` : ""}`;
           })
           .join(" · ")}`
       : null;
@@ -442,7 +442,6 @@ export default async function FilingDetailPage({
         isOverpayment={sheet.isOverpayment}
         overpaymentCents={sheet.overpaymentCents}
         taxPayableCents={sheet.taxPayableCents}
-        formType={sheet.formType}
         isFrozen={isFrozen}
         hasSalesRecorded={hasSalesRecorded}
         period={filing.period}
@@ -484,34 +483,12 @@ export default async function FilingDetailPage({
       />
       <div id="filing-page-header" className="mb-2 flex items-start justify-between">
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-semibold text-ink">
-              {filing.client.registeredName} — TY{filing.taxableYear} {filing.period}
-            </h1>
-            <StatusBadge tone={STATUS_TONE[filing.status] ?? "pending"}>
-              {filingStatusLabel(filing.status, skippedCount)}
-            </StatusBadge>
-          </div>
-          <details className="mt-0.5 text-sm text-faint">
-            <summary className="inline cursor-pointer list-none marker:hidden">
-              {filing.formType} — due {formatManilaDate(filing.adjustedDueDate)}
-              <span className="ml-1 text-xs text-faint">(details)</span>
-            </summary>
-            <div className="mt-1 text-xs text-faint">
-              {filing.statutoryDueDate.getTime() !== filing.adjustedDueDate.getTime() && (
-                <p>
-                  Statutory due date {formatManilaDate(filing.statutoryDueDate)}, shifted for weekend/holiday.
-                </p>
-              )}
-              {(filing.certificatesExpectedBy || filing.internalFilingTarget) && (
-                <p>
-                  Working calendar — documents due from client {formatManilaDate(filing.certificatesExpectedBy)},
-                  filing target {formatManilaDate(filing.internalFilingTarget)} (practice targets, not the
-                  statutory deadline).
-                </p>
-              )}
-            </div>
-          </details>
+          <h1 className="text-2xl font-semibold text-ink">
+            {filing.client.registeredName} — TY{filing.taxableYear} {filing.period}
+          </h1>
+          <p className="mt-0.5 text-sm text-ink-secondary">
+            {formLabel(filing.formType)} - due {formatManilaDateDotted(filing.adjustedDueDate)}
+          </p>
         </div>
         <Link href={`/clients/${id}`}>
           <Button variant="secondary" size="sm">
@@ -565,19 +542,16 @@ export default async function FilingDetailPage({
       </Card>
 
       {/* §4.2 — compact summary strip: one row, no explanatory prose. */}
-      <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-line bg-surface px-3 py-2 text-sm">
-        <span className="font-medium text-ink">{netLabel}</span>
-        <span className="text-faint">·</span>
-        <span className="text-ink-secondary">
-          {daysToAdjustedDue >= 0
-            ? `${daysToAdjustedDue}d to adjusted due date`
-            : `${Math.abs(daysToAdjustedDue)}d past adjusted due date`}
-        </span>
-        <span className="text-faint">·</span>
-        <StatusBadge tone={STATUS_TONE[filing.status] ?? "pending"}>
-          {filingStatusLabel(filing.status, skippedCount)}
-        </StatusBadge>
-      </div>
+      <FilingSummaryStrip
+        netLabel={netLabel}
+        daysLabel={
+          daysToAdjustedDue >= 0
+            ? `${formatDays(daysToAdjustedDue)} to adjusted due date`
+            : `${formatDays(Math.abs(daysToAdjustedDue))} past adjusted due date`
+        }
+        statusTone={STATUS_TONE[filing.status] ?? "pending"}
+        statusLabel={filingStatusLabel(filing.status, skippedCount)}
+      />
 
       {completenessGaps.length > 0 && (
         <div className="mb-3 rounded-lg border border-amber bg-amber-tint px-3 py-2">
@@ -641,7 +615,7 @@ export default async function FilingDetailPage({
           exposes every per-step control that existed before grouping. */}
       <Card id="checklist" className="mb-3">
         <CardHeader className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-ink">Workflow ({visibleSteps.length}/{allSteps.length} steps shown)</h2>
+          <h2 className="text-sm font-semibold text-ink">Steps</h2>
           <div className="flex items-center gap-3">
             {naCount > 0 && (
               <Link
@@ -892,6 +866,25 @@ export default async function FilingDetailPage({
           </div>
         </CardBody>
       </Card>
+
+      {/* D115 — what the subtitle's "(details)" used to open; nothing else on this page shows these dates. */}
+      <details className="mb-3 text-xs text-ink-secondary">
+        <summary className="cursor-pointer underline">Filing details</summary>
+        <div className="mt-1 flex flex-col gap-1">
+          <p>
+            Due date {formatManilaDate(filing.adjustedDueDate)}
+            {filing.statutoryDueDate.getTime() !== filing.adjustedDueDate.getTime() &&
+              ` (statutory due date ${formatManilaDate(filing.statutoryDueDate)}, shifted for weekend/holiday)`}
+            .
+          </p>
+          {(filing.certificatesExpectedBy || filing.internalFilingTarget) && (
+            <p>
+              Working calendar — documents due from client {formatManilaDate(filing.certificatesExpectedBy)}, filing
+              target {formatManilaDate(filing.internalFilingTarget)} (practice targets, not the statutory deadline).
+            </p>
+          )}
+        </div>
+      </details>
     </div>
   );
 }
