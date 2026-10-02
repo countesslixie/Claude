@@ -61,6 +61,7 @@ export function FileGroupDocStepCard({
   waitingOnLabel,
   agingDaysWaiting,
   agingTone,
+  readOnly = false,
 }: {
   stepId: string;
   sequence: number;
@@ -79,6 +80,8 @@ export function FileGroupDocStepCard({
   waitingOnLabel: string | null;
   agingDaysWaiting: number | null;
   agingTone: "green" | "amber" | "red" | null;
+  /** D153 — the filing is Complete: saved files can be opened, nothing can be uploaded or replaced. */
+  readOnly?: boolean;
 }) {
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
@@ -147,7 +150,7 @@ export function FileGroupDocStepCard({
         isUnlocked &&
         slots.map((slot) => {
           const hasFile = slot.documents.length > 0;
-          const showForm = !hasFile || replacing === slot.slotCode;
+          const showForm = !readOnly && (!hasFile || replacing === slot.slotCode);
           return (
             <div key={slot.slotCode} className={slots.length > 1 ? "mt-2 rounded border border-line bg-background p-2" : "mt-2"}>
               {slots.length > 1 && <p className="text-xs font-medium text-ink-secondary">{slot.label}</p>}
@@ -179,7 +182,7 @@ export function FileGroupDocStepCard({
                     </button>
                   )}
                 </form>
-              ) : (
+              ) : readOnly ? null : (
                 <button
                   type="button"
                   onClick={() => setReplacing(slot.slotCode)}

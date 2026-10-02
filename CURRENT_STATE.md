@@ -1,13 +1,13 @@
 # CURRENT_STATE.md
 
 *Living snapshot. Replace stale content rather than appending.*
-*Last reconciled: 2026-10-02 — brief #6a, the documentation pass for briefs #5v–#5z (D115–D142). Everything below was checked against the tree at brief #5z's tip (`e761a74`): **553 tests in 58 files pass, the build passes, and typecheck is clean once Next's route types exist** — see Known limitations for the one-line `LayoutProps` catch. Per-brief history lives in DECISIONS.md, not here.*
+*Last reconciled: 2026-10-03 — brief #6c (D151–D154), on top of brief #6b (D143–D150) and brief #6a's documentation pass (D115–D142, checked at brief #5z's tip `e761a74`). **578 tests in 61 files pass, the build passes, and typecheck is clean once Next's route types exist** — see Known limitations for the one-line `LayoutProps` catch. Per-brief history lives in DECISIONS.md, not here.*
 
 ---
 
 ## Where the code is
 
-**Working branch: `claude/serene-hypatia-rs67pw`.** Tip at the start of brief #6a: `e761a74` (brief #5z); brief #6a's documentation-only commit (`b378c1e`) sits under brief #6b. Briefs #5a through #5z and #6a all landed on this one branch — no new branch since it was cut for brief #5a.
+**Working branch: `claude/serene-hypatia-rs67pw`.** Tip at the start of brief #6c: `93f56c2` (brief #6b), on top of brief #6a's documentation-only commit (`b378c1e`) and brief #5z (`e761a74`). Briefs #5a through #5z and #6a all landed on this one branch — no new branch since it was cut for brief #5a.
 
 Standing rules:
 - `git fetch origin <branch>` first, every pass; a local checkout has been behind the remote more than once (briefs #5g, #5n).
@@ -86,9 +86,16 @@ Built and walked (briefs #5r–#5t, D101–D103 and D106–D114). Step 16 is Mar
 - The filing page's old top-of-card "Download period package" link is gone (D114's note); its route stays for step 16's button.
 
 ### The client form and the Clients list (D143–D150, brief #6b)
-The New/Edit client form (one component, `components/client-form.tsx`) reads: Registration — TIN · Branch code · RDO code; Registered name; Trade name; Registered address; Birthday · Client code; Email · Mobile phone number — then Tax profile (Line of business · PSIC code) and a Status section (Engaged since, Active, Notes — kept because Engaged since drives D78). Birthday is required on New and Edit (`Client.birthDate`, nullable in the database; existing clients must have one entered before Edit saves) and shows on the client page as "January 5, 1990". On New client the Client code fills in from the name — last word + "-" + first word ("Maria Santos Reyes" → reyes-maria) — until she types in the box; Edit never auto-fills. Cancel (bordered) saves nothing: New → Clients list, Edit → the client's page. Taxpayer type, recognition basis, civil status, default WHT rate and the books fields are off the form but their columns stay; a new client is saved purely self-employed / collection / manual books, and Edit leaves those values as stored. Because a new client has no default WHT rate, `generateFilingsForClientYear` starts its step 2 Skipped (Undo skip) — see D145. The Clients list shows Code · Registered name · TIN · RDO · Status, all centred. The client page still shows the removed fields (D150) until she walks it.
+The New/Edit client form (one component, `components/client-form.tsx`) reads: Registration — TIN · Branch code · RDO code; Registered name; Trade name; Registered address; Birthday · Client code; Email · Mobile phone number — then Tax profile (Line of business · PSIC code) and a Status section (Engaged since, Active, Notes — kept because Engaged since drives D78). Birthday is required on New and Edit (`Client.birthDate`, nullable in the database; existing clients must have one entered before Edit saves) and shows on the client page as "January 5, 1990". On New client the Client code fills in from the name — last word + "-" + first word ("Maria Santos Reyes" → reyes-maria) — until she types in the box; Edit never auto-fills. Cancel (bordered) saves nothing: New → Clients list, Edit → the client's page. Taxpayer type, recognition basis, civil status, default WHT rate and the books fields are off the form but their columns stay; a new client is saved purely self-employed / collection / manual books, and Edit leaves those values as stored. A new client has no default WHT rate, and its step 2 now starts open like every other client's (D152) — it used to be generated Skipped. The Clients list shows Code · Registered name · TIN · RDO · Status, all centred.
+
+### The client page (D154, brief #6c)
+After the header row (name, Active pill, Back to list · Income · Form 2307s · Payors · Edit — unchanged), two same-height cards side by side, stacked on a narrow window (`components/client-details-cards.tsx`): **Registration** (TIN · Branch code · RDO code; Trade name; Registered address; Birthday · Client code) and **Contact & business** (Email · Mobile phone number; Line of business · PSIC code; Engaged since · Notes). Then Taxable years and Filings, unchanged. No Books & compliance card and no taxpayer type, civil status, default WHT rate or revenue recognition (columns kept). Full-month dates, a muted "—" for empty values, TIN and client code monospace. Engaged since, Active and Notes stay at the bottom of the form (D151).
+
+### A Complete filing is locked (D153, brief #6c)
+A filing whose status is Complete shows no control that changes anything (no Undo skip, Skip, Mark done, upload/Replace/Remove, Add certificate, "all received" tick, payment or item 61 edit, "Go to income entry"), and the server refuses every such action with "This filing is complete and locked." No Unlock. Opening documents, Show/Hide, Collapse/Expand and the links still work. The amber amendment alert's Dismiss stays. In the sample data the Complete filings are **Villamor Q1 and Q2** (Rosario Garcia's Q3 is Waiting on BIR with step 16 unsent until the TRRC is saved).
 
 ### Cross-cutting rules
+- **Step 2 starts open (D152):** generation never leaves it Skipped; Waiting on client until she adds certificates or clicks Skip. Existing filings were not backfilled; a fresh reseed differs only for the no-rate samples whose seed doesn't skip step 2 by hand (Villamor's Q3, the Annuals of Villamor and Garcia).
 - **Reopening (D50/D61).** While a filing is unfiled, a figures-changing final save of step 1, a draft save of a previously-final step 1, adding/removing a certificate, a saved item 61, a saved starting-figures change, or a saved payment reopens steps 3 and 4 (`reopenPreparedFiling`); the same step-1 saves un-skip a Skipped step 2, and undoing step 2's skip reopens too. A filed filing is never reopened.
 - **Frozen returns and amendment alerts (D83/D94).** Step 5 Done writes the full computation to `Filing.computationSnapshot` (and `filedAt`) in the same transaction, never rewritten; every reader of a filing's own figures goes through `getFilingSheet`. After any change that could feed a filed return, `checkAndRecordAmendments` raises an `AmendmentAlert` shown as one amber block with per-item old → new and a Dismiss (informational, D11). Later returns still read real data. The locks that keep this rare are kept on purpose (D94): payment until the next return is filed, certificates and item 61 at their own filing, starting figures once the first in-app return is filed.
 - **Next (D84).** `nextActionForFiling` (`lib/workflow/groups.ts`): the first open step in group order that is her work — skipping locked steps and steps waiting on BIR; when only BIR waits remain, "Next: waiting on BIR — TRRC, 3 days" with no button. Shared by the filing page banner, the slim bar and the dashboard. The banner never offers a control the step's own card lacks (D77).
@@ -226,6 +233,10 @@ Annual filings for A, B, D, E, F, G, H exist, Not started, due April 2027; the b
 ---
 
 ## Known limitations
+
+- **The client page scrolls sideways on a very narrow window (about 420 px)** because of the header row's five buttons (left alone on purpose in brief #6c; she is walking those buttons next). The two cards stack and fit.
+- **`generateSawtBatch` is not covered by the Complete lock (D153):** it writes the batch marker on certificates, including ones claimed on a Complete filing, and the worksheet needs that. Her call whether to lock it.
+- **`Client.defaultWithholdingRateBps` has no reader left** (D152); the column stays and the seed still fills it.
 
 - The late-filing penalty calculator exists but **self-disables** — surcharge and interest rates are `null`, no verified BIR figures.
 - Seed `waitingSince` values are relative to the time of the run, so ageing shifts on every reseed.

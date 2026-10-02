@@ -64,6 +64,7 @@ import { buildLiveAdviceMessageForFiling } from "@/lib/workflow/adviceMessage";
 import { ownSalesQuarterOf, periodToSingleQuarterCovered, quarterNumberDateRange } from "@/lib/tax/periods";
 import { changedItems } from "@/lib/tax/amendment";
 import { formatDays } from "@/lib/formatDays";
+import { isFilingComplete } from "@/lib/workflow/filingLock";
 import type { FilingComputationResult } from "@/lib/tax/types";
 
 const STATUS_TONE: Record<string, "pending" | "progress" | "waiting" | "overdue" | "done"> = {
@@ -114,6 +115,10 @@ export default async function FilingDetailPage({
   // own step 5 (FILE_RETURN) is DONE: the income quarter and step 2's
   // certificate list both lock at that point.
   const isFilingLocked = filing.workflowSteps.some((s) => s.stepCode === "FILE_RETURN" && s.status === "DONE");
+
+  // D153 — a Complete filing is read-only for good: every control that changes
+  // something is left out of the page (not greyed), and the actions refuse too.
+  const isComplete = isFilingComplete(filing);
 
   // D75 (brief #5m §3.1) — Pay (steps 8, 9) opens only once File (5, 6,
   // 7) is Done. D75 §3.3 — step 9 unlocks once step 8 (MAKE_PAYMENT) is
@@ -426,7 +431,7 @@ export default async function FilingDetailPage({
     sheet.formType === "F1701Q" || sheet.formType === "F1701A" ? (
       <OtherCreditsForm
         action={boundUpdateFilingOtherCredits}
-        locked={isFilingLocked}
+        locked={isFilingLocked || isComplete}
         hasSavedValue={otherCreditsHasSavedValue}
         amountCents={otherCreditsAmountCents}
         description={otherCreditsDescriptionValue}
@@ -457,7 +462,7 @@ export default async function FilingDetailPage({
         hasSalesRecorded={hasSalesRecorded}
         period={filing.period}
         taxableYear={filing.taxableYear}
-        incomeHref={incomeHref}
+        incomeHref={isComplete ? null : incomeHref}
       />
     </div>
   );
@@ -579,11 +584,13 @@ export default async function FilingDetailPage({
                 ))}
               </ul>
             </div>
-            <form action={submitDismissCompleteness}>
-              <Button type="submit" size="sm" variant="ghost">
-                Dismiss
-              </Button>
-            </form>
+            {!isComplete && (
+              <form action={submitDismissCompleteness}>
+                <Button type="submit" size="sm" variant="ghost">
+                  Dismiss
+                </Button>
+              </form>
+            )}
           </div>
         </div>
       )}
@@ -680,6 +687,7 @@ export default async function FilingDetailPage({
                         status={step.status}
                         totalCents={ownSalesRow ? ownSalesRow.grossSalesCents : null}
                         incomeHref={incomeHref}
+                        readOnly={isComplete}
                       />
                     );
                   }
@@ -694,7 +702,8 @@ export default async function FilingDetailPage({
                         skippedReason={step.skippedReason}
                         certificates={certificateRows}
                         allReceived={filing.certificatesAllReceivedAt != null}
-                        locked={isFilingLocked}
+                        locked={isFilingLocked || isComplete}
+                        readOnly={isComplete}
                         addCertificateAction={boundAddCertificate}
                         toggleAllReceivedAction={boundToggleAllReceived}
                         defaultPeriodFrom={toManilaDateInputValue(defaultCertificatePeriod.from)}
@@ -737,6 +746,7 @@ export default async function FilingDetailPage({
                         waitingOnLabel={step.waitingOnLabel}
                         agingDaysWaiting={step.agingDaysWaiting}
                         agingTone={step.agingTone}
+                        readOnly={isComplete}
                       />
                     );
                   }
@@ -799,6 +809,7 @@ export default async function FilingDetailPage({
                         savedAtLabel={filing.clientPackageEmailSavedAt ? formatManilaDate(filing.clientPackageEmailSavedAt) : null}
                         skippedReason={step.skippedReason}
                         downloadHref={`/api/filings/${filing.id}/package`}
+                        readOnly={isComplete}
                       />
                     );
                   }
@@ -814,7 +825,7 @@ export default async function FilingDetailPage({
                         title={step.title}
                         status={step.status}
                         isUnlocked={isFileGroupDone}
-                        locked={paymentLocked}
+                        locked={paymentLocked || isComplete}
                         action={boundSavePayment}
                         defaultAmountCents={sheet.isOverpayment ? 0 : sheet.taxPayableCents}
                         savedAmountCents={filing.amountPaidCents}
@@ -847,6 +858,7 @@ export default async function FilingDetailPage({
                         waitingOnLabel={step.waitingOnLabel}
                         agingDaysWaiting={step.agingDaysWaiting}
                         agingTone={step.agingTone}
+                        readOnly={isComplete}
                       />
                     );
                   }
@@ -867,6 +879,7 @@ export default async function FilingDetailPage({
                           : "full"
                       }
                       lockedMessage={step.stepCode === "EAFS_SUBMIT" ? stepLockReason(step.stepCode, filing.workflowSteps) : null}
+                      readOnly={isComplete}
                     />
                   );
                     })()}

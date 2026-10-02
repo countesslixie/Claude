@@ -1,7 +1,7 @@
 # PROJECT_MASTER.md
 
 *Permanent project memory: the intended application and the rules that govern it, stated as they stand today. History lives in DECISIONS.md; build status in CURRENT_STATE.md. Decision numbers in brackets trace each rule.*
-*Last reconciled: 2026-10-02 — brief #6a, the documentation pass, checked against the tree at brief #5z's tip (`e761a74`), covering briefs #5v–#5z (D115–D142); reconciled through #5z.*
+*Last reconciled: 2026-10-03 — brief #6c (D151–D154: the Complete lock, step 2 starting open, the client page), on top of brief #6b (D143–D150) and brief #6a's documentation pass (checked against the tree at brief #5z's tip `e761a74`, covering D115–D142).*
 
 ---
 
@@ -76,6 +76,7 @@ The client's stated quarterly figure IS the income record and is accepted as giv
 - **Birthday is required** (New and Edit), stored as a Manila calendar date, shown as "January 5, 1990".
 - **Client code** is suggested from the registered name on New client (last word + "-" + first word, lowercased, accents and punctuation removed) and is otherwise an ordinary field validated as before; Edit never auto-fills it.
 - **The Clients list** shows Code · Registered name · TIN · RDO · Status, centred.
+- **The client page (D154):** after the header row, two same-height cards side by side (stacked on a narrow window) — Registration (TIN · Branch code · RDO code; Trade name; Registered address; Birthday · Client code) and Contact & business (Email · Mobile phone number; Line of business · PSIC code; Engaged since · Notes) — then Taxable years and Filings. Taxpayer type, civil status, default WHT rate, revenue recognition and Books & compliance are not shown (columns kept). Engaged since, Active and Notes stay at the bottom of the form (D151).
 
 ### Starting figures for a client joining mid-year (D56)
 Every current client's Q1 and Q2 2026 were filed from Excel, so at go-live each joins mid-year. `StartingFigures` (one row per client-year) holds `latestOutsideReturn` (`NONE`/`Q1`/`Q2`/`Q3`) and the figures typed once from that outside return: items 55, 51, 57, 58, 56, the amount paid on it, item 61 with a description, and optional non-operating income (which can't exceed cumulative income). Read-only after Save with Edit; locked once the year's first in-app return is filed.
@@ -91,6 +92,7 @@ A period `latestOutsideReturn` names as filed gets **no `Filing` row at all** �
 
 ### Creditable withholding (Form 2307)
 - **A certificate counts in the filing whose step 2 it was entered under (D34)**; `Form2307.claimedOnFilingId` is set once and never reassigned. Its list is locked once that filing's step 5 is Done; a late certificate goes under the next open filing. No amended returns (D11) is what makes this safe.
+- **Step 2 always starts open (D152):** every client's step 2 is generated Waiting on client, never Skipped, whatever the client's default WHT rate (which nothing reads any more); she clicks Skip herself when a client has no certificates that quarter. Filings generated before D152 are left as they are.
 - **Step 2's checkbox appears only once a certificate row exists (D39);** with none, step 2 offers Add certificate and Skip. **Add/Remove are hidden while "all received" is ticked** (D47, enforced server-side).
 - Cumulative crediting: a certificate claimed on period P counts toward P and every later period of the year.
 - **Required fields (D45):** payor name, TIN, address, ATC code, income, tax withheld, period covered, validated server-side. **The ATC code is a picker of maintained `AtcCode` rows and the rate comes from it (D43); there is no Rate field on the certificate form (D132)** — the chosen code's rate is saved with the certificate, and tax withheld is typed and summed as given. The form's layout is fixed (D131): payor name · payor address · TIN + ATC code · income + tax withheld · period from + to · scan. **There is no scan date either — the upload day is recorded (D122).** Never invent a code or a rate (D19).
@@ -152,6 +154,10 @@ Steps 13 and 14 carry the titles "Save SAWT acknowledgement email" and "Save SAW
 - **The board — the Kanban (D70/D79/D138/D139/D141):** six group columns, no Complete column and no filters; a card sits in its earliest incomplete group and appears only once its period has ended. Outside BIR Confirmations a card shows each BIR wait as grey text at the bottom right ("TRRC · 2 days"); inside, its wait line goes red past twice the expected days. The board fills the window with its scroll bar at the bottom.
 - **The status pill (D97):** "In progress" while any of her own work remains; "Waiting on BIR" only when nothing of hers is left — the pill and Next always agree.
 - **Step 16 (D101–D114):** Mark done only. Unlocks when steps 7, 9, 10 and 13 are each saved or NA — not 14, which is never sent to the client (D109); the lock message names only what's missing (D113). The package is five kinds of document — filed return, proof of payment, TRRC, SAWT acknowledgement, Form 2307 scans (D108) — in a flat zip with standard file names and no manifest (D103/D111). The email opens "Hi [first name],", lists documents by name (D110), prints the same summary as step 4 from the frozen sheet so it adds up (D114), ends "Next filing: … due [date]. Please send required documents by [date]." (D106), then "Thank you!" (D112). Mark done saves the exact email on the filing and collapses the card.
+
+### A Complete filing is read-only for good (D153)
+- **Once a filing is Complete (all sixteen steps resolved, the green pill) nothing on its page can change it, and there is no Unlock or Reopen, not even a hidden one.** Every control that changes something is left out of the page (not greyed): Undo skip, Skip, Mark done, upload/Replace/Remove, Add certificate, the "all received" tick, payment and item 61 edits, "Go to income entry". Opening a saved document, Show/Hide, Collapse/Expand, Back to client and "Filing details" still work.
+- **Enforced on the server:** every action that changes a filing, its steps, its documents or its certificates refuses with "This filing is complete and locked." This overrides D75/D94's "payment editable until the next return is filed". The amber amendment alert's Dismiss is the one thing that stays (it changes none of those).
 
 ### Blocking — the rule (D27, D35)
 **The app blocks on documents it receives. It never asks the bookkeeper to prove she did something.**

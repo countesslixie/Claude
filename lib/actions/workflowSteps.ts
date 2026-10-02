@@ -21,6 +21,7 @@ import {
   stepLockReason,
 } from "@/lib/workflow/groups";
 import { loadFilingOrderBlockReason } from "@/lib/workflow/filingOrderData";
+import { FILING_LOCKED_MESSAGE, filingLockedReason, isFilingComplete } from "@/lib/workflow/filingLock";
 import { buildESubmissionEmail } from "@/lib/workflow/eSubmissionEmail";
 import { buildClientPackageEmailForFiling } from "@/lib/workflow/clientPackageEmailData";
 import { buildLiveAdviceMessageForFiling } from "@/lib/workflow/adviceMessage";
@@ -71,6 +72,8 @@ export async function markStepDone(stepId: string): Promise<StepActionResult> {
     include: { documents: true, filing: { include: { workflowSteps: { include: { documents: true } } } } },
   });
   if (!step) return { ok: false, error: "Step not found." };
+  // D153 — a Complete filing is read-only for good.
+  if (isFilingComplete(step.filing)) return { ok: false, error: FILING_LOCKED_MESSAGE };
 
   // D86/D88 (brief #5o §4) — steps 11 and 13 complete themselves when their
   // document(s) are saved; there is no Mark done to click, refused here so
@@ -360,6 +363,7 @@ async function saveDataEmailDraft(filingId: string): Promise<void> {
 export async function reopenPreparedFiling(filingId: string): Promise<void> {
   const filing = await prisma.filing.findUnique({ where: { id: filingId }, include: { workflowSteps: true } });
   if (!filing) return;
+  if (isFilingComplete(filing)) return; // D153 — a Complete filing is never reopened (it is filed too, so this was already a no-op)
 
   const fileReturnStep = filing.workflowSteps.find((s) => s.stepCode === "FILE_RETURN");
   if (fileReturnStep?.status === "DONE") return; // filed filings are unaffected
@@ -440,6 +444,7 @@ export async function reopenPreparedFiling(filingId: string): Promise<void> {
  * own guards on the figures-changing saves already stop there).
  */
 export async function reopenSkippedReceive2307(filingId: string, actorId: string, note: string): Promise<void> {
+  if (await filingLockedReason(filingId)) return; // D153 — a Complete filing's skipped step 2 stays skipped
   const step = await prisma.workflowStep.findFirst({ where: { filingId, stepCode: "RECEIVE_2307" } });
   if (!step || step.status !== "SKIPPED") return;
 
@@ -469,6 +474,8 @@ export async function unskipStep(stepId: string): Promise<StepActionResult> {
     include: { filing: { include: { workflowSteps: true } } },
   });
   if (!step) return { ok: false, error: "Step not found." };
+  // D153 — a Complete filing is read-only for good.
+  if (isFilingComplete(step.filing)) return { ok: false, error: FILING_LOCKED_MESSAGE };
   if (step.status !== "SKIPPED") return { ok: false, error: "This step isn't skipped." };
 
   const fileReturnStep = step.filing.workflowSteps.find((s) => s.stepCode === "FILE_RETURN");
@@ -522,6 +529,7 @@ export async function unskipStep(stepId: string): Promise<StepActionResult> {
 export async function recomputeReceive2307Status(filingId: string): Promise<void> {
   const filing = await prisma.filing.findUnique({ where: { id: filingId } });
   if (!filing) return;
+  if (isFilingComplete(filing)) return; // D153 — nothing re-derives a Complete filing's steps
 
   const step = await prisma.workflowStep.findFirst({ where: { filingId, stepCode: "RECEIVE_2307" } });
   if (!step || step.status === "SKIPPED") return;
@@ -582,6 +590,7 @@ export async function recomputeFileGroupDocStepStatus(stepId: string): Promise<v
     include: { filing: true, documents: { where: { deletedAt: null } } },
   });
   if (!step) return;
+  if (isFilingComplete(step.filing)) return; // D153 — nothing re-derives a Complete filing's steps
 
   // D86 — a step with more than one required slot (step 11: generated report
   // AND DAT file) is complete only when EVERY required slot has a file.
@@ -642,6 +651,8 @@ export async function recomputeFileGroupDocStepStatus(stepId: string): Promise<v
 export async function markStepInProgress(stepId: string): Promise<StepActionResult> {
   const step = await prisma.workflowStep.findUnique({ where: { id: stepId }, include: { filing: true } });
   if (!step) return { ok: false, error: "Step not found." };
+  // D153 — a Complete filing is read-only for good.
+  if (isFilingComplete(step.filing)) return { ok: false, error: FILING_LOCKED_MESSAGE };
 
   // D65/D75 (briefs #5k §2, #5m §3) — steps 5-7/10 (File/BIR
   // Confirmations) and 8-9 (Pay) have no Start, enforced here so it can't
@@ -677,6 +688,8 @@ export async function markStepInProgress(stepId: string): Promise<StepActionResu
 export async function markStepWaitingExternal(stepId: string): Promise<StepActionResult> {
   const step = await prisma.workflowStep.findUnique({ where: { id: stepId }, include: { filing: true } });
   if (!step) return { ok: false, error: "Step not found." };
+  // D153 — a Complete filing is read-only for good.
+  if (isFilingComplete(step.filing)) return { ok: false, error: FILING_LOCKED_MESSAGE };
 
   // D68/D71 (briefs #5l §1, #5m §2) — steps 10 (RECEIVE_TRRC) and 14
   // (SAWT_VALIDATION) no longer have a manual Mark waiting: each enters
@@ -714,6 +727,8 @@ export async function skipStep(stepId: string, reason: string): Promise<StepActi
 
   const step = await prisma.workflowStep.findUnique({ where: { id: stepId }, include: { filing: true } });
   if (!step) return { ok: false, error: "Step not found." };
+  // D153 — a Complete filing is read-only for good.
+  if (isFilingComplete(step.filing)) return { ok: false, error: FILING_LOCKED_MESSAGE };
 
   // Brief #5f §1 — step 3 (PREPARE_RETURN) can no longer be skipped at
   // all; it's the heart of the app. Enforced here, not just by the UI
@@ -765,6 +780,8 @@ export async function skipStep(stepId: string, reason: string): Promise<StepActi
 export async function logFollowUp(stepId: string): Promise<StepActionResult> {
   const step = await prisma.workflowStep.findUnique({ where: { id: stepId }, include: { filing: true } });
   if (!step) return { ok: false, error: "Step not found." };
+  // D153 — a Complete filing is read-only for good.
+  if (isFilingComplete(step.filing)) return { ok: false, error: FILING_LOCKED_MESSAGE };
 
   // D72 (brief #5m §2, her decision) — no Log follow-up on any BIR wait
   // (steps 10, 13, 14): she can't follow up with BIR on any of these. The

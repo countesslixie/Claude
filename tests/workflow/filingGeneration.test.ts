@@ -165,30 +165,65 @@ describe("generateFilingsForClientYear", () => {
     expect(receive2307.waitingSince).toEqual(q2.certificatesExpectedBy);
   });
 
-  it("skips RECEIVE_2307 entirely for a client with no withholding relationship", async () => {
+  it("D152: step 2 always starts open — never Skipped — whether or not the client has a default WHT rate", async () => {
+    for (const [label, rate] of [["none", null], ["500", 500]] as const) {
+      const client = await prisma.client.create({
+        data: {
+          code: `p3-gen-open2307-${label}-${Date.now()}`,
+          registeredName: `Step 2 Open Test Client (${label})`,
+          tin: "555666777",
+          rdoCode: "999",
+          registeredAddress: "N/A",
+          taxpayerType: "PURELY_SELF_EMPLOYED",
+          booksType: "MANUAL",
+          defaultWithholdingRateBps: rate,
+        },
+      });
+      createdClientIds.push(client.id);
+
+      await generateFilingsForClientYear(client.id, 2026);
+      const filings = await prisma.filing.findMany({ where: { clientId: client.id, taxableYear: 2026 } });
+      expect(filings).toHaveLength(4);
+      for (const f of filings) {
+        const receive2307 = await prisma.workflowStep.findFirstOrThrow({ where: { filingId: f.id, stepCode: "RECEIVE_2307" } });
+        // Open and waiting on the client (the app's "Pending" for this step is its Waiting-on-client state, D34/D152).
+        expect(receive2307.status).toBe("WAITING_EXTERNAL");
+        expect(receive2307.skippedReason).toBeNull();
+        expect(receive2307.waitingSince).toEqual(f.certificatesExpectedBy);
+        // Steps 11-15 still follow the real certificates (none yet): Not applicable.
+        const conditional = await prisma.workflowStep.findMany({ where: { filingId: f.id, isConditional: true } });
+        expect(conditional.every((st) => st.status === "NA")).toBe(true);
+      }
+    }
+  });
+
+  it("D152: generating again leaves a filing that already exists — including a step 2 she skipped — alone", async () => {
     const client = await prisma.client.create({
       data: {
-        code: `p3-gen-no2307-${Date.now()}`,
-        registeredName: "Phase 3 No-2307 Test Client",
-        tin: "555666777",
+        code: `p3-gen-keep-${Date.now()}`,
+        registeredName: "Step 2 Untouched Test Client",
+        tin: "555666778",
         rdoCode: "999",
         registeredAddress: "N/A",
         taxpayerType: "PURELY_SELF_EMPLOYED",
         booksType: "MANUAL",
-        // defaultWithholdingRateBps left null
       },
     });
     createdClientIds.push(client.id);
-
     await generateFilingsForClientYear(client.id, 2026);
     const q1 = await prisma.filing.findUniqueOrThrow({
       where: { clientId_taxableYear_period: { clientId: client.id, taxableYear: 2026, period: "Q1" } },
     });
-    const receive2307 = await prisma.workflowStep.findFirstOrThrow({
+    await prisma.workflowStep.updateMany({
       where: { filingId: q1.id, stepCode: "RECEIVE_2307" },
+      data: { status: "SKIPPED", skippedReason: "No certificates this quarter." },
     });
-    expect(receive2307.status).toBe("SKIPPED");
-    expect(receive2307.skippedReason).toBeTruthy();
+
+    const again = await generateFilingsForClientYear(client.id, 2026);
+    expect(again.createdPeriods).toEqual([]);
+    const step2 = await prisma.workflowStep.findFirstOrThrow({ where: { filingId: q1.id, stepCode: "RECEIVE_2307" } });
+    expect(step2.status).toBe("SKIPPED");
+    expect(step2.skippedReason).toBe("No certificates this quarter.");
   });
 
   it("recomputeRequiresSawt flips requiresSawt true and un-NA's steps 11-14 once a certificate exists", async () => {

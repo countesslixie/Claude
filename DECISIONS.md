@@ -2,7 +2,7 @@
 
 *Append new decisions. Mark superseded ones rather than deleting them.*
 *Dates during the build are approximate — most work happened across August 2026.*
-*Last reconciled: 2026-10-02 — brief #6a documentation pass (checked D115–D142 against the tree at brief #5z's tip `e761a74`; supersession markers added on D27, D43, D58, D60, D67, D70, D72, D74, D79, D81, D84, D87, D91, D93, D101, D115, D119, D121, D126 and D136), on top of brief #5z (D140–D142), brief #5y (D135–D139), brief #5x (D131–D134), brief #5w (D121–D130), brief #5v (D115–D120); earlier passes: brief #5t (D110–D114), brief #5s (D106–D109), brief #5r (D100–D105), brief #5q (D95–D99, built; D97–D99 new), brief #5p (D94–D96, markers on D6, D17, D27, D70, D73, D76, D82, D92), brief #5o (D83-D93), brief #5n (D78-D82), brief #5m (D70-D77, six groups, BIR Confirmations and the Pay group built), brief #5l (D68-D69), brief #5k (D64-D67), brief #5j (D60-D63), brief #5i, brief #5h (D49-D59, briefs #5d-#5g), brief #5c, brief #5b (D48), brief #5a (D43-D47) and the documentation pass (brief #4f) through briefs #4c-#4e.*
+*Last reconciled: 2026-10-03 — brief #6c (D151–D154), on top of the 2026-10-02 brief #6a documentation pass (checked D115–D142 against the tree at brief #5z's tip `e761a74`; supersession markers added on D27, D43, D58, D60, D67, D70, D72, D74, D79, D81, D84, D87, D91, D93, D101, D115, D119, D121, D126 and D136), on top of brief #5z (D140–D142), brief #5y (D135–D139), brief #5x (D131–D134), brief #5w (D121–D130), brief #5v (D115–D120); earlier passes: brief #5t (D110–D114), brief #5s (D106–D109), brief #5r (D100–D105), brief #5q (D95–D99, built; D97–D99 new), brief #5p (D94–D96, markers on D6, D17, D27, D70, D73, D76, D82, D92), brief #5o (D83-D93), brief #5n (D78-D82), brief #5m (D70-D77, six groups, BIR Confirmations and the Pay group built), brief #5l (D68-D69), brief #5k (D64-D67), brief #5j (D60-D63), brief #5i, brief #5h (D49-D59, briefs #5d-#5g), brief #5c, brief #5b (D48), brief #5a (D43-D47) and the documentation pass (brief #4f) through briefs #4c-#4e.*
 
 ---
 
@@ -1120,6 +1120,8 @@ A bordered secondary Cancel button beside Save (a button, not a link). It saves 
 
 **D145 — Fields off the form; every column kept** *(brief #6b, her decision)*
 
+**⚠️ Superseded in part, 2026-10-03:** the consequence that a new client's step 2 is generated Skipped no longer holds — step 2 always starts open (D152). The rest stands.
+
 Off the form: Taxpayer type, Revenue recognition basis, Civil status, Default WHT rate, and the whole Books & compliance section (Books type, Books registration date, Books permit number, Sworn declaration year, Sworn declaration on file, eBIRForms email, eFPS enrolled). **No database column is dropped.** `clientSchema` no longer contains them, so `updateClient` cannot touch them — an edit leaves taxpayer type, recognition basis and the rest exactly as stored, including the mixed-income sample (Estrella Navarro). `createClient` writes fixed values: `taxpayerType = PURELY_SELF_EMPLOYED` (her decision: every client is purely self-employed — ₱250,000 deduction, 1701A), `recognitionBasis = COLLECTION`, and `booksType = MANUAL` (a required column with no schema default — the same value the samples carry); civil status, default WHT rate and the other books fields stay empty or at their schema defaults. The computation is unchanged; `MIXED_INCOME` and the Form 1701 path stay in the code (D49). **One consequence to know:** `defaultWithholdingRateBps` is also read by `generateFilingsForClientYear` as "does this client expect Form 2307s" — with it empty, a new client's step 2 starts **Skipped** ("No withholding agents…") rather than Waiting; she can Undo skip. Existing clients are unaffected. Not changed in this brief; her call.
 
 **D146 — Birthday** *(brief #6b, her decision: required)*
@@ -1140,10 +1142,55 @@ The Taxpayer type column is gone; Code · Registered name · TIN · RDO · Statu
 
 **D150 — Other screens still showing the removed fields (report only)** *(brief #6b)*
 
+**⚠️ Resolved, 2026-10-03:** the client page was walked and redesigned in D154; the removed fields are off it.
+
 Only the client page (`/clients/[id]`): Registration card shows Taxpayer type and Civil status; the whole "Books & compliance" card shows Books type, Books registration date, Books permit number, Sworn declaration, eBIRForms email, eFPS enrolled, Default WHT rate and Revenue recognition. Left as they are until she walks that page. Its "Mobile" label was not renamed.
 
 **Also in brief #6b:** the stale "Complete (N steps skipped)" comment in `lib/workflow/status.ts` rewritten to match D124; `clientDocsDue.test.ts` made deterministic — it changed `clientDocsDueDay` on the shared 2026 rule set (18, then back) while other test files ran in parallel against the same database, and its backfill rewrote every filing; it now owns a throwaway 2031 rule set.
 
 ---
 
-**Documentation reconciled through brief #5z** (brief #6a, this pass; earlier passes: #5u, #5m, #5o's light additions D83–D93, #5p) — see the "Last reconciled" line at the top of this file, CURRENT_STATE.md, PROJECT_MASTER.md and CLAUDE.md.
+## 2026-10-03 — brief #6c (the Complete lock, step 2 starts open, the client page)
+
+**D151 — The Status section stays on the client form** *(brief #6c, her decision)*
+
+Engaged since, Active and Notes stay at the bottom of the New/Edit client form exactly as #6b left them. Recorded only; no code change.
+
+**D152 — Step 2 starts open for every client** *(brief #6c, her decision)*
+
+*Found:* #6b noticed that with no default WHT rate (every new client, D145) `instantiateWorkflowSteps` generated step 2 Skipped. That branch was the only reader of `Client.defaultWithholdingRateBps` in the whole code (apart from the client page's display line, removed in D154).
+
+*Decision:* when filings are generated, step 2 is never Skipped — whatever the rate holds. She clicks Skip herself when a client has no certificates that quarter. The branch, its skipped reason and the `clientExpectsForm2307` option are gone. The column stays (the seed still fills it and nothing reads it); not dropped.
+
+*What "open" means in the tree:* the brief says "Pending"; in the tree a rate-bearing client's step 2 was already generated **Waiting on client** (status `WAITING_EXTERNAL`, clock from the documents-due date — the amber pill, listed under the dashboard's Waiting on client once the period ends), and `recomputeReceive2307Status` flips it back to that state any time the certificates are incomplete. Every client now gets that same state; it was not changed to `PENDING`, which would take step 2 out of "Waiting on client" and put it under "Needs my action" — a different rule. Open and skippable either way (Skip works from any unresolved state).
+
+*Existing filings are untouched* — no backfill, sample ones included (Rosario Garcia's Q3 still reads "Skipped: No withholding agents …"; that one was skipped by hand in the seed). A **fresh reseed** does differ in one respect: the sample clients with no rate (Villamor, Garcia) whose seed does not skip step 2 by hand (their Annuals, Villamor's Q3) now come out Waiting on client instead of Skipped. No figure changes.
+
+*Everything that follows step 2 still works from the real certificates and step state*: steps 11–15 are NA until a certificate is saved (`recomputeRequiresSawt`); eAFS reads its grey Pending until step 2 is Done or Skipped, then Not applicable (`eafsHeaderDisplay` reads `step2Status` and the certificate count, never the rate); step 5's Prepare lock still asks for step 2 Done or Skipped.
+
+**D153 — A Complete filing is read-only for good** *(brief #6c, her decision)*
+
+Once a filing's status is Complete (every step resolved — the green pill), nothing on the filing page can change it. **No Unlock, no Reopen, not even hidden.**
+
+*Left out of the page (not greyed) on a Complete filing:* Undo skip (step 2 and step 16), Skip, Mark done, Choose File / Upload and Replace on steps 6, 7, 9, 10, 11, 13, 14, Remove, Replace scan / Attach scan, Add certificate, the "All certificates received" tick, the payment's Edit, item 61's Edit, the "documents not yet attached" note's Dismiss, step 1's "Go to income entry", and the computation sheet's "Record quarterly sales" link. *Still works:* opening a saved document by file name, Show/Hide on the computation sheet and on the saved advice/e-mail texts, group Collapse/Expand, "Show N not applicable", Back to client, the sticky bar, "Filing details". (The client package zip's "Download package" button is only offered before step 16 is Done, so it was never on a Complete filing; nothing added.)
+
+*Enforced on the server:* `lib/workflow/filingLock.ts`. Each action that changes a filing, its steps, its documents or its certificates checks first and refuses with "This filing is complete and locked.": `markStepDone`, `skipStep`, `unskipStep`, `markStepInProgress`, `markStepWaitingExternal`, `logFollowUp`, `saveDocumentForStep` (so `uploadDocument` and the scan inside `addCertificate`), `deleteDocument`, `addCertificate`, `deleteCertificate`, `setAllCertificatesReceived`, `dismissCompletenessNote`, `updateFilingOtherCredits`, `savePayment`. The ones that return a result carry the message; the ones that return nothing throw `FilingLockedError`. `reopenPreparedFiling`, `reopenSkippedReceive2307`, `recomputeReceive2307Status` and `recomputeFileGroupDocStepStatus` are exported (so callable) re-derivations; on a Complete filing they simply do nothing. "Complete" is the derived `Filing.status` (what the pill reads).
+
+*One deliberate exception:* the amber amendment alert's **Dismiss** stays on a Complete filing. It records that she has read a notice about a filed return whose inputs changed later (D83); it changes no filing, step, document or certificate, and with no Unlock, removing it would leave the amber block there for good. One line to reverse if she disagrees.
+
+*Reported, not changed:*
+- **Payment (D75/D94):** a payment used to be editable until the next return was filed; a Complete filing now overrides that. No normal flow is affected — step 16 needs step 9 (proof of payment), which needs step 8 (the payment), so a payment is always saved before a filing can be Complete. A filing with nothing to pay has no payment card. What is gone is correcting a mistyped payment after Complete.
+- **Income page:** it could not change a Complete filing's quarter before either — `saveQuarterlySales` refuses the filing's own quarter once step 5 is Done ("This quarter is locked…"), and every Complete filing has step 5 Done. Earlier quarters are locked the same way once filed, and filing order (D95) means a Complete filing's earlier quarters are filed. No amendment alert is raised by a refused save. Starting figures lock when the year's first in-app return is filed. The Form 2307 register has no actions at all. Payors is a saved list, independent of filings (D44).
+- **Background writers:** (1) `checkAndRecordAmendments` writes `AmendmentAlert` rows onto filed (so possibly Complete) filings when a later return's figures change — an alert is not a filing, step, document or certificate, so it is not refused; the lock does not break it. (2) `generateSawtBatch` (SAWT worksheet page) writes `Form2307.sawtBatchId` on unbatched certificates, which can include certificates claimed on a Complete filing. It is not a filing-page action, it changes no figure, and refusing it would stop the worksheet from batching earlier quarters' certificates — so it is **not** locked. If she wants it locked, that needs her call. (3) The seed's D97 status backfill writes `Filing.status` directly (not through an action) — unaffected. The seed, which drives the real actions, runs to the end with the lock in place.
+
+**D154 — The client page layout** *(brief #6c, her decision: option B from the mockup)*
+
+The header row is unchanged. Below it two cards, side by side and the same height (stacked below the `lg` breakpoint), in `components/client-details-cards.tsx`:
+- **Registration** (three columns): TIN · Branch code · RDO code / Trade name (full width) / Registered address (full width) / Birthday · Client code (two columns).
+- **Contact & business** (two columns): Email · Mobile phone number / Line of business · PSIC code / Engaged since · Notes.
+
+Removed from the page: the whole Books & compliance card, Taxpayer type, Civil status, Default WHT rate and Revenue recognition (columns stay). Dates use full month names; an empty value is a muted "—"; TIN and client code stay monospace. The standalone Notes card is gone (Notes moved into the second card); Taxable years and Filings are unchanged. Widths are 3 : 2 on a wide window. **Reported:** at a 420 px window the page scrolls sideways because of the header row's five buttons, which the brief says to leave as they are; the cards themselves stack and fit.
+
+---
+
+**Documentation reconciled through brief #6c** (brief #6a, then #6c's own additions D151–D154; earlier passes: #5u, #5m, #5o's light additions D83–D93, #5p) — see the "Last reconciled" line at the top of this file, CURRENT_STATE.md, PROJECT_MASTER.md and CLAUDE.md.

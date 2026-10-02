@@ -66,6 +66,7 @@ export function WorkflowStepCard({
   extra,
   controlsMode = "full",
   lockedMessage = null,
+  readOnly = false,
 }: {
   step: StepCardData;
   /** A blocking reason from another step's state, e.g. step 13 -> 14 (D29). */
@@ -87,6 +88,8 @@ export function WorkflowStepCard({
   controlsMode?: "full" | "markDoneOnly";
   /** D85 — when set (eAFS step 15 before Pay is Done), the card shows this one muted line and no controls at all. */
   lockedMessage?: string | null;
+  /** D153 — the filing is Complete: no control that changes anything is shown (Undo skip included). */
+  readOnly?: boolean;
 }) {
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
@@ -188,9 +191,11 @@ export function WorkflowStepCard({
       {step.status === "SKIPPED" && (
         <div className="mt-1 flex flex-wrap items-center gap-2">
           {step.skippedReason && <p className="text-xs text-faint">Skipped: {step.skippedReason}</p>}
-          <Button size="sm" variant="secondary" disabled={isPending} onClick={() => run(() => unskipStep(step.id))}>
-            Undo skip
-          </Button>
+          {!readOnly && (
+            <Button size="sm" variant="secondary" disabled={isPending} onClick={() => run(() => unskipStep(step.id))}>
+              Undo skip
+            </Button>
+          )}
         </div>
       )}
 
@@ -198,7 +203,7 @@ export function WorkflowStepCard({
 
       {extra && <div className="mt-2">{extra}</div>}
 
-      {requiredSlots.length > 0 && !isResolved && (
+      {!readOnly && requiredSlots.length > 0 && !isResolved && (
         <div className="mt-2 flex flex-col gap-2">
           {requiredSlots.map((slot) => {
             const attached = attachedFor(slot.slotCode);
@@ -257,7 +262,7 @@ export function WorkflowStepCard({
         </div>
       )}
 
-      {optionalSlots.length > 0 && !isResolved && (
+      {!readOnly && optionalSlots.length > 0 && !isResolved && (
         <div className="mt-2 flex flex-col gap-2">
           {optionalSlots.map((slot) => {
             const attached = attachedFor(slot.slotCode);
@@ -314,7 +319,7 @@ export function WorkflowStepCard({
         </div>
       )}
 
-      {!isResolved && !lockedMessage && (
+      {!readOnly && !isResolved && !lockedMessage && (
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           {controlsMode === "full" && step.status === "PENDING" && (
             <Button size="sm" variant="secondary" disabled={isPending} onClick={() => run(() => markStepInProgress(step.id))}>

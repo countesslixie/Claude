@@ -58,16 +58,6 @@ export async function generateFilingsForClientYear(
     orderBy: { sequence: "asc" },
   });
 
-  // The client's own default withholding rate is the best available
-  // signal, at generation time, for "does this client typically receive
-  // Form 2307s at all." requiresSawt itself stays a genuinely derived,
-  // per-filing figure (SPEC.md 5: "derived: any Form2307 in period") that
-  // recomputeRequiresSawt() refines once real certificates exist — this
-  // is only the starting assumption, so RECEIVE_2307 isn't wrongly
-  // skipped for a client who obviously expects certificates just because
-  // none have arrived yet for a brand-new future period.
-  const clientExpectsForm2307 = client.defaultWithholdingRateBps != null;
-
   const actorId = await getActorId();
   const createdPeriods: Period[] = [];
   const skippedPeriods: Period[] = [];
@@ -99,9 +89,8 @@ export async function generateFilingsForClientYear(
 
     // requiresSawt is genuinely derived from actual Form2307 records
     // (SPEC.md 5), which is always zero for a brand-new filing — it
-    // starts false regardless of clientExpectsForm2307 (that signal only
-    // drives whether RECEIVE_2307 itself applies, below) and gets
-    // refined by recomputeRequiresSawt() as real certificates arrive.
+    // starts false and gets refined by recomputeRequiresSawt() as real
+    // certificates arrive.
     const filing = await prisma.filing.create({
       data: {
         clientId,
@@ -119,7 +108,6 @@ export async function generateFilingsForClientYear(
     await instantiateWorkflowSteps(filing.id, {
       templates,
       requiresSawt: false,
-      clientExpectsForm2307,
       certificatesExpectedBy,
       actorId,
     });
@@ -151,9 +139,9 @@ interface StepTemplateRow {
  * applying:
  *   - steps 11-14 (isConditional, "requiresSawt == true") -> NA when the
  *     filing has no SAWT requirement, excluded from progress % (§16 item 12)
- *   - RECEIVE_2307 -> SKIPPED with a reason when the client never
- *     receives Form 2307s at all
- *   - RECEIVE_2307, otherwise -> WAITING_EXTERNAL from the moment the
+ *   - RECEIVE_2307 -> WAITING_EXTERNAL for every client (D152 — never
+ *     generated Skipped; she clicks Skip herself when a client has no
+ *     certificates that quarter), from the moment the
  *     filing is generated, with its clock stamped at certificatesExpectedBy,
  *     not "now" (SPEC.md 3.6 — the waiting clock starts from when
  *     certificates are expected, not when the bookkeeper happens to open
@@ -164,21 +152,16 @@ export async function instantiateWorkflowSteps(
   opts: {
     templates: StepTemplateRow[];
     requiresSawt: boolean;
-    clientExpectsForm2307: boolean;
     certificatesExpectedBy: Date | null;
     actorId: string;
   },
 ) {
   for (const template of opts.templates) {
-    let status: "PENDING" | "WAITING_EXTERNAL" | "NA" | "SKIPPED" = "PENDING";
+    let status: "PENDING" | "WAITING_EXTERNAL" | "NA" = "PENDING";
     let waitingSince: Date | null = null;
-    let skippedReason: string | null = null;
 
     if (template.isConditional && !opts.requiresSawt) {
       status = "NA";
-    } else if (template.stepCode === "RECEIVE_2307" && !opts.clientExpectsForm2307) {
-      status = "SKIPPED";
-      skippedReason = "No withholding agents / no Form 2307 expected for this client this period.";
     } else if (template.stepCode === "RECEIVE_2307") {
       status = "WAITING_EXTERNAL";
       waitingSince = opts.certificatesExpectedBy;
@@ -208,7 +191,6 @@ export async function instantiateWorkflowSteps(
           typeof template.requiredDocSlots === "string"
             ? template.requiredDocSlots
             : JSON.stringify(template.requiredDocSlots),
-        skippedReason,
         actorId: opts.actorId,
       },
     });

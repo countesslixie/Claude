@@ -447,7 +447,7 @@ export async function seedScenarios(prisma: PrismaClient, actorId: string): Prom
     registeredAddress: "34 Aguinaldo St, Marikina City, Metro Manila",
     taxpayerType: "PURELY_SELF_EMPLOYED",
     lineOfBusiness: "Graphic design services",
-    withholdingBps: null, // no certificates: step 2 is skipped from the start, steps 11-14 NA
+    withholdingBps: null, // no certificates: step 2 is skipped by hand below (generation leaves it open, D152), steps 11-14 NA
     engagedSince: "2026-01-15",
     notes:
       "Sample E: Q3 overpayment, filed, no certificates. Pay reads 'Nothing to pay — overpayment'; the eAFS group reads 'Not applicable — no Form 2307'. Q1/Q2 were filed outside the app (starting figures).",

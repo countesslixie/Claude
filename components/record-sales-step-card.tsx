@@ -22,6 +22,7 @@ export function RecordSalesStepCard({
   status,
   totalCents,
   incomeHref,
+  readOnly = false,
 }: {
   sequence: number;
   title: string;
@@ -29,6 +30,8 @@ export function RecordSalesStepCard({
   /** null when this quarter has no QuarterlySales row at all yet. */
   totalCents: number | null;
   incomeHref: string;
+  /** D153 — the filing is Complete: no "Go to income entry". */
+  readOnly?: boolean;
 }) {
   const isDone = status === "DONE";
   const isDraft = !isDone && totalCents != null;
@@ -53,13 +56,15 @@ export function RecordSalesStepCard({
         )}
       </p>
 
-      <div className="mt-2">
-        <Link href={incomeHref}>
-          <Button type="button" size="sm" variant="secondary">
-            Go to income entry
-          </Button>
-        </Link>
-      </div>
+      {!readOnly && (
+        <div className="mt-2">
+          <Link href={incomeHref}>
+            <Button type="button" size="sm" variant="secondary">
+              Go to income entry
+            </Button>
+          </Link>
+        </div>
+      )}
     </div>
   );
 }

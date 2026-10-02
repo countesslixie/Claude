@@ -34,6 +34,7 @@ export function ClientPackageStepCard({
   savedAtLabel,
   skippedReason,
   downloadHref,
+  readOnly = false,
 }: {
   stepId: string;
   clientId: string;
@@ -51,6 +52,8 @@ export function ClientPackageStepCard({
   savedAtLabel: string | null;
   skippedReason: string | null;
   downloadHref: string;
+  /** D153 — the filing is Complete: no Undo skip (the saved email can still be shown). */
+  readOnly?: boolean;
 }) {
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
@@ -136,11 +139,13 @@ export function ClientPackageStepCard({
       {isSkipped && (
         <div className="mt-1 flex flex-col gap-1">
           <p className="text-xs text-ink-secondary">Skipped{skippedReason ? ` — ${skippedReason}` : ""}</p>
-          <div>
-            <Button size="sm" variant="secondary" disabled={isPending} onClick={() => run(() => unskipStep(stepId))}>
-              Undo skip
-            </Button>
-          </div>
+          {!readOnly && (
+            <div>
+              <Button size="sm" variant="secondary" disabled={isPending} onClick={() => run(() => unskipStep(stepId))}>
+                Undo skip
+              </Button>
+            </div>
+          )}
         </div>
       )}
 

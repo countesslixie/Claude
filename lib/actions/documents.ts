@@ -1,5 +1,6 @@
 "use server";
 
+import { FILING_LOCKED_MESSAGE, assertFilingNotComplete, isFilingComplete } from "@/lib/workflow/filingLock";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getActorId } from "@/lib/actor";
@@ -74,6 +75,9 @@ export async function saveDocumentForStep(params: {
 
   const { filing } = step;
   const { client } = filing;
+
+  // D153 — a Complete filing takes no new or replacement document.
+  if (isFilingComplete(filing)) return { ok: false, error: FILING_LOCKED_MESSAGE };
 
   // D64 (brief #5k §1) — a server-side backstop behind the client-side
   // check every upload control now runs first: a file this large should
@@ -239,6 +243,7 @@ export async function uploadDocument(formData: FormData): Promise<UploadDocument
 export async function deleteDocument(documentId: string, reason: string): Promise<void> {
   const before = await prisma.document.findUnique({ where: { id: documentId }, include: { workflowStep: true } });
   if (!before) return;
+  await assertFilingNotComplete(before.filingId); // D153 — a Complete filing's documents stay as they are
 
   const actorId = await getActorId();
   const updated = await prisma.document.update({

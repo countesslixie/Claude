@@ -6,9 +6,9 @@ import { prisma } from "@/lib/prisma";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { StatusBadge, type StatusTone } from "@/components/status-badge";
+import { ClientDetailsCards } from "@/components/client-details-cards";
 import { GenerateFilingsForm } from "@/components/generate-filings-form";
-import { formatManilaDate, formatManilaDateLong, currentTaxableYearManila } from "@/lib/dates";
-import { bpsToPercentLabel } from "@/lib/money";
+import { formatManilaDate, currentTaxableYearManila } from "@/lib/dates";
 import { formLabel } from "@/lib/workflow/eSubmissionEmail";
 import { filingStatusLabel } from "@/lib/workflow/status";
 
@@ -23,28 +23,6 @@ const FILING_STATUS_TONE: Record<string, StatusTone> = {
   COMPLETE: "done",
   NA: "pending",
 };
-
-const LABELS: Record<string, string> = {
-  PURELY_SELF_EMPLOYED: "Purely self-employed",
-  MIXED_INCOME: "Mixed income",
-  MANUAL: "Manual",
-  LOOSE_LEAF: "Loose-leaf",
-  CAS: "CAS",
-  COLLECTION: "Collection (cash received)",
-  BILLING: "Billing (accrual)",
-  RATE_8_PERCENT: "8% flat rate",
-  GRADUATED_OSD: "Graduated, OSD",
-  GRADUATED_ITEMIZED: "Graduated, itemized",
-};
-
-function Field({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div>
-      <dt className="text-xs font-medium uppercase tracking-wide text-faint">{label}</dt>
-      <dd className="mt-0.5 text-sm text-ink">{value ?? "—"}</dd>
-    </div>
-  );
-}
 
 export default async function ClientDetailPage({
   params,
@@ -106,64 +84,10 @@ export default async function ClientDetailPage({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <h2 className="text-sm font-semibold text-ink">Registration</h2>
-          </CardHeader>
-          <CardBody>
-            <dl className="grid grid-cols-2 gap-4">
-              <Field label="Client code" value={<span className="font-mono">{client.code}</span>} />
-              <Field label="TIN" value={<span className="font-mono">{client.tin}</span>} />
-              <Field label="Branch code" value={client.branchCode} />
-              <Field label="RDO code" value={client.rdoCode} />
-              <Field label="Birthday" value={formatManilaDateLong(client.birthDate)} />
-              <Field label="Taxpayer type" value={LABELS[client.taxpayerType]} />
-              <Field label="Civil status" value={client.civilStatus ? LABELS[client.civilStatus] ?? client.civilStatus : "—"} />
-              <div className="col-span-2">
-                <Field label="Registered address" value={client.registeredAddress} />
-              </div>
-              <Field label="Email" value={client.email} />
-              <Field label="Mobile" value={client.mobile} />
-              <Field label="Line of business" value={client.lineOfBusiness} />
-              <Field label="PSIC code" value={client.psicCode} />
-            </dl>
-          </CardBody>
-        </Card>
+      <ClientDetailsCards client={client} />
 
+      <div className="mt-4 grid grid-cols-1 gap-4">
         <Card>
-          <CardHeader>
-            <h2 className="text-sm font-semibold text-ink">Books & compliance</h2>
-          </CardHeader>
-          <CardBody>
-            <dl className="grid grid-cols-2 gap-4">
-              <Field label="Books type" value={LABELS[client.booksType]} />
-              <Field label="Books registration date" value={formatManilaDate(client.booksRegistrationDate)} />
-              <Field label="Books permit number" value={client.booksPermitNumber} />
-              <Field
-                label="Sworn declaration"
-                value={
-                  client.swornDeclarationOnFile
-                    ? `On file (${client.swornDeclarationYear ?? "year unknown"})`
-                    : "Not on file"
-                }
-              />
-              <Field label="eBIRForms email" value={client.eBIRFormsEmail} />
-              <Field label="eFPS enrolled" value={client.eFPSEnrolled ? "Yes" : "No"} />
-              <Field
-                label="Default WHT rate"
-                value={
-                  client.defaultWithholdingRateBps != null
-                    ? bpsToPercentLabel(client.defaultWithholdingRateBps)
-                    : "—"
-                }
-              />
-              <Field label="Revenue recognition" value={LABELS[client.recognitionBasis]} />
-            </dl>
-          </CardBody>
-        </Card>
-
-        <Card className="lg:col-span-2">
           <CardHeader className="flex items-center justify-between">
             <h2 className="text-sm font-semibold text-ink">Taxable years</h2>
             <Link href={`/clients/${client.id}/tax-years/new`}>
@@ -216,7 +140,7 @@ export default async function ClientDetailPage({
           </CardBody>
         </Card>
 
-        <Card className="lg:col-span-2">
+        <Card>
           <CardHeader className="flex items-center justify-between">
             <h2 className="text-sm font-semibold text-ink">Filings</h2>
             <GenerateFilingsForm clientId={client.id} defaultYear={currentTaxableYearManila()} />
@@ -279,15 +203,6 @@ export default async function ClientDetailPage({
                 </tbody>
               </table>
             )}
-          </CardBody>
-        </Card>
-
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <h2 className="text-sm font-semibold text-ink">Notes</h2>
-          </CardHeader>
-          <CardBody>
-            <p className="whitespace-pre-wrap text-sm text-ink-secondary">{client.notes || "—"}</p>
           </CardBody>
         </Card>
       </div>

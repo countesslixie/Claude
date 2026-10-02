@@ -31,7 +31,8 @@ export function ComputationSheetPanel({
   hasSalesRecorded: boolean;
   period: string;
   taxableYear: number;
-  incomeHref: string;
+  /** null on a Complete filing (D153): no link to income entry. */
+  incomeHref: string | null;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -57,7 +58,7 @@ export function ComputationSheetPanel({
       </button>
       {open && (
         <div className="border-t border-line px-4 py-3">
-          {!hasSalesRecorded && (
+          {!hasSalesRecorded && incomeHref && (
             <p className="mb-2 rounded bg-amber-tint px-2 py-1 text-xs text-amber">
               No sales recorded for {period} {taxableYear} — enter the client&apos;s declared figure to compute.{" "}
               <Link href={incomeHref} className="underline">

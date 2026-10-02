@@ -1,5 +1,6 @@
 "use server";
 
+import { FILING_LOCKED_MESSAGE, FilingLockedError, isFilingComplete } from "@/lib/workflow/filingLock";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getActorId } from "@/lib/actor";
@@ -98,6 +99,7 @@ export async function acknowledgeAmendmentAlert(alertId: string, note: string): 
 export async function setAllCertificatesReceived(filingId: string, received: boolean): Promise<void> {
   const before = await prisma.filing.findUnique({ where: { id: filingId } });
   if (!before) return;
+  if (isFilingComplete(before)) throw new FilingLockedError(); // D153
 
   const actorId = await getActorId();
   const updated = await prisma.filing.update({
@@ -132,6 +134,7 @@ export async function setAllCertificatesReceived(filingId: string, received: boo
 export async function dismissCompletenessNote(filingId: string): Promise<void> {
   const before = await prisma.filing.findUnique({ where: { id: filingId } });
   if (!before) return;
+  if (isFilingComplete(before)) throw new FilingLockedError(); // D153
 
   const actorId = await getActorId();
   const updated = await prisma.filing.update({
@@ -191,6 +194,7 @@ export async function updateFilingOtherCredits(
     include: { workflowSteps: { where: { stepCode: "FILE_RETURN" } } },
   });
   if (!filing) return { error: "Filing not found.", values };
+  if (isFilingComplete(filing)) return { error: FILING_LOCKED_MESSAGE, values }; // D153
   if (filing.workflowSteps[0]?.status === "DONE") {
     return { error: "This return has already been filed — item 61 is locked.", values };
   }
@@ -288,6 +292,7 @@ export async function savePayment(
     },
   });
   if (!filing) return { error: "Filing not found.", values };
+  if (isFilingComplete(filing)) return { error: FILING_LOCKED_MESSAGE, values }; // D153 — overrides D75/D94's "editable until the next return is filed"
 
   const step = filing.workflowSteps.find((s) => s.stepCode === "MAKE_PAYMENT");
   if (!step) return { error: "This filing has no Make payment step.", values };

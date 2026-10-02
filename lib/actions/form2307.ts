@@ -1,5 +1,6 @@
 "use server";
 
+import { FILING_LOCKED_MESSAGE, filingLockedReason, isFilingComplete } from "@/lib/workflow/filingLock";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { certificateEntrySchema } from "@/lib/validation/form2307";
@@ -103,6 +104,9 @@ export async function addCertificate(
   const filing = await prisma.filing.findUnique({ where: { id: filingId }, include: { client: true } });
   if (!filing) return { error: "Filing not found." };
 
+  // D153 — a Complete filing takes no new certificate.
+  if (isFilingComplete(filing)) return { error: FILING_LOCKED_MESSAGE, values };
+
   const lockedReason = await assertFilingNotLocked(filingId);
   if (lockedReason) return { error: lockedReason, values };
 
@@ -188,6 +192,10 @@ export async function deleteCertificate(certificateId: string, reason: string): 
   const cert = await prisma.form2307.findUnique({ where: { id: certificateId } });
   if (!cert) return { ok: false, error: "Certificate not found." };
   if (!cert.claimedOnFilingId) return { ok: false, error: "Certificate isn't attached to a filing." };
+
+  // D153 — a Complete filing keeps every certificate it has.
+  const completeReason = await filingLockedReason(cert.claimedOnFilingId);
+  if (completeReason) return { ok: false, error: completeReason };
 
   const lockedReason = await assertFilingNotLocked(cert.claimedOnFilingId);
   if (lockedReason) return { ok: false, error: lockedReason };

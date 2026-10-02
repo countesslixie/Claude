@@ -75,6 +75,7 @@ export function Receive2307StepCard({
   atcCodes,
   onSaveNewPayor,
   onFillPayorDetail,
+  readOnly = false,
 }: {
   stepId: string;
   sequence: number;
@@ -102,6 +103,8 @@ export function Receive2307StepCard({
     field: "tin" | "address" | "usualAtcCode",
     value: string,
   ) => Promise<{ ok: true; payor: SavedPayor } | { ok: false; error: string }>;
+  /** D153 — the filing is Complete: no Undo skip, no "all received" tick; the rows are view-only (`locked` is also true). */
+  readOnly?: boolean;
 }) {
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
@@ -199,9 +202,11 @@ export function Receive2307StepCard({
       {status === "SKIPPED" && (
         <div className="mt-1 flex flex-wrap items-center gap-2">
           {skippedReason && <p className="text-xs text-faint">Skipped: {skippedReason}</p>}
-          <Button size="sm" variant="secondary" disabled={isPending} onClick={() => run(() => unskipStep(stepId))}>
-            Undo skip
-          </Button>
+          {!readOnly && (
+            <Button size="sm" variant="secondary" disabled={isPending} onClick={() => run(() => unskipStep(stepId))}>
+              Undo skip
+            </Button>
+          )}
         </div>
       )}
 
@@ -380,7 +385,7 @@ export function Receive2307StepCard({
             </p>
           )}
 
-          {certificates.length > 0 && (
+          {certificates.length > 0 && !readOnly && (
             <>
               <label className="mt-3 flex items-center gap-1.5 text-sm text-ink-secondary">
                 <Checkbox
