@@ -3,11 +3,6 @@ import { prisma } from "@/lib/prisma";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 
-const TAXPAYER_TYPE_LABELS: Record<string, string> = {
-  PURELY_SELF_EMPLOYED: "Purely self-employed",
-  MIXED_INCOME: "Mixed income",
-};
-
 export default async function ClientsPage({
   searchParams,
 }: {
@@ -72,14 +67,13 @@ export default async function ClientsPage({
       </form>
 
       <div className="overflow-x-auto rounded-lg border border-line bg-surface">
-        <table className="data-table">
+        <table className="data-table data-table-centered">
           <thead>
             <tr>
               <th>Code</th>
               <th>Registered name</th>
               <th>TIN</th>
               <th>RDO</th>
-              <th>Taxpayer type</th>
               <th>Status</th>
             </tr>
           </thead>
@@ -95,7 +89,6 @@ export default async function ClientsPage({
                 </td>
                 <td className="font-mono text-xs">{c.tin}</td>
                 <td>{c.rdoCode}</td>
-                <td>{TAXPAYER_TYPE_LABELS[c.taxpayerType]}</td>
                 <td>
                   {c.isActive ? (
                     <StatusBadge tone="done">Active</StatusBadge>
@@ -107,7 +100,7 @@ export default async function ClientsPage({
             ))}
             {clients.length === 0 && (
               <tr>
-                <td colSpan={6} className="py-8 text-center text-sm text-faint">
+                <td colSpan={5} className="py-8 text-center text-sm text-faint">
                   No clients found.
                 </td>
               </tr>

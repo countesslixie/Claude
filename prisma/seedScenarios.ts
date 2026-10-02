@@ -36,6 +36,7 @@ import { uploadDocument } from "../lib/actions/documents";
 import { markStepDone, skipStep } from "../lib/actions/workflowSteps";
 import { assembleAndComputeFiling } from "../lib/filingComputation";
 import { centsToPesos } from "../lib/money";
+import { manilaDateInputToJsDate } from "../lib/dates";
 import type { Period } from "../lib/tax/types";
 
 const MANILA_ZONE = "Asia/Manila";
@@ -50,6 +51,18 @@ export const SAMPLE_CLIENT_CODES = [
   "tolentino-g", // G
   "navarro-e", // H
 ] as const;
+
+// Brief #6b (D146) — made-up birthdays for the fictitious samples. Not real.
+const SAMPLE_BIRTHDAYS: Record<(typeof SAMPLE_CLIENT_CODES)[number], string> = {
+  "villamor-e": "1984-03-14",
+  "pangilinan-a": "1990-07-22",
+  "lacson-b": "1978-11-05",
+  "mendoza-c": "1992-01-30",
+  "garcia-r": "1986-09-18",
+  "ocampo-f": "1981-05-09",
+  "tolentino-g": "1995-12-27",
+  "navarro-e": "1988-06-03",
+};
 
 // ---------------------------------------------------------------------------
 // small helpers
@@ -161,6 +174,7 @@ export async function seedScenarios(prisma: PrismaClient, actorId: string): Prom
         branchCode: "000",
         rdoCode: data.rdoCode,
         registeredAddress: data.registeredAddress,
+        birthDate: manilaDateInputToJsDate(SAMPLE_BIRTHDAYS[data.code as (typeof SAMPLE_CLIENT_CODES)[number]]),
         email: `${data.code}@example.com`,
         mobile: `0917-000-010${n}`,
         taxpayerType: data.taxpayerType,

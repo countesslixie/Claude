@@ -197,6 +197,11 @@ model Client {
   branchCode String @default("000")
   rdoCode    String
 
+  // Brief #6b (D146) — a calendar date, stored like every other date
+  // (manilaDateInputToJsDate). Nullable only because rows made before the
+  // field existed have none; the form requires it on New and Edit.
+  birthDate DateTime?
+
   registeredAddress String
   email             String?
   mobile            String?

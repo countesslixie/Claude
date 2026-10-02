@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { TaxpayerType, BooksType, CivilStatus, RecognitionBasis } from "@prisma/client";
+import { DateTime } from "luxon";
 
 const optionalText = z
   .string()
@@ -12,6 +12,18 @@ const optionalDate = z
   .optional()
   .transform((v) => (v === "" ? undefined : v));
 
+// Brief #6b (D146) — required on New and Edit. A real calendar date typed
+// or picked as yyyy-mm-dd.
+const requiredDate = z
+  .string()
+  .trim()
+  .min(1, "Required")
+  .refine((v) => /^\d{4}-\d{2}-\d{2}$/.test(v) && DateTime.fromISO(v).isValid, "Enter a valid date");
+
+// Brief #6b (D145) — the form no longer asks for taxpayer type, recognition
+// basis, civil status, default WHT rate or the books fields. They are not in
+// this schema on purpose: createClient writes fixed values for them and
+// updateClient never touches them.
 export const clientSchema = z.object({
   code: z
     .string()
@@ -26,6 +38,7 @@ export const clientSchema = z.object({
   rdoCode: z.string().trim().min(1, "Required"),
 
   registeredAddress: z.string().trim().min(1, "Required"),
+  birthDate: requiredDate,
   email: z
     .string()
     .trim()
@@ -35,38 +48,8 @@ export const clientSchema = z.object({
     .transform((v) => (v === "" ? undefined : v)),
   mobile: optionalText,
 
-  taxpayerType: z.nativeEnum(TaxpayerType),
   lineOfBusiness: optionalText,
   psicCode: optionalText,
-  civilStatus: z
-    .union([z.nativeEnum(CivilStatus), z.literal("")])
-    .optional()
-    .transform((v) => (v === "" ? undefined : v)),
-
-  booksType: z.nativeEnum(BooksType),
-  booksRegistrationDate: optionalDate,
-  booksPermitNumber: optionalText,
-
-  swornDeclarationOnFile: z.boolean().default(false),
-  swornDeclarationYear: z
-    .union([z.coerce.number().int().min(2000).max(2100), z.literal("")])
-    .optional()
-    .transform((v) => (v === "" || v === undefined ? undefined : v)),
-
-  eBIRFormsEmail: z
-    .string()
-    .trim()
-    .email("Invalid email")
-    .optional()
-    .or(z.literal(""))
-    .transform((v) => (v === "" ? undefined : v)),
-  eFPSEnrolled: z.boolean().default(false),
-  defaultWithholdingRateBps: z
-    .union([z.coerce.number().int().min(0).max(10000), z.literal("")])
-    .optional()
-    .transform((v) => (v === "" || v === undefined ? undefined : v)),
-
-  recognitionBasis: z.nativeEnum(RecognitionBasis).default(RecognitionBasis.COLLECTION),
 
   isActive: z.boolean().default(true),
   engagedSince: optionalDate,

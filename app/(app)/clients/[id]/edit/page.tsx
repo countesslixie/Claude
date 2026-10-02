@@ -23,22 +23,11 @@ export default async function EditClientPage({
     branchCode: client.branchCode,
     rdoCode: client.rdoCode,
     registeredAddress: client.registeredAddress,
+    birthDate: toManilaDateInputValue(client.birthDate),
     email: client.email ?? "",
     mobile: client.mobile ?? "",
-    taxpayerType: client.taxpayerType,
     lineOfBusiness: client.lineOfBusiness ?? "",
     psicCode: client.psicCode ?? "",
-    civilStatus: client.civilStatus ?? "",
-    booksType: client.booksType,
-    booksRegistrationDate: toManilaDateInputValue(client.booksRegistrationDate),
-    booksPermitNumber: client.booksPermitNumber ?? "",
-    swornDeclarationOnFile: client.swornDeclarationOnFile ? "on" : "",
-    swornDeclarationYear: client.swornDeclarationYear ? String(client.swornDeclarationYear) : "",
-    eBIRFormsEmail: client.eBIRFormsEmail ?? "",
-    eFPSEnrolled: client.eFPSEnrolled ? "on" : "",
-    defaultWithholdingRateBps:
-      client.defaultWithholdingRateBps != null ? String(client.defaultWithholdingRateBps) : "",
-    recognitionBasis: client.recognitionBasis,
     isActive: client.isActive ? "on" : "",
     engagedSince: toManilaDateInputValue(client.engagedSince),
     notes: client.notes ?? "",
@@ -47,7 +36,7 @@ export default async function EditClientPage({
   return (
     <div className="mx-auto max-w-3xl">
       <h1 className="mb-4 text-2xl font-semibold text-ink">Edit {client.registeredName}</h1>
-      <ClientForm action={boundAction} initialValues={initialValues} submitLabel="Save changes" />
+      <ClientForm action={boundAction} initialValues={initialValues} submitLabel="Save changes" cancelHref={`/clients/${client.id}`} />
     </div>
   );
 }

@@ -123,6 +123,12 @@ table.data-table td {
   color: var(--ink-secondary);
 }
 
+/* D149 — every column, heading and cell, centred (the Clients list). */
+table.data-table.data-table-centered th,
+table.data-table.data-table-centered td {
+  text-align: center;
+}
+
 table.data-table tbody tr:hover {
   background: var(--purple-wash);
 }

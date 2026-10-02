@@ -1108,4 +1108,42 @@ The Taxable years table loses its Regime column and the tax year forms their Reg
 
 ---
 
+## 2026-10-02 — brief #6b (the New/Edit client form and the Clients list)
+
+**D143 — The client form's layout** *(2026-10-02, brief #6b, her decision)*
+
+Registration, in this order: TIN · Branch code · RDO code (three across); Registered name; Trade name; Registered address (textarea); Birthday · Client code (two across); Email · Mobile phone number (two across). Tax profile: Line of business · PSIC code. The Client code's label is just "Client code" (the "(used in file paths)" note is gone). Rows stack to one column on narrow screens. **Kept, because the brief only named what comes off and one of them is load-bearing:** the Status section below (Engaged since, Active, Notes) — Engaged since drives the mid-year Generate guard (D78) and nothing else can set it. Flagged to her to confirm.
+
+**D144 — Cancel** *(brief #6b, her decision)*
+
+A bordered secondary Cancel button beside Save (a button, not a link). It saves nothing: on New client it returns to the Clients list; on Edit client, to that client's page.
+
+**D145 — Fields off the form; every column kept** *(brief #6b, her decision)*
+
+Off the form: Taxpayer type, Revenue recognition basis, Civil status, Default WHT rate, and the whole Books & compliance section (Books type, Books registration date, Books permit number, Sworn declaration year, Sworn declaration on file, eBIRForms email, eFPS enrolled). **No database column is dropped.** `clientSchema` no longer contains them, so `updateClient` cannot touch them — an edit leaves taxpayer type, recognition basis and the rest exactly as stored, including the mixed-income sample (Estrella Navarro). `createClient` writes fixed values: `taxpayerType = PURELY_SELF_EMPLOYED` (her decision: every client is purely self-employed — ₱250,000 deduction, 1701A), `recognitionBasis = COLLECTION`, and `booksType = MANUAL` (a required column with no schema default — the same value the samples carry); civil status, default WHT rate and the other books fields stay empty or at their schema defaults. The computation is unchanged; `MIXED_INCOME` and the Form 1701 path stay in the code (D49). **One consequence to know:** `defaultWithholdingRateBps` is also read by `generateFilingsForClientYear` as "does this client expect Form 2307s" — with it empty, a new client's step 2 starts **Skipped** ("No withholding agents…") rather than Waiting; she can Undo skip. Existing clients are unaffected. Not changed in this brief; her call.
+
+**D146 — Birthday** *(brief #6b, her decision: required)*
+
+`Client.birthDate`, nullable in the database (migration `client_birth_date`) because existing rows have none, required on the form for New and Edit — an existing client without one must have it filled in before Edit saves. A calendar date stored through `manilaDateInputToJsDate()` like every other date (that function returns Manila midnight, i.e. 16:00 UTC the day before, not UTC midnight as the brief worded it — the code wins; it round-trips to the same Manila date). Shown on the client page's Registration card as "January 5, 1990". The eight sample clients carry made-up birthdays. Existing databases do not get them unless reseeded (the seed builds samples only when none exist).
+
+**D147 — Client code fills in from the name (New client only)** *(brief #6b, her decision)*
+
+`suggestClientCode` (`lib/clients/suggestCode.ts`, pure, tested): last word + "-" + first word, lowercased, accents stripped, anything outside a–z/0–9 removed from each word; one word → itself; empty → empty. "Maria Santos Reyes" → reyes-maria; "Juan Dela Cruz" → cruz-juan (two-word surnames are fixed by hand). It stays an ordinary box; once she types in it, it stops following the name for that form. Server validation (required, format, unique) is unchanged, a taken suggestion shows the existing "already exists" error, and no number is ever appended. On Edit the code is an ordinary editable field as before (changing it is allowed, and refused only if taken) and never auto-fills.
+
+**D148 — Edit client uses the same form** *(brief #6b, her decision)*
+
+Same order, same Cancel, Birthday required; no auto-fill.
+
+**D149 — The Clients list** *(brief #6b, her decision)*
+
+The Taxpayer type column is gone; Code · Registered name · TIN · RDO · Status are centred, headings and cells (`data-table-centered`). Search, the Active/All/Inactive filter and the name link are unchanged.
+
+**D150 — Other screens still showing the removed fields (report only)** *(brief #6b)*
+
+Only the client page (`/clients/[id]`): Registration card shows Taxpayer type and Civil status; the whole "Books & compliance" card shows Books type, Books registration date, Books permit number, Sworn declaration, eBIRForms email, eFPS enrolled, Default WHT rate and Revenue recognition. Left as they are until she walks that page. Its "Mobile" label was not renamed.
+
+**Also in brief #6b:** the stale "Complete (N steps skipped)" comment in `lib/workflow/status.ts` rewritten to match D124; `clientDocsDue.test.ts` made deterministic — it changed `clientDocsDueDay` on the shared 2026 rule set (18, then back) while other test files ran in parallel against the same database, and its backfill rewrote every filing; it now owns a throwaway 2031 rule set.
+
+---
+
 **Documentation reconciled through brief #5z** (brief #6a, this pass; earlier passes: #5u, #5m, #5o's light additions D83–D93, #5p) — see the "Last reconciled" line at the top of this file, CURRENT_STATE.md, PROJECT_MASTER.md and CLAUDE.md.

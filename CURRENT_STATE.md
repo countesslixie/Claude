@@ -1,13 +1,13 @@
 # CURRENT_STATE.md
 
 *Living snapshot. Replace stale content rather than appending.*
-*Last reconciled: 2026-10-02 — brief #6a, the documentation pass for briefs #5v–#5z (D115–D142). Everything below was checked against the tree at brief #5z's tip (`e761a74`): **534 tests in 56 files pass, the build passes, and typecheck is clean once Next's route types exist** — see Known limitations for the one-line `LayoutProps` catch. Per-brief history lives in DECISIONS.md, not here.*
+*Last reconciled: 2026-10-02 — brief #6a, the documentation pass for briefs #5v–#5z (D115–D142). Everything below was checked against the tree at brief #5z's tip (`e761a74`): **553 tests in 58 files pass, the build passes, and typecheck is clean once Next's route types exist** — see Known limitations for the one-line `LayoutProps` catch. Per-brief history lives in DECISIONS.md, not here.*
 
 ---
 
 ## Where the code is
 
-**Working branch: `claude/serene-hypatia-rs67pw`.** Tip at the start of brief #6a: `e761a74` (brief #5z); brief #6a's documentation-only commit sits on top. Briefs #5a through #5z and #6a all landed on this one branch — no new branch since it was cut for brief #5a.
+**Working branch: `claude/serene-hypatia-rs67pw`.** Tip at the start of brief #6a: `e761a74` (brief #5z); brief #6a's documentation-only commit (`b378c1e`) sits under brief #6b. Briefs #5a through #5z and #6a all landed on this one branch — no new branch since it was cut for brief #5a.
 
 Standing rules:
 - `git fetch origin <branch>` first, every pass; a local checkout has been behind the remote more than once (briefs #5g, #5n).
@@ -36,7 +36,7 @@ All four share one key: client × taxable year × period.
 
 ## How each group works today
 
-The sixteen steps sit in six groups (D70) — a fixed lookup in `lib/workflow/groups.ts`, not `category`. Step numbers are never renumbered to make groups contiguous; a filing sitting at BIR Confirmations after every other group is done is normal. A group has no "Mark done" of its own (D62): its header shows a grey Pending label (tooltip names the open steps) or a green Done pill.
+The sixteen steps sit in six groups (D70) — a fixed lookup in `lib/workflow/groups.ts`, not `category`. Step numbers are never renumbered to make groups contiguous; a filing sitting at BIR Confirmations after every other group is done is normal. A group has no "Mark done" of its own (D62): its header shows a grey Pending label (tooltip names the open steps), a green Done pill, or — when every step in it is NA — a grey Not applicable pill.
 
 ### The sixteen steps
 
@@ -84,6 +84,9 @@ Built and walked (briefs #5r–#5t, D101–D103 and D106–D114). Step 16 is Mar
 - **The email:** opens "Hi [first name],", says the return has been filed, lists the attached documents **by name, never file names** (D110), then the **summary** — the same year-to-date lines step 4 prints (`buildSummaryLines`, D114), read from the frozen sheet so they reconcile to the last line: gross sales this quarter, taxable income and tax due year to date, each "Less:" credit (zero lines left out), a rounding line only when needed, and **Amount payable** or **Overpayment**. Then "Next filing: [form] for [period], due [date]. **Please send required documents by [date].**" — that date is the engagement-letter rule, the 20th of the month after the period ends (D106; Jan 20 for the Annual) — then "Please keep this for your records." and "Thank you!" (D112). A client with no email shows one muted line and never blocks.
 - **Mark done saves the exact email** on the filing (`Filing.clientPackageEmail…`) and the card collapses to "Emailed on [date]: [subject]" (D125). A step 16 done before this existed reads "Done on [date]" with nothing invented.
 - The filing page's old top-of-card "Download period package" link is gone (D114's note); its route stays for step 16's button.
+
+### The client form and the Clients list (D143–D150, brief #6b)
+The New/Edit client form (one component, `components/client-form.tsx`) reads: Registration — TIN · Branch code · RDO code; Registered name; Trade name; Registered address; Birthday · Client code; Email · Mobile phone number — then Tax profile (Line of business · PSIC code) and a Status section (Engaged since, Active, Notes — kept because Engaged since drives D78). Birthday is required on New and Edit (`Client.birthDate`, nullable in the database; existing clients must have one entered before Edit saves) and shows on the client page as "January 5, 1990". On New client the Client code fills in from the name — last word + "-" + first word ("Maria Santos Reyes" → reyes-maria) — until she types in the box; Edit never auto-fills. Cancel (bordered) saves nothing: New → Clients list, Edit → the client's page. Taxpayer type, recognition basis, civil status, default WHT rate and the books fields are off the form but their columns stay; a new client is saved purely self-employed / collection / manual books, and Edit leaves those values as stored. Because a new client has no default WHT rate, `generateFilingsForClientYear` starts its step 2 Skipped (Undo skip) — see D145. The Clients list shows Code · Registered name · TIN · RDO · Status, all centred. The client page still shows the removed fields (D150) until she walks it.
 
 ### Cross-cutting rules
 - **Reopening (D50/D61).** While a filing is unfiled, a figures-changing final save of step 1, a draft save of a previously-final step 1, adding/removing a certificate, a saved item 61, a saved starting-figures change, or a saved payment reopens steps 3 and 4 (`reopenPreparedFiling`); the same step-1 saves un-skip a Skipped step 2, and undoing step 2's skip reopens too. A filed filing is never reopened.

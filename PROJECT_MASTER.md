@@ -71,6 +71,12 @@ One bookkeeper, alone, on a single laptop. Not deployed. Not client-facing.
 ### There is no control over a declared income figure — say so plainly
 The client's stated quarterly figure IS the income record and is accepted as given (D37). The per-quarter Notes field is free text, not a control. The only reconciliation left is the annual certificates-vs-declared-sales check, which only catches certificates that, summed, exceed what was declared.
 
+### The client record (D145–D147)
+- **Every client is purely self-employed** — the ₱250,000 deduction and the 1701A. The form doesn't ask for taxpayer type, recognition basis, civil status, default WHT rate or books details; the columns are kept and new clients get fixed values (`PURELY_SELF_EMPLOYED`, `COLLECTION`, manual books). Editing never changes them.
+- **Birthday is required** (New and Edit), stored as a Manila calendar date, shown as "January 5, 1990".
+- **Client code** is suggested from the registered name on New client (last word + "-" + first word, lowercased, accents and punctuation removed) and is otherwise an ordinary field validated as before; Edit never auto-fills it.
+- **The Clients list** shows Code · Registered name · TIN · RDO · Status, centred.
+
 ### Starting figures for a client joining mid-year (D56)
 Every current client's Q1 and Q2 2026 were filed from Excel, so at go-live each joins mid-year. `StartingFigures` (one row per client-year) holds `latestOutsideReturn` (`NONE`/`Q1`/`Q2`/`Q3`) and the figures typed once from that outside return: items 55, 51, 57, 58, 56, the amount paid on it, item 61 with a description, and optional non-operating income (which can't exceed cumulative income). Read-only after Save with Edit; locked once the year's first in-app return is filed.
 

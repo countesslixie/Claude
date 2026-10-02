@@ -1,38 +1,14 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import type { ClientFormState } from "@/lib/actions/clients";
-
-const TAXPAYER_TYPES = [
-  { value: "PURELY_SELF_EMPLOYED", label: "Purely self-employed" },
-  { value: "MIXED_INCOME", label: "Mixed income" },
-];
-
-const BOOKS_TYPES = [
-  { value: "MANUAL", label: "Manual" },
-  { value: "LOOSE_LEAF", label: "Loose-leaf" },
-  { value: "CAS", label: "CAS" },
-];
-
-const CIVIL_STATUSES = [
-  { value: "", label: "—" },
-  { value: "SINGLE", label: "Single" },
-  { value: "MARRIED", label: "Married" },
-  { value: "WIDOWED", label: "Widowed" },
-  { value: "LEGALLY_SEPARATED", label: "Legally separated" },
-  { value: "ANNULLED", label: "Annulled" },
-];
-
-const RECOGNITION_BASES = [
-  { value: "COLLECTION", label: "Collection (cash received)" },
-  { value: "BILLING", label: "Billing (accrual)" },
-];
+import { suggestClientCode } from "@/lib/clients/suggestCode";
 
 type FieldProps = {
   name: string;
@@ -42,11 +18,15 @@ type FieldProps = {
   required?: boolean;
   type?: string;
   placeholder?: string;
+  className?: string;
+  /** Controlled mode (the Client code box on New client, D147). */
+  value?: string;
+  onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
 };
 
-function TextField({ name, label, defaultValue, errors, required, type = "text", placeholder }: FieldProps) {
+function TextField({ name, label, defaultValue, errors, required, type = "text", placeholder, className, value, onChange }: FieldProps) {
   return (
-    <div className="flex flex-col gap-1">
+    <div className={`flex flex-col gap-1 ${className ?? ""}`}>
       <Label htmlFor={name}>
         {label}
         {required && <span className="text-red"> *</span>}
@@ -55,7 +35,8 @@ function TextField({ name, label, defaultValue, errors, required, type = "text",
         id={name}
         name={name}
         type={type}
-        defaultValue={defaultValue}
+        {...(value !== undefined ? { value } : { defaultValue })}
+        onChange={onChange}
         required={required}
         placeholder={placeholder}
       />
@@ -72,14 +53,25 @@ export function ClientForm({
   action,
   initialValues,
   submitLabel,
+  cancelHref,
+  suggestCode = false,
 }: {
   action: (state: ClientFormState, formData: FormData) => Promise<ClientFormState>;
   initialValues?: Record<string, string>;
   submitLabel: string;
+  /** Where Cancel goes — saves nothing (D144). */
+  cancelHref: string;
+  /** New client only: fill the Client code in from the Registered name (D147). */
+  suggestCode?: boolean;
 }) {
+  const router = useRouter();
   const [state, formAction, isPending] = useActionState<ClientFormState, FormData>(action, {
     values: initialValues,
   });
+
+  // D147 — the code follows the name until she types in the code box herself.
+  const [code, setCode] = useState(initialValues?.code ?? "");
+  const [codeTyped, setCodeTyped] = useState(false);
 
   const v = (key: string) => state.values?.[key] ?? initialValues?.[key] ?? "";
   const errs = (key: string) => state.fieldErrors?.[key];
@@ -90,26 +82,10 @@ export function ClientForm({
         <p className="rounded-md bg-red-tint px-3 py-2 text-sm text-red">{state.error}</p>
       )}
 
-      <fieldset className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <fieldset className="grid grid-cols-1 gap-4 sm:grid-cols-6">
         <legend className="col-span-full text-sm font-semibold text-ink">
           Registration
         </legend>
-        <TextField
-          name="code"
-          label="Client code (used in file paths)"
-          defaultValue={v("code")}
-          errors={errs("code")}
-          required
-          placeholder="dela-cruz-j"
-        />
-        <TextField
-          name="registeredName"
-          label="Registered name"
-          defaultValue={v("registeredName")}
-          errors={errs("registeredName")}
-          required
-        />
-        <TextField name="tradeName" label="Trade name" defaultValue={v("tradeName")} errors={errs("tradeName")} />
         <TextField
           name="tin"
           label="TIN (9 digits)"
@@ -117,12 +93,14 @@ export function ClientForm({
           errors={errs("tin")}
           required
           placeholder="123456789"
+          className="sm:col-span-2"
         />
         <TextField
           name="branchCode"
           label="Branch code"
           defaultValue={v("branchCode") || "000"}
           errors={errs("branchCode")}
+          className="sm:col-span-2"
         />
         <TextField
           name="rdoCode"
@@ -130,8 +108,31 @@ export function ClientForm({
           defaultValue={v("rdoCode")}
           errors={errs("rdoCode")}
           required
+          className="sm:col-span-2"
         />
-        <div className="flex flex-col gap-1 sm:col-span-2">
+        <TextField
+          name="registeredName"
+          label="Registered name"
+          defaultValue={v("registeredName")}
+          errors={errs("registeredName")}
+          required
+          className="sm:col-span-6"
+          onChange={
+            suggestCode
+              ? (e) => {
+                  if (!codeTyped) setCode(suggestClientCode(e.target.value));
+                }
+              : undefined
+          }
+        />
+        <TextField
+          name="tradeName"
+          label="Trade name"
+          defaultValue={v("tradeName")}
+          errors={errs("tradeName")}
+          className="sm:col-span-6"
+        />
+        <div className="flex flex-col gap-1 sm:col-span-6">
           <Label htmlFor="registeredAddress">
             Registered address<span className="text-red"> *</span>
           </Label>
@@ -146,120 +147,51 @@ export function ClientForm({
             <p key={e} className="text-xs text-red">{e}</p>
           ))}
         </div>
-        <TextField name="email" label="Email" type="email" defaultValue={v("email")} errors={errs("email")} />
-        <TextField name="mobile" label="Mobile" defaultValue={v("mobile")} errors={errs("mobile")} />
+        <TextField
+          name="birthDate"
+          label="Birthday"
+          type="date"
+          defaultValue={v("birthDate")}
+          errors={errs("birthDate")}
+          required
+          className="sm:col-span-3"
+        />
+        <TextField
+          name="code"
+          label="Client code"
+          value={code}
+          onChange={(e) => {
+            setCodeTyped(true);
+            setCode(e.target.value);
+          }}
+          errors={errs("code")}
+          required
+          placeholder="reyes-maria"
+          className="sm:col-span-3"
+        />
+        <TextField
+          name="email"
+          label="Email"
+          type="email"
+          defaultValue={v("email")}
+          errors={errs("email")}
+          className="sm:col-span-3"
+        />
+        <TextField
+          name="mobile"
+          label="Mobile phone number"
+          defaultValue={v("mobile")}
+          errors={errs("mobile")}
+          className="sm:col-span-3"
+        />
       </fieldset>
 
       <fieldset className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <legend className="col-span-full text-sm font-semibold text-ink">
           Tax profile
         </legend>
-        <div className="flex flex-col gap-1">
-          <Label htmlFor="taxpayerType">
-            Taxpayer type<span className="text-red"> *</span>
-          </Label>
-          <Select id="taxpayerType" name="taxpayerType" defaultValue={v("taxpayerType")} required>
-            <option value="" disabled>
-              Select…
-            </option>
-            {TAXPAYER_TYPES.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </Select>
-          {errs("taxpayerType")?.map((e) => (
-            <p key={e} className="text-xs text-red">{e}</p>
-          ))}
-        </div>
-        <div className="flex flex-col gap-1">
-          <Label htmlFor="recognitionBasis">Revenue recognition basis</Label>
-          <Select id="recognitionBasis" name="recognitionBasis" defaultValue={v("recognitionBasis") || "COLLECTION"}>
-            {RECOGNITION_BASES.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </Select>
-        </div>
         <TextField name="lineOfBusiness" label="Line of business" defaultValue={v("lineOfBusiness")} errors={errs("lineOfBusiness")} />
         <TextField name="psicCode" label="PSIC code" defaultValue={v("psicCode")} errors={errs("psicCode")} />
-        <div className="flex flex-col gap-1">
-          <Label htmlFor="civilStatus">Civil status</Label>
-          <Select id="civilStatus" name="civilStatus" defaultValue={v("civilStatus")}>
-            {CIVIL_STATUSES.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </Select>
-        </div>
-        <TextField
-          name="defaultWithholdingRateBps"
-          label="Default WHT rate (bps, e.g. 500 = 5%)"
-          type="number"
-          defaultValue={v("defaultWithholdingRateBps")}
-          errors={errs("defaultWithholdingRateBps")}
-        />
-      </fieldset>
-
-      <fieldset className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <legend className="col-span-full text-sm font-semibold text-ink">
-          Books & compliance
-        </legend>
-        <div className="flex flex-col gap-1">
-          <Label htmlFor="booksType">
-            Books type<span className="text-red"> *</span>
-          </Label>
-          <Select id="booksType" name="booksType" defaultValue={v("booksType")} required>
-            <option value="" disabled>
-              Select…
-            </option>
-            {BOOKS_TYPES.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </Select>
-          {errs("booksType")?.map((e) => (
-            <p key={e} className="text-xs text-red">{e}</p>
-          ))}
-        </div>
-        <TextField
-          name="booksRegistrationDate"
-          label="Books registration date"
-          type="date"
-          defaultValue={v("booksRegistrationDate")}
-          errors={errs("booksRegistrationDate")}
-        />
-        <TextField
-          name="booksPermitNumber"
-          label="Books permit number"
-          defaultValue={v("booksPermitNumber")}
-          errors={errs("booksPermitNumber")}
-        />
-        <TextField
-          name="swornDeclarationYear"
-          label="Sworn declaration year"
-          type="number"
-          defaultValue={v("swornDeclarationYear")}
-          errors={errs("swornDeclarationYear")}
-        />
-        <div className="flex items-center gap-2 pt-5">
-          <Checkbox id="swornDeclarationOnFile" name="swornDeclarationOnFile" defaultChecked={v("swornDeclarationOnFile") === "on"} />
-          <Label htmlFor="swornDeclarationOnFile">Sworn declaration on file</Label>
-        </div>
-        <TextField
-          name="eBIRFormsEmail"
-          label="eBIRForms email"
-          type="email"
-          defaultValue={v("eBIRFormsEmail")}
-          errors={errs("eBIRFormsEmail")}
-        />
-        <div className="flex items-center gap-2 pt-5">
-          <Checkbox id="eFPSEnrolled" name="eFPSEnrolled" defaultChecked={v("eFPSEnrolled") === "on"} />
-          <Label htmlFor="eFPSEnrolled">eFPS enrolled</Label>
-        </div>
       </fieldset>
 
       <fieldset className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -287,9 +219,12 @@ export function ClientForm({
         </div>
       </fieldset>
 
-      <div>
+      <div className="flex items-center gap-2">
         <Button type="submit" disabled={isPending}>
           {isPending ? "Saving…" : submitLabel}
+        </Button>
+        <Button type="button" variant="secondary" onClick={() => router.push(cancelHref)}>
+          Cancel
         </Button>
       </div>
     </form>

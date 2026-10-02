@@ -92,7 +92,7 @@ Next.js 15 App Router · TypeScript strict · Prisma + SQLite (`data/app.db`) ·
                                 starting-figures-form, generate-filings-form, payor-*, atc-code-*, tax-rule-set-form, client-form, client-tax-year-form, holiday-form, clickable-row, print-button, nav, status-badge, copy-textarea, ui/
 /prisma/                       schema.prisma, migrations/, seed.ts (reference data), seedScenarios.ts (the eight sample clients, D82),
                                 backfills.ts (idempotent seed-run corrections: D96 step titles, D97 filing status, D106 document dates)
-/tests/                        actions/ filingComputation/ documents/ reconciliation/ sawt/ seed/ tax/ workflow/  (534 tests, 56 files)
+/tests/                        actions/ filingComputation/ documents/ reconciliation/ sawt/ seed/ tax/ workflow/  (553 tests, 58 files)
 /storage/  /data/              gitignored document vault and SQLite database
 ```
 
@@ -111,6 +111,7 @@ Next.js 15 App Router · TypeScript strict · Prisma + SQLite (`data/app.db`) ·
 - **"Payors" (D44/D48) is a saved list, not a link:** no foreign key from `QuarterlySalesCustomer` or `Form2307` to `Payor`, ever. "Save … to payors" opens a native dialog; `fillPayorDetail` only fills a blank payor field, never overwrites.
 - **A certificate's ATC code is a picker of maintained `AtcCode` rows and the rate comes from it (D43), and there is no Rate field (D132)** — `addCertificate` saves the code's rate; the `rateOverridden` column stays (old rows) but nothing sets it. Payor TIN, address and ATC are required (D45). The form is laid out in the rows of D131 (payor name · address · TIN + ATC · income + tax withheld · period from + to · scan). The scan is part of saving (D46); a saved row's only scan action is Replace, and **there is no scan date — the upload day is recorded automatically (D122).**
 - **Starting figures (D56)** hold a mid-year client's outside-return figures; a period `latestOutsideReturn` names as outside gets **no `Filing` row at all** (`Filing.filedOutsideApp` covers a row that pre-existed). Locked once the year's first in-app return is filed.
+- **Every new client is purely self-employed (D145).** The client form doesn't ask for taxpayer type, recognition basis, civil status, default WHT rate or the books fields; `createClient` writes `PURELY_SELF_EMPLOYED`/`COLLECTION`/`MANUAL`, `updateClient` never touches them, and the columns stay (the mixed-income sample keeps its value). Birthday is required (D146); the code suggestion on New client is `suggestClientCode` (D147).
 - **Generate refuses for a client engaged mid-year with no starting figures (D78).** `generateFilingsForClientYear` (via `midYearGuard.ts`) creates nothing when `engagedSince` is inside the year after January 1, a quarter had already ended before it, and no `StartingFigures` row exists. Message names client, date and quarters and links to the screen. **No override, and `engagedSince` never excludes a quarter itself.** Any saved row (including "none") satisfies it; Feb 10 or Jan 1 or no date is unaffected. Enforced in the function, not just the button.
 - **Credits (D55/D75):** item 61/63 is one figure per return (`Filing.otherCreditsCents`), inheriting forward, locked at that return's step 5. Item 55/57 is display-only, entered in the starting figures. Item 56/58 is real: the sum of earlier in-app returns' `Filing.amountPaidCents` (written by `savePayment`) plus the starting figures' base. Carry-over of a client's own Annual overpayment is not built.
 
@@ -156,7 +157,7 @@ There is no third category: step 15's optional slot and step 16's forwarding lin
 | 5 | BIR Confirmations | 10 Save TRRC email (D90) · 14 Validation email |
 | 6 | Client package | 16 Email package to client |
 
-Step titles in the tree (D96, built): step 13 **"Save SAWT acknowledgement email"**, step 14 **"Save SAWT validation email"**; `BIR_WAIT_SHORT_NAME` (`lib/workflow/aging.ts`) reads "TRRC", "SAWT acknowledgement", "SAWT validation", so the board tag is "SAWT validation · 8d". A seed backfill renames existing rows.
+Step titles in the tree (D96, built): step 13 **"Save SAWT acknowledgement email"**, step 14 **"Save SAWT validation email"**; `BIR_WAIT_SHORT_NAME` (`lib/workflow/aging.ts`) reads "TRRC", "SAWT acknowledgement", "SAWT validation", so the board tag is "SAWT validation · 8 days". A seed backfill renames existing rows.
 
 - **Grouping only changes reporting, not what any step requires.** Membership is a fixed lookup in `groups.ts`, **never `category` repurposed** (`category` would put step 10 in File and step 4 with step 16).
 - **Step numbers are never renumbered to make groups contiguous — do not "fix" it.** File and Pay sit ahead of BIR Confirmations numerically though it's a later group. A filing waiting only on the TRRC or validation email after everything else is done is normal and raises no warning.

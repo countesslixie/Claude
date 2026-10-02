@@ -30,19 +30,11 @@ function rawFromFormData(formData: FormData) {
     "branchCode",
     "rdoCode",
     "registeredAddress",
+    "birthDate",
     "email",
     "mobile",
-    "taxpayerType",
     "lineOfBusiness",
     "psicCode",
-    "civilStatus",
-    "booksType",
-    "booksRegistrationDate",
-    "booksPermitNumber",
-    "swornDeclarationYear",
-    "eBIRFormsEmail",
-    "defaultWithholdingRateBps",
-    "recognitionBasis",
     "engagedSince",
     "notes",
   ]) {
@@ -53,21 +45,22 @@ function rawFromFormData(formData: FormData) {
     raw: {
       ...values,
       branchCode: values.branchCode || "000",
-      recognitionBasis: values.recognitionBasis || "COLLECTION",
-      swornDeclarationOnFile: formData.get("swornDeclarationOnFile") === "on",
-      eFPSEnrolled: formData.get("eFPSEnrolled") === "on",
       isActive: formData.get("isActive") === "on",
     },
     values: {
       ...values,
-      swornDeclarationOnFile: formData.get("swornDeclarationOnFile") === "on" ? "on" : "",
-      eFPSEnrolled: formData.get("eFPSEnrolled") === "on" ? "on" : "",
       isActive: formData.get("isActive") === "on" ? "on" : "",
     },
   };
 }
 
-function toDbData(input: z.infer<typeof clientSchema>) {
+/**
+ * The fields the form shows. Used by both create and update. (D145) Nothing
+ * the form no longer asks for is in here, so an update can never overwrite
+ * taxpayer type, recognition basis, civil status, default WHT rate or the
+ * books fields.
+ */
+function formFieldsToDbData(input: z.infer<typeof clientSchema>) {
   return {
     code: input.code,
     registeredName: input.registeredName,
@@ -76,28 +69,29 @@ function toDbData(input: z.infer<typeof clientSchema>) {
     branchCode: input.branchCode,
     rdoCode: input.rdoCode,
     registeredAddress: input.registeredAddress,
+    birthDate: manilaDateInputToJsDate(input.birthDate),
     email: input.email ?? null,
     mobile: input.mobile ?? null,
-    taxpayerType: input.taxpayerType,
     lineOfBusiness: input.lineOfBusiness ?? null,
     psicCode: input.psicCode ?? null,
-    civilStatus: input.civilStatus ?? null,
-    booksType: input.booksType,
-    booksRegistrationDate: input.booksRegistrationDate
-      ? manilaDateInputToJsDate(input.booksRegistrationDate)
-      : null,
-    booksPermitNumber: input.booksPermitNumber ?? null,
-    swornDeclarationOnFile: input.swornDeclarationOnFile,
-    swornDeclarationYear: input.swornDeclarationYear ?? null,
-    eBIRFormsEmail: input.eBIRFormsEmail ?? null,
-    eFPSEnrolled: input.eFPSEnrolled,
-    defaultWithholdingRateBps: input.defaultWithholdingRateBps ?? null,
-    recognitionBasis: input.recognitionBasis,
     isActive: input.isActive,
     engagedSince: input.engagedSince ? manilaDateInputToJsDate(input.engagedSince) : null,
     notes: input.notes ?? null,
   };
 }
+
+/**
+ * Brief #6b (D145) — every new client is purely self-employed (₱250,000
+ * deduction, 1701A) and reports on collections. booksType is a required
+ * column with no schema default, so it gets the same "Manual" the sample
+ * clients carry; the form never asks. Everything else stays empty / at its
+ * schema default.
+ */
+const NEW_CLIENT_FIXED_VALUES = {
+  taxpayerType: "PURELY_SELF_EMPLOYED",
+  recognitionBasis: "COLLECTION",
+  booksType: "MANUAL",
+} as const;
 
 export async function createClient(
   _prevState: ClientFormState,
@@ -119,7 +113,7 @@ export async function createClient(
 
   const actorId = await getActorId();
   const client = await prisma.client.create({
-    data: { ...toDbData(parsed.data), actorId },
+    data: { ...formFieldsToDbData(parsed.data), ...NEW_CLIENT_FIXED_VALUES, actorId },
   });
   await logActivity({
     entityType: "Client",
@@ -158,7 +152,7 @@ export async function updateClient(
   const actorId = await getActorId();
   const client = await prisma.client.update({
     where: { id },
-    data: { ...toDbData(parsed.data), actorId },
+    data: { ...formFieldsToDbData(parsed.data), actorId },
   });
   await logActivity({
     entityType: "Client",

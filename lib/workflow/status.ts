@@ -12,8 +12,9 @@ import { nextActionForFiling } from "./groups";
  *     more than NA does. Excluding it here would strand a filing on the
  *     dashboard/board forever with no way to clear it, for a decision
  *     that was already deliberately made and recorded. The distinction
- *     stays visible at render time: filingStatusLabel() below renders
- *     "Complete (N steps skipped)" rather than collapsing SKIPPED into NA.
+ *     stays visible on the step itself: a skipped step shows Skipped on its
+ *     own card (D124 — filingStatusLabel() below reads plain "Complete",
+ *     with no skipped count).
  *   - past adjustedDueDate and not complete -> BLOCKED (takes priority
  *     over "waiting on X" below: being overdue is the more urgent signal
  *     for a bookkeeper regardless of what it's specifically waiting on)

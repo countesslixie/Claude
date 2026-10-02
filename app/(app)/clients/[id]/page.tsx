@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { StatusBadge, type StatusTone } from "@/components/status-badge";
 import { GenerateFilingsForm } from "@/components/generate-filings-form";
-import { formatManilaDate, currentTaxableYearManila } from "@/lib/dates";
+import { formatManilaDate, formatManilaDateLong, currentTaxableYearManila } from "@/lib/dates";
 import { bpsToPercentLabel } from "@/lib/money";
 import { formLabel } from "@/lib/workflow/eSubmissionEmail";
 import { filingStatusLabel } from "@/lib/workflow/status";
@@ -117,6 +117,7 @@ export default async function ClientDetailPage({
               <Field label="TIN" value={<span className="font-mono">{client.tin}</span>} />
               <Field label="Branch code" value={client.branchCode} />
               <Field label="RDO code" value={client.rdoCode} />
+              <Field label="Birthday" value={formatManilaDateLong(client.birthDate)} />
               <Field label="Taxpayer type" value={LABELS[client.taxpayerType]} />
               <Field label="Civil status" value={client.civilStatus ? LABELS[client.civilStatus] ?? client.civilStatus : "—"} />
               <div className="col-span-2">
