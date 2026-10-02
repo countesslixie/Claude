@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Regime, YearEndCreditElection } from "@prisma/client";
+import { YearEndCreditElection } from "@prisma/client";
 
 /**
  * Brief #5f §7 — prior-year excess credit (item 55) is no longer entered
@@ -9,7 +9,6 @@ import { Regime, YearEndCreditElection } from "@prisma/client";
  */
 export const clientTaxYearSchema = z.object({
   taxableYear: z.coerce.number().int().min(2000).max(2100),
-  regime: z.nativeEnum(Regime),
   yearEndCreditElection: z.nativeEnum(YearEndCreditElection).default(YearEndCreditElection.NA),
 });
 

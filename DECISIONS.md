@@ -1052,4 +1052,18 @@ A filing's card shows on the board from the day after its period ends (Asia/Mani
 
 ---
 
+**D140 — Menu names and order** *(2026-10-02, brief #5z, her decision)*
+
+The left menu reads Dashboard · Kanban · Clients · Tax Rules · ATC · Holidays (was Filings; Tax rule sets; ATC codes; Holidays now last). Page headings match ("Kanban", "Tax Rules", "ATC"), and so does the Settings hub list. URLs and form field labels (e.g. "ATC code" on the certificate form) are unchanged.
+
+**D141 — The Kanban fills the window** *(brief #5z, her request)*
+
+The board area takes the rest of the window height; columns scroll up and down inside themselves, and the sideways scroll bar sits on the window's bottom edge. The page itself never scrolls sideways.
+
+**D142 — No Regime column or field** *(brief #5z, her decision)*
+
+The Taxable years table loses its Regime column and the tax year forms their Regime field. Every tax year is 8% flat rate: `createClientTaxYear` writes `RATE_8_PERCENT` (as D136 does for the election) and the edit action leaves the stored value alone. Nothing in the computation, form choice, mixed-income handling or threshold alert read `ClientTaxYear.regime`, but the column stays (no migration). All existing rows were 8% flat rate.
+
+---
+
 **Documentation reconciled through brief #5t** (brief #5u, this pass; earlier passes: #5m, #5o's light additions D83–D93, #5p) — see the "Last reconciled" line at the top of this file, CURRENT_STATE.md, PROJECT_MASTER.md and CLAUDE.md.

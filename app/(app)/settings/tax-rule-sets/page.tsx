@@ -11,7 +11,7 @@ export default async function TaxRuleSetsPage() {
     <div>
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-ink">Tax rule sets</h1>
+          <h1 className="text-2xl font-semibold text-ink">Tax Rules</h1>
           <p className="text-sm text-faint">
             Every rate, threshold, and deadline the tax engine uses — versioned by taxable year,
             never hardcoded.

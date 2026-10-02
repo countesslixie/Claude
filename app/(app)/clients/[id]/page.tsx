@@ -181,7 +181,6 @@ export default async function ClientDetailPage({
                 <thead>
                   <tr>
                     <th>Year</th>
-                    <th>Regime</th>
                     <th>Threshold breached</th>
                     <th></th>
                     <th></th>
@@ -191,7 +190,6 @@ export default async function ClientDetailPage({
                   {client.taxYears.map((ty) => (
                     <tr key={ty.id}>
                       <td>{ty.taxableYear}</td>
-                      <td>{LABELS[ty.regime]}</td>
                       <td>{ty.thresholdBreachedAt ? formatManilaDate(ty.thresholdBreachedAt) : "—"}</td>
                       <td>
                         <Link

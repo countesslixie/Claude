@@ -18,7 +18,7 @@ export default async function AtcCodesPage() {
     <div className="mx-auto max-w-4xl">
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-ink">ATC codes</h1>
+          <h1 className="text-2xl font-semibold text-ink">ATC</h1>
           <p className="mt-1 text-sm text-faint">
             The rate is a property of the code — the certificate form fills it in once a code is chosen.
             Never invent a code or a rate here; leave it unverified until confirmed against the

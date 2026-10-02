@@ -4,19 +4,19 @@ import { Card, CardBody } from "@/components/ui/card";
 const BUILT = [
   {
     href: "/settings/tax-rule-sets",
-    title: "Tax rule sets",
+    title: "Tax Rules",
     description:
       "Versioned rates, thresholds, and statutory deadlines, effective by taxable year.",
+  },
+  {
+    href: "/settings/atc-codes",
+    title: "ATC",
+    description: "Add, edit and deactivate the codes the certificate form's ATC picker offers.",
   },
   {
     href: "/settings/holidays",
     title: "Holidays",
     description: "Regular and special non-working days used for due-date business-day shifting.",
-  },
-  {
-    href: "/settings/atc-codes",
-    title: "ATC codes",
-    description: "Add, edit and deactivate the codes the certificate form's ATC picker offers.",
   },
 ];
 

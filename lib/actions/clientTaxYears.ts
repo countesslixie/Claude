@@ -13,7 +13,7 @@ export type ClientTaxYearFormState = {
   values?: Record<string, string>;
 };
 
-const FIELDS = ["taxableYear", "regime", "yearEndCreditElection"] as const;
+const FIELDS = ["taxableYear", "yearEndCreditElection"] as const;
 
 function rawFromFormData(formData: FormData) {
   const values: Record<string, string> = {};
@@ -53,7 +53,7 @@ export async function createClientTaxYear(
     data: {
       clientId,
       taxableYear: parsed.data.taxableYear,
-      regime: parsed.data.regime,
+      regime: "RATE_8_PERCENT", // D142 — every tax year is 8% flat rate; no field for it
       electionStatus: "ELECTED", // D136 — every tax year is 8% elected; there is no election to record
       yearEndCreditElection: parsed.data.yearEndCreditElection,
       actorId,
@@ -105,7 +105,6 @@ export async function updateClientTaxYear(
     where: { id },
     data: {
       taxableYear: parsed.data.taxableYear,
-      regime: parsed.data.regime,
       yearEndCreditElection: parsed.data.yearEndCreditElection,
       actorId,
     },

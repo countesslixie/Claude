@@ -39,8 +39,8 @@ export interface BoardCardData {
  */
 export function BoardColumn({ title, filings }: { title: string; filings: BoardCardData[] }) {
   return (
-    <div className="w-60 flex-shrink-0">
-      <div className="sticky top-0 z-10 mb-2 flex items-center justify-between border-b-2 border-ink-secondary bg-background px-1 pb-1.5">
+    <div className="flex h-full min-h-0 w-60 flex-shrink-0 flex-col">
+      <div className="mb-2 flex shrink-0 items-center justify-between border-b-2 border-ink-secondary bg-background px-1 pb-1.5">
         <h2 className="text-[15px] font-bold text-ink">{title}</h2>
         <span className="rounded-full bg-[var(--status-pending-bg)] px-2 py-0.5 text-xs font-medium text-ink-secondary">
           {filings.length}
@@ -49,7 +49,7 @@ export function BoardColumn({ title, filings }: { title: string; filings: BoardC
       {filings.length === 0 ? (
         <p className="px-1 text-xs text-faint">Nothing here.</p>
       ) : (
-        <div className="flex flex-col gap-2">
+        <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1">
           {filings.map((f) => (
             <Link key={f.id} href={`/clients/${f.clientId}/filings/${f.id}`} className="block">
               <div className="flex h-[9.25rem] flex-col rounded-md border border-line bg-surface p-2 text-sm hover:border-separator">

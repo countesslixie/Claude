@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 /**
  * Brief #5g §4 — left-side menu, replacing the old top bar, modelled on
  * the bookkeeper's other app. Every link the old top bar carried
- * (Dashboard, Filings, Clients, Settings and its three sub-pages, Sign
+ * (Dashboard, Kanban, Clients, Settings and its three sub-pages, Sign
  * out) is still here so nothing becomes unreachable — the Settings hub
  * page (app/(app)/settings/page.tsx) is only otherwise linked from here,
  * so its group heading stays a link to it, with its three children
@@ -32,18 +32,18 @@ type NavLink = {
   icon: React.ComponentType<{ className?: string }>;
 };
 
-const TOP: NavLink = { href: "/", label: "Dashboard", icon: LayoutDashboard };
+export const TOP: NavLink = { href: "/", label: "Dashboard", icon: LayoutDashboard };
 
-const WORK: NavLink[] = [
-  { href: "/filings", label: "Filings", icon: KanbanSquare },
+export const WORK: NavLink[] = [
+  { href: "/filings", label: "Kanban", icon: KanbanSquare },
   { href: "/clients", label: "Clients", icon: Users },
 ];
 
 const SETTINGS_GROUP = { href: "/settings", label: "Settings" };
-const SETTINGS: NavLink[] = [
-  { href: "/settings/tax-rule-sets", label: "Tax rule sets", icon: Percent },
+export const SETTINGS: NavLink[] = [
+  { href: "/settings/tax-rule-sets", label: "Tax Rules", icon: Percent },
+  { href: "/settings/atc-codes", label: "ATC", icon: Tag },
   { href: "/settings/holidays", label: "Holidays", icon: Calendar },
-  { href: "/settings/atc-codes", label: "ATC codes", icon: Tag },
 ];
 
 function NavItem({ link, pathname }: { link: NavLink; pathname: string }) {

@@ -24,7 +24,6 @@ describe("createClientTaxYear / updateClientTaxYear no longer accept item 55", (
   function taxYearFormData(overrides: Record<string, string> = {}): FormData {
     const fd = new FormData();
     fd.set("taxableYear", "2026");
-    fd.set("regime", "RATE_8_PERCENT");
     fd.set("yearEndCreditElection", "NA");
     // A stray legacy field — must be ignored, not written anywhere.
     fd.set("priorYearExcessCredit", "50000");
@@ -72,6 +71,28 @@ describe("createClientTaxYear / updateClientTaxYear no longer accept item 55", (
       where: { clientId_taxableYear: { clientId: client.id, taxableYear: 2026 } },
     });
     expect(taxYear.electionStatus).toBe("ELECTED");
+  });
+
+  it("D142: a new tax year with no regime supplied is stored as 8% flat rate, and a stray regime is ignored", async () => {
+    const client = await prisma.client.create({
+      data: {
+        code: `ctyr-regime-${Date.now()}`,
+        registeredName: "Client Tax Year Test",
+        tin: "222333447",
+        rdoCode: "999",
+        registeredAddress: "N/A",
+        taxpayerType: "PURELY_SELF_EMPLOYED",
+        booksType: "MANUAL",
+      },
+    });
+    createdClientIds.push(client.id);
+    const fd = taxYearFormData({ regime: "GRADUATED_OSD" });
+    expect(taxYearFormData().get("regime")).toBeNull();
+    await createClientTaxYear(client.id, {}, fd);
+    const taxYear = await prisma.clientTaxYear.findUniqueOrThrow({
+      where: { clientId_taxableYear: { clientId: client.id, taxableYear: 2026 } },
+    });
+    expect(taxYear.regime).toBe("RATE_8_PERCENT");
   });
 
   it("updateClientTaxYear ignores a submitted priorYearExcessCredit — an existing figure is left untouched", async () => {

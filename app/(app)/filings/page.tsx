@@ -6,7 +6,7 @@ import { boardShowsFiling } from "@/lib/workflow/clientWait";
 import type { Period } from "@/lib/tax/types";
 
 /**
- * Filing cycle board: kanban, columns = the six groups (D70), cards =
+ * Kanban (was "Filing cycle board"): kanban, columns = the six groups (D70), cards =
  * client-period. D138 — no filter bar and no Complete column (finished filings
  * stay on the client's page). D139 — a card appears only once its period has
  * ended, the same rule as the dashboard's Waiting on client (D130).
@@ -80,12 +80,15 @@ export default async function FilingsBoardPage() {
   }));
 
   return (
-    <div className="min-w-0">
-      <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-ink">Filing cycle board</h1>
+    // D141 — the Kanban fills the window below the heading: the layout's 1.5rem top padding is
+    // kept, the bottom padding is cancelled (-mb-6) so the sideways scroll bar sits on the
+    // window's bottom edge, and each column scrolls up and down inside itself.
+    <div className="-mb-6 flex h-[calc(100vh-1.5rem)] min-w-0 flex-col">
+      <div className="mb-4 flex shrink-0 items-center justify-between">
+        <h1 className="text-2xl font-semibold text-ink">Kanban</h1>
       </div>
 
-      <div className="flex max-h-[calc(100vh-9rem)] gap-3 overflow-auto pb-2">
+      <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto overflow-y-hidden pb-2">
         {columns.map((col) => (
           <BoardColumn key={col.code} title={col.title} filings={col.filings} />
         ))}

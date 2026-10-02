@@ -19,7 +19,6 @@ export default async function EditClientTaxYearPage({
 
   const initialValues: Record<string, string> = {
     taxableYear: String(taxYear.taxableYear),
-    regime: taxYear.regime,
     yearEndCreditElection: taxYear.yearEndCreditElection,
   };
 

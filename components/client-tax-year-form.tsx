@@ -7,12 +7,6 @@ import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import type { ClientTaxYearFormState } from "@/lib/actions/clientTaxYears";
 
-const REGIMES = [
-  { value: "RATE_8_PERCENT", label: "8% flat rate" },
-  { value: "GRADUATED_OSD", label: "Graduated, OSD" },
-  { value: "GRADUATED_ITEMIZED", label: "Graduated, itemized" },
-];
-
 const YEAR_END_ELECTIONS = [
   { value: "NA", label: "N/A" },
   { value: "REFUND", label: "Refund" },
@@ -58,19 +52,6 @@ export function ClientTaxYearForm({
           {errs("taxableYear")?.map((e) => (
             <p key={e} className="text-xs text-red">{e}</p>
           ))}
-        </div>
-
-        <div className="flex flex-col gap-1">
-          <Label htmlFor="regime">
-            Regime<span className="text-red"> *</span>
-          </Label>
-          <Select id="regime" name="regime" defaultValue={v("regime") || "RATE_8_PERCENT"} required>
-            {REGIMES.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </Select>
         </div>
 
         <div className="flex flex-col gap-1">
