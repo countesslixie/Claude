@@ -32,9 +32,6 @@ const LABELS: Record<string, string> = {
   CAS: "CAS",
   COLLECTION: "Collection (cash received)",
   BILLING: "Billing (accrual)",
-  ELECTED: "Elected",
-  NOT_YET_ELECTED: "Not yet elected",
-  DEFAULTED_GRADUATED: "Defaulted to graduated",
   RATE_8_PERCENT: "8% flat rate",
   GRADUATED_OSD: "Graduated, OSD",
   GRADUATED_ITEMIZED: "Graduated, itemized",
@@ -185,7 +182,6 @@ export default async function ClientDetailPage({
                   <tr>
                     <th>Year</th>
                     <th>Regime</th>
-                    <th>Election status</th>
                     <th>Threshold breached</th>
                     <th></th>
                     <th></th>
@@ -196,15 +192,6 @@ export default async function ClientDetailPage({
                     <tr key={ty.id}>
                       <td>{ty.taxableYear}</td>
                       <td>{LABELS[ty.regime]}</td>
-                      <td>
-                        {ty.electionStatus === "ELECTED" ? (
-                          <StatusBadge tone="done">{LABELS[ty.electionStatus]}</StatusBadge>
-                        ) : ty.electionStatus === "DEFAULTED_GRADUATED" ? (
-                          <StatusBadge tone="overdue">{LABELS[ty.electionStatus]}</StatusBadge>
-                        ) : (
-                          <StatusBadge tone="waiting">{LABELS[ty.electionStatus]}</StatusBadge>
-                        )}
-                      </td>
                       <td>{ty.thresholdBreachedAt ? formatManilaDate(ty.thresholdBreachedAt) : "—"}</td>
                       <td>
                         <Link

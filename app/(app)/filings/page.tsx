@@ -1,50 +1,22 @@
-import { periodLabel } from "@/lib/periodLabel";
-import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { Card, CardBody } from "@/components/ui/card";
-import { Select } from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
-import { StatusBadge, type StatusTone } from "@/components/status-badge";
-import { formatManilaDate } from "@/lib/dates";
-import { filingStatusLabel } from "@/lib/workflow/status";
+import { BoardColumn } from "@/components/board-column";
 import { WORKFLOW_GROUPS, currentGroupCode, summarizeGroup } from "@/lib/workflow/groups";
-import { deriveStepAging, birWaitTags, type BirWaitTag } from "@/lib/workflow/aging";
-import type { FilingStatus, WorkflowStepStatus } from "@/lib/workflow/types";
-
-const FILING_STATUS_TONE: Record<string, StatusTone> = {
-  NOT_STARTED: "pending",
-  IN_PROGRESS: "progress",
-  WAITING_CLIENT: "waiting",
-  WAITING_BIR: "waiting",
-  BLOCKED: "overdue",
-  COMPLETE: "done",
-  NA: "pending",
-};
+import { deriveStepAging, birWaitTags } from "@/lib/workflow/aging";
+import { boardShowsFiling } from "@/lib/workflow/clientWait";
+import type { Period } from "@/lib/tax/types";
 
 /**
- * Filing cycle board (brief #4a, superseding SPEC.md §11.2's flat
- * sixteen-column design): kanban, columns = the five groups, cards =
- * client-period. Sixteen columns couldn't be read at a glance; five can.
- * "Which process am I in" at a glance. Filters persist via the URL
- * (client/year/status) — no client-side state, so a bookmarked/shared
- * link reproduces the same view (SPEC.md §11 design note).
+ * Filing cycle board: kanban, columns = the six groups (D70), cards =
+ * client-period. D138 — no filter bar and no Complete column (finished filings
+ * stay on the client's page). D139 — a card appears only once its period has
+ * ended, the same rule as the dashboard's Waiting on client (D130).
  */
-export default async function FilingsBoardPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ clientId?: string; taxableYear?: string; status?: string }>;
-}) {
-  const params = await searchParams;
-
-  const clients = await prisma.client.findMany({ where: { isActive: true }, orderBy: { registeredName: "asc" } });
-
+export default async function FilingsBoardPage() {
+  const now = new Date();
   const filings = await prisma.filing.findMany({
     where: {
       deletedAt: null,
       filedOutsideApp: false,
-      ...(params.clientId ? { clientId: params.clientId } : {}),
-      ...(params.taxableYear ? { taxableYear: Number(params.taxableYear) } : {}),
-      ...(params.status ? { status: params.status as never } : {}),
     },
     include: {
       client: true,
@@ -66,8 +38,7 @@ export default async function FilingsBoardPage({
   // not raw step sequence — group 2/File isn't contiguous), carrying that
   // group's waiting state so a filing awaiting only the TRRC reads as
   // "File — waiting on BIR, 12 days" rather than looking unfiled.
-  const now = new Date();
-  const cards = filings.map((f) => {
+  const cards = filings.filter((f) => boardShowsFiling(f.taxableYear, f.period as Period, now)).map((f) => {
     const groupCode = currentGroupCode(f.workflowSteps);
     const group = groupCode ? WORKFLOW_GROUPS.find((g) => g.code === groupCode) : undefined;
     const outstandingLabel = group
@@ -107,139 +78,16 @@ export default async function FilingsBoardPage({
     title: g.name,
     filings: cards.filter((c) => c.groupCode === g.code),
   }));
-  const completeLane = cards.filter((c) => c.groupCode === null);
-
-  const taxableYears = Array.from(new Set(filings.map((f) => f.taxableYear))).sort((a, b) => b - a);
 
   return (
-    <div>
+    <div className="min-w-0">
       <div className="mb-4 flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-ink">Filing cycle board</h1>
       </div>
 
-      <Card className="mb-4">
-        <CardBody>
-          <form className="flex flex-wrap items-end gap-3" method="get">
-            <div className="w-56">
-              <label className="text-xs font-medium uppercase tracking-wide text-faint" htmlFor="clientId">
-                Client
-              </label>
-              <Select id="clientId" name="clientId" defaultValue={params.clientId ?? ""}>
-                <option value="">All clients</option>
-                {clients.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.registeredName}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <div className="w-32">
-              <label className="text-xs font-medium uppercase tracking-wide text-faint" htmlFor="taxableYear">
-                Year
-              </label>
-              <Select id="taxableYear" name="taxableYear" defaultValue={params.taxableYear ?? ""}>
-                <option value="">All years</option>
-                {taxableYears.map((y) => (
-                  <option key={y} value={y}>
-                    {y}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <div className="w-44">
-              <label className="text-xs font-medium uppercase tracking-wide text-faint" htmlFor="status">
-                Status
-              </label>
-              <Select id="status" name="status" defaultValue={params.status ?? ""}>
-                <option value="">All statuses</option>
-                {Object.keys(FILING_STATUS_TONE).map((s) => (
-                  <option key={s} value={s}>
-                    {filingStatusLabel(s as FilingStatus)}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <Button type="submit" size="sm" variant="secondary">
-              Filter
-            </Button>
-            {(params.clientId || params.taxableYear || params.status) && (
-              <Link href="/filings">
-                <Button type="button" size="sm" variant="ghost">
-                  Clear
-                </Button>
-              </Link>
-            )}
-          </form>
-        </CardBody>
-      </Card>
-
-      {filings.length === 0 ? (
-        <p className="text-sm text-faint">No filings match these filters.</p>
-      ) : (
-        <div className="flex max-h-[calc(100vh-14rem)] gap-3 overflow-auto pb-2">
-          {columns.map((col) => (
-            <BoardColumn key={col.code} title={col.title} filings={col.filings} />
-          ))}
-          <BoardColumn title="Complete" filings={completeLane} />
-        </div>
-      )}
-    </div>
-  );
-}
-
-function BoardColumn({
-  title,
-  filings,
-}: {
-  title: string;
-  filings: Array<{
-    id: string;
-    clientId: string;
-    taxableYear: number;
-    period: string;
-    status: FilingStatus;
-    adjustedDueDate: Date;
-    client: { registeredName: string };
-    workflowSteps: Array<{ status: WorkflowStepStatus }>;
-    outstandingLabel: string | null;
-    outstandingTone: "amber" | "red";
-    birTags: BirWaitTag[];
-  }>;
-}) {
-  return (
-    <div className="w-56 flex-shrink-0">
-      <div className="sticky top-0 z-10 mb-2 flex items-center justify-between bg-background px-1 pb-1">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-faint">{title}</h2>
-        <span className="text-xs text-faint">{filings.length}</span>
-      </div>
-      <div className="flex flex-col gap-2">
-        {filings.map((f) => (
-          <Link key={f.id} href={`/clients/${f.clientId}/filings/${f.id}`}>
-            <div className="rounded-md border border-line bg-surface p-2 text-sm hover:border-separator">
-              <p className="font-medium text-ink">{f.client.registeredName}</p>
-              <p className="text-xs text-faint">
-                TY{f.taxableYear} {periodLabel(f.period)}
-              </p>
-              <div className="mt-1 flex items-center justify-between">
-                <StatusBadge tone={FILING_STATUS_TONE[f.status] ?? "pending"}>
-                  {filingStatusLabel(f.status)}
-                </StatusBadge>
-                <span className="text-xs text-faint">{formatManilaDate(f.adjustedDueDate)}</span>
-              </div>
-              {f.outstandingLabel && (
-                <p className={`mt-1 text-xs ${f.outstandingTone === "red" ? "text-red" : "text-amber"}`}>{f.outstandingLabel}</p>
-              )}
-              {f.birTags.length > 0 && (
-                <div className="mt-1 flex flex-wrap gap-1">
-                  {f.birTags.map((t) => (
-                    <StatusBadge key={t.stepCode} tone={t.tone}>
-                      {t.text}
-                    </StatusBadge>
-                  ))}
-                </div>
-              )}
-            </div>
-          </Link>
+      <div className="flex max-h-[calc(100vh-9rem)] gap-3 overflow-auto pb-2">
+        {columns.map((col) => (
+          <BoardColumn key={col.code} title={col.title} filings={col.filings} />
         ))}
       </div>
     </div>

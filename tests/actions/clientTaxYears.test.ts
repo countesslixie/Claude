@@ -25,7 +25,6 @@ describe("createClientTaxYear / updateClientTaxYear no longer accept item 55", (
     const fd = new FormData();
     fd.set("taxableYear", "2026");
     fd.set("regime", "RATE_8_PERCENT");
-    fd.set("electionStatus", "ELECTED");
     fd.set("yearEndCreditElection", "NA");
     // A stray legacy field — must be ignored, not written anywhere.
     fd.set("priorYearExcessCredit", "50000");
@@ -55,6 +54,26 @@ describe("createClientTaxYear / updateClientTaxYear no longer accept item 55", (
     expect(taxYear.priorYearExcessCreditCents).toBe(0);
   });
 
+  it("D136: a new tax year is created as 8% elected, with no election in the form", async () => {
+    const client = await prisma.client.create({
+      data: {
+        code: `ctyr-elected-${Date.now()}`,
+        registeredName: "Client Tax Year Test",
+        tin: "222333446",
+        rdoCode: "999",
+        registeredAddress: "N/A",
+        taxpayerType: "PURELY_SELF_EMPLOYED",
+        booksType: "MANUAL",
+      },
+    });
+    createdClientIds.push(client.id);
+    await createClientTaxYear(client.id, {}, taxYearFormData({ electionStatus: "NOT_YET_ELECTED" })); // a stray value is ignored
+    const taxYear = await prisma.clientTaxYear.findUniqueOrThrow({
+      where: { clientId_taxableYear: { clientId: client.id, taxableYear: 2026 } },
+    });
+    expect(taxYear.electionStatus).toBe("ELECTED");
+  });
+
   it("updateClientTaxYear ignores a submitted priorYearExcessCredit — an existing figure is left untouched", async () => {
     const client = await prisma.client.create({
       data: {
@@ -78,10 +97,9 @@ describe("createClientTaxYear / updateClientTaxYear no longer accept item 55", (
       },
     });
 
-    await updateClientTaxYear(taxYear.id, {}, taxYearFormData({ electionStatus: "NOT_YET_ELECTED" }));
+    await updateClientTaxYear(taxYear.id, {}, taxYearFormData());
 
     const after = await prisma.clientTaxYear.findUniqueOrThrow({ where: { id: taxYear.id } });
-    expect(after.electionStatus).toBe("NOT_YET_ELECTED"); // the update itself did apply
     expect(after.priorYearExcessCreditCents).toBe(123_45); // but item 55 is untouched
   });
 });

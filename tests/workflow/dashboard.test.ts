@@ -11,10 +11,9 @@ describe("dashboard sections (D126)", () => {
       "Needs my action now",
       "Waiting on client",
       "Waiting on BIR",
-      "Missing documents",
-      "Threshold & election alerts",
+      "3M Threshold Alert",
     ]);
-    expect(DASHBOARD_SECTIONS.join(" ")).not.toMatch(/Upcoming/);
+    expect(DASHBOARD_SECTIONS.join(" ")).not.toMatch(/Upcoming|Missing|election/i);
   });
 });
 

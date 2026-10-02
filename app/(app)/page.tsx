@@ -3,8 +3,6 @@ import { currentTaxableYearManila } from "@/lib/dates";
 import { nextActionForFiling, BIR_WAIT_STEP_CODES } from "@/lib/workflow/groups";
 import { deriveStepAging } from "@/lib/workflow/aging";
 import { stepDueDate } from "@/lib/workflow/dueDate";
-import { missingRequiredSlots } from "@/lib/workflow/docSlots";
-import { parseDocSlots } from "@/lib/workflow/types";
 import { cumulativeGrossForThreshold } from "@/lib/vatThreshold";
 import { clientWaitDueDate, periodHasEnded } from "@/lib/workflow/clientWait";
 import { DASHBOARD_SECTIONS, sortByDueThenClient } from "@/lib/workflow/dashboardRows";
@@ -12,18 +10,15 @@ import { DashboardSection } from "@/components/dashboard-section";
 import {
   AlertsTable,
   FilingRowsTable,
-  MissingDocsTable,
   type AlertRow,
   type FilingTableRow,
-  type MissingRow,
 } from "@/components/dashboard-tables";
 import type { Period } from "@/lib/tax/types";
 
 /**
- * Dashboard (SPEC.md §11.1) — "where am I?" in under 10 seconds. Five
- * collapsible sections (D126, lib/workflow/dashboardRows.ts): needs my action,
- * waiting on client, waiting on BIR, missing documents, threshold/election
- * alerts. Upcoming deadlines was removed.
+ * Dashboard (SPEC.md §11.1) — "where am I?" in under 10 seconds. Four
+ * collapsible sections (D126/D137, lib/workflow/dashboardRows.ts): needs my action,
+ * waiting on client, waiting on BIR, 3M threshold alert.
  */
 export default async function DashboardPage() {
   const now = new Date();
@@ -47,7 +42,6 @@ export default async function DashboardPage() {
   const needsAction: Row[] = [];
   const waitingBir: Row[] = [];
   const waitingClient: Row[] = [];
-  const missingDocs: Array<{ filing: (typeof activeFilings)[number]; step: Row["step"]; missing: string[]; dueDate: Date }> = [];
 
   for (const filing of activeFilings) {
     // D74 (brief #5m §2) — "Needs my action" / "Waiting on client" pick
@@ -98,11 +92,6 @@ export default async function DashboardPage() {
         needsAction.push({ filing, step, aging: null, dueDate });
       }
 
-      const slots = parseDocSlots(step.requiredDocSlots);
-      const missing = missingRequiredSlots(slots, step.documents);
-      if (missing.length > 0) {
-        missingDocs.push({ filing, step, missing: missing.map((s) => s.label), dueDate });
-      }
     }
 
     // D74 — "Waiting on BIR" lists every step 10/13/14 currently
@@ -137,13 +126,8 @@ export default async function DashboardPage() {
 
   const [ruleSet, activeClients] = await Promise.all([
     prisma.taxRuleSet.findUnique({ where: { taxableYear: currentYear } }),
-    prisma.client.findMany({
-      where: { isActive: true },
-      include: { taxYears: { where: { taxableYear: currentYear } } },
-    }),
+    prisma.client.findMany({ where: { isActive: true } }),
   ]);
-
-  const electionAlerts = activeClients.filter((c) => (c.taxYears[0]?.electionStatus ?? "NOT_YET_ELECTED") !== "ELECTED");
 
   const thresholdAlerts: Array<{ clientName: string; pct: number }> = [];
   if (ruleSet) {
@@ -177,19 +161,6 @@ export default async function DashboardPage() {
   const waitingClientRows = sortByDueThenClient(waitingClient.map((r) => toRow(r, r.filing.id)));
   const waitingBirRows = sortByDueThenClient(waitingBir.map((r) => toRow(r, `${r.filing.id}-${r.step.stepCode}`)));
 
-  const missingRows: MissingRow[] = sortByDueThenClient(
-    missingDocs.map((m) => ({
-      id: `${m.filing.id}-${m.step.stepCode}`,
-      href: rowHref(m.filing.id, m.filing.clientId),
-      clientName: m.filing.client.registeredName,
-      taxableYear: m.filing.taxableYear,
-      period: m.filing.period,
-      stepTitle: m.step.title,
-      missing: m.missing.join(", "),
-      dueDate: m.dueDate,
-    })),
-  );
-
   const alertRows: AlertRow[] = [
     ...thresholdAlerts.map((a) => ({
       id: `threshold-${a.clientName}`,
@@ -200,21 +171,13 @@ export default async function DashboardPage() {
         a.pct >= 1 ? " — BREACHED. The 8% option ceases to apply; consult the current BIR issuance." : "."
       }`,
     })),
-    ...electionAlerts.map((c) => ({
-      id: `election-${c.id}`,
-      clientName: c.registeredName,
-      taxableYear: currentYear,
-      tone: "amber" as const,
-      text: `8% election for TY${currentYear} is ${c.taxYears[0]?.electionStatus ?? "not recorded"} — Q1 filings are blocked until confirmed.`,
-    })),
   ].sort((a, b) => a.clientName.localeCompare(b.clientName));
 
   const sections: Record<(typeof DASHBOARD_SECTIONS)[number], { count: number; body: React.ReactNode }> = {
     "Needs my action now": { count: needsActionRows.length, body: <FilingRowsTable rows={needsActionRows} /> },
     "Waiting on client": { count: waitingClientRows.length, body: <FilingRowsTable rows={waitingClientRows} /> },
     "Waiting on BIR": { count: waitingBirRows.length, body: <FilingRowsTable rows={waitingBirRows} /> },
-    "Missing documents": { count: missingRows.length, body: <MissingDocsTable rows={missingRows} /> },
-    "Threshold & election alerts": { count: alertRows.length, body: <AlertsTable rows={alertRows} /> },
+    "3M Threshold Alert": { count: alertRows.length, body: <AlertsTable rows={alertRows} /> },
   };
 
   return (

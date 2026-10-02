@@ -75,49 +75,6 @@ export function FilingRowsTable({ rows }: { rows: FilingTableRow[] }) {
   );
 }
 
-export type MissingRow = {
-  id: string;
-  href: string;
-  clientName: string;
-  taxableYear: number;
-  period: string;
-  stepTitle: string;
-  missing: string;
-  dueDate: Date;
-};
-
-export function MissingDocsTable({ rows }: { rows: MissingRow[] }) {
-  return (
-    <Shell
-      headers={
-        <>
-          <th className={TH}>Client</th>
-          <th className={TH}>Period</th>
-          <th className={TH}>Step</th>
-          <th className={TH} colSpan={2}>
-            Missing
-          </th>
-        </>
-      }
-    >
-      {rows.map((r) => (
-        <tr key={r.id} className="border-b border-line last:border-0">
-          <td className={`${TD} text-[14px] font-medium text-ink`}>{r.clientName}</td>
-          <td className={`${TD} text-[13px] text-faint`}>{periodText(r.taxableYear, r.period)}</td>
-          <td className={`${TD} text-[14px]`}>
-            <Link href={r.href} className="text-ink-secondary underline">
-              {r.stepTitle}
-            </Link>
-          </td>
-          <td className={`${TD} text-[13px] text-ink-secondary`} colSpan={2}>
-            {r.missing}
-          </td>
-        </tr>
-      ))}
-    </Shell>
-  );
-}
-
 export type AlertRow = { id: string; clientName: string; taxableYear: number; text: string; tone: "red" | "amber" };
 
 export function AlertsTable({ rows }: { rows: AlertRow[] }) {

@@ -1030,6 +1030,26 @@ Step 3's "Other tax credits/payments (item 61)" is normal ink, semibold, with no
 
 With no Form 2307 on the filing, the eAFS header (`lib/workflow/eafsHeader.ts`) is a grey "Pending" with "Depends on Form 2307s (step 2)" while step 2 is open, then a grey "Not applicable" with "No Form 2307" once step 2 is Done or Skipped — never green Done; no counter, nothing to expand. Undoing the skip returns it to Pending. Display only: D93's NA storage is unchanged.
 
+**D135 — Pay "Not applicable"** *(2026-10-02, brief #5y, her decision)*
+
+When Pay is not applicable (an overpayment or exactly ₱0, D76) its header shows a grey "Not applicable" pill, never green "Done"; the text stays "Nothing to pay — overpayment ₱X" / "Nothing to pay". Pay and eAFS share one helper (`lib/workflow/naGroupHeader.ts`). Display only: steps 8 and 9 stay NA; unlocks, status, Next, board placement and step 16 are unchanged.
+
+**D136 — Every client is 8% elected, always** *(2026-10-02, brief #5y, her decision)*
+
+"This app only caters for 8%." There is no election to record or confirm. Removed: the election field on the tax-year form, the Election status column on the client page, the dashboard's election rows, and the lock (`isElectionBlocked`, `lib/workflow/election.ts` deleted) — which in fact stopped *every* step of a Q1 filing being marked done, not only step 5 (it sat in `markStepDone`, `recomputeReceive2307Status` and `recomputeFileGroupDocStepStatus`). Step 5 keeps its other two locks (D100, D95). `ClientTaxYear.electionStatus` stays as a column, now defaulting to `ELECTED`; a migration sets every existing row to `ELECTED`, and `createClientTaxYear` writes `ELECTED` itself. The computation never read the election (the engine takes no election input), so no figure changed. The year-end credit election (refund / TCC / carry over) is a different thing and is untouched; so is `regime`.
+
+**D137 — Dashboard trim** *(2026-10-02, brief #5y, her decision)*
+
+"Missing documents" is gone (the same filings show under Needs my action now, and the filing page shows what is missing). "Threshold & election alerts" is now "3M Threshold Alert", threshold rows only (80% and over, 100% and over). Sections, in order: Needs my action now · Waiting on client · Waiting on BIR · 3M Threshold Alert.
+
+**D138 — The board** *(2026-10-02, brief #5y, her decision)*
+
+No filter bar (old filter URL parameters are ignored) and no Complete column — finished filings stay on the client's page. Six columns; an empty one says "Nothing here." Headings are bold, normal ink, a little larger, with the count in a chip and a 2px line under them. Every card is the same fixed height (`components/board-column.tsx`); the message is cut after two lines; BIR wait tags outside BIR Confirmations are plain grey text at the bottom right, no pill, no red. The BIR Confirmations wait line still turns red past twice the expected days (D79).
+
+**D139 — Board cards appear once the period has ended** *(2026-10-02, brief #5y, her decision)*
+
+A filing's card shows on the board from the day after its period ends (Asia/Manila): Q1 April 1, Q2 July 1, Q3 October 1, Annual January 1 of the next year. `boardShowsFiling` wraps the same `periodHasEnded` as D130's dashboard rule. The filing still exists and shows on the client page.
+
 ---
 
 **Documentation reconciled through brief #5t** (brief #5u, this pass; earlier passes: #5m, #5o's light additions D83–D93, #5p) — see the "Last reconciled" line at the top of this file, CURRENT_STATE.md, PROJECT_MASTER.md and CLAUDE.md.

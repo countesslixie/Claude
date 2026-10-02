@@ -1,13 +1,12 @@
 /**
- * D126/D129 — the dashboard's sections, in order. "Upcoming deadlines" is gone:
+ * D126/D129/D137 — the dashboard's sections, in order (Missing documents and the election alerts are gone). "Upcoming deadlines" is gone:
  * every unfiled return already shows under one of the first three.
  */
 export const DASHBOARD_SECTIONS = [
   "Needs my action now",
   "Waiting on client",
   "Waiting on BIR",
-  "Missing documents",
-  "Threshold & election alerts",
+  "3M Threshold Alert",
 ] as const;
 
 /** D129 — every dashboard table: earliest due date first, then client name. */

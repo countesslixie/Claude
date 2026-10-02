@@ -22,7 +22,7 @@ describe("filing order guard (D95) and steps 1/4 (D98)", () => {
     await prisma.client.deleteMany({ where: { id: { in: clientIds } } });
   });
 
-  async function makeClient(latestOutsideReturn?: "Q1" | "Q2" | "Q3") {
+  async function makeClient(latestOutsideReturn?: "Q1" | "Q2" | "Q3", electionStatus: "ELECTED" | "NOT_YET_ELECTED" = "ELECTED") {
     const client = await prisma.client.create({
       data: {
         code: `order-${Date.now()}-${n++}`,
@@ -36,7 +36,7 @@ describe("filing order guard (D95) and steps 1/4 (D98)", () => {
     });
     clientIds.push(client.id);
     const taxYear = await prisma.clientTaxYear.create({
-      data: { clientId: client.id, taxableYear: 2026, regime: "RATE_8_PERCENT", electionStatus: "ELECTED" },
+      data: { clientId: client.id, taxableYear: 2026, regime: "RATE_8_PERCENT", electionStatus },
     });
     if (latestOutsideReturn) {
       await prisma.startingFigures.create({
@@ -66,6 +66,13 @@ describe("filing order guard (D95) and steps 1/4 (D98)", () => {
     const filing = await filingOf(client.id, "Q2");
     expect(filing.computationSnapshot).toBeNull();
     expect(filing.filedAt).toBeNull();
+  });
+
+  it("D136: Q1 step 5 is not refused for an election, even on a legacy NOT_YET_ELECTED row", async () => {
+    const client = await makeClient(undefined, "NOT_YET_ELECTED");
+    const q1 = await filingOf(client.id, "Q1");
+    const result = await markStepDone((await step5(q1.id)).id);
+    expect(result.ok, result.error).toBe(true);
   });
 
   it("Q2 is allowed once Q1 is filed", async () => {

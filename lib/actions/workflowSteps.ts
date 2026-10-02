@@ -5,7 +5,6 @@ import { prisma } from "@/lib/prisma";
 import { getActorId } from "@/lib/actor";
 import { logActivity } from "@/lib/activityLog";
 import { deriveFilingStatus } from "@/lib/workflow/status";
-import { isElectionBlocked } from "@/lib/workflow/election";
 import { ensureComputationSheetSaved } from "@/lib/documents/computationSheet";
 import { missingRequiredSlots, checkSendClientPackageReadiness } from "@/lib/workflow/docSlots";
 import { parseDocSlots } from "@/lib/workflow/types";
@@ -56,11 +55,9 @@ async function recomputeFilingStatus(filingId: string, actorId: string): Promise
  * importantly steps 4, 12, 16 (no slot at all) and step 3/15 (optional) —
  * marks DONE freely regardless of what's attached.
  *
- * Two things are checked ahead of the document gate, in order:
- *   1. The election hard-blocker (unaffected by D27 — it guards a wrong
- *      tax rate, not a missing file): a Q1 filing whose election isn't
- *      confirmed ELECTED cannot be marked DONE on any step.
- *   2. Step 13 -> 14 (D29): a validation email cannot arrive before the
+ * One thing is checked ahead of the document gate (D136 removed the 8%
+ * election lock — every client is 8% elected):
+ *   Step 13 -> 14 (D29): a validation email cannot arrive before the
  *      acknowledgement it follows, so SAWT_VALIDATION stays blocked while
  *      SAWT_ACK is unresolved. One explicit edge, not a general
  *      "waiting blocks the next step" rule.
@@ -74,17 +71,6 @@ export async function markStepDone(stepId: string): Promise<StepActionResult> {
     include: { documents: true, filing: { include: { workflowSteps: { include: { documents: true } } } } },
   });
   if (!step) return { ok: false, error: "Step not found." };
-
-  const clientTaxYear = await prisma.clientTaxYear.findUnique({
-    where: { clientId_taxableYear: { clientId: step.filing.clientId, taxableYear: step.filing.taxableYear } },
-  });
-  if (isElectionBlocked(step.filing.period, clientTaxYear?.electionStatus)) {
-    return {
-      ok: false,
-      error:
-        "8% election for this taxable year is not confirmed Elected — Q1 steps cannot be marked done until this is resolved (an unconfirmed election may default to graduated rates, making this filing's computation wrong).",
-    };
-  }
 
   // D86/D88 (brief #5o §4) — steps 11 and 13 complete themselves when their
   // document(s) are saved; there is no Mark done to click, refused here so
@@ -550,13 +536,6 @@ export async function recomputeReceive2307Status(filingId: string): Promise<void
   const actorId = await getActorId();
 
   if (isComplete && step.status !== "DONE") {
-    const clientTaxYear = await prisma.clientTaxYear.findUnique({
-      where: { clientId_taxableYear: { clientId: filing.clientId, taxableYear: filing.taxableYear } },
-    });
-    // The election hard-blocker still applies (D27/D32) — an unconfirmed
-    // Q1 election leaves step 2 not-done rather than silently completing.
-    if (isElectionBlocked(filing.period, clientTaxYear?.electionStatus)) return;
-
     const updated = await prisma.workflowStep.update({
       where: { id: step.id },
       data: { status: "DONE", completedAt: new Date(), startedAt: step.startedAt ?? new Date(), actorId },
@@ -595,12 +574,7 @@ export async function recomputeReceive2307Status(filingId: string): Promise<void
  * hasn't arrived (again); waitingSince is reset to the gating step's own
  * `completedAt` on this same filing — a reliable existing record of when
  * that happened, not "now," so the aging clock measures from the actual
- * event, not from whenever the file happened to be removed. The election
- * hard-blocker (D27) still applies to the completing branch, mirroring
- * recomputeReceive2307Status's own check: an unconfirmed Q1 election
- * leaves the step un-done regardless of what's attached, since these
- * steps bypass markStepDone's own check entirely by completing
- * themselves here instead.
+ * event, not from whenever the file happened to be removed.
  */
 export async function recomputeFileGroupDocStepStatus(stepId: string): Promise<void> {
   const step = await prisma.workflowStep.findUnique({
@@ -617,11 +591,6 @@ export async function recomputeFileGroupDocStepStatus(stepId: string): Promise<v
   const actorId = await getActorId();
 
   if (hasDoc && step.status !== "DONE") {
-    const clientTaxYear = await prisma.clientTaxYear.findUnique({
-      where: { clientId_taxableYear: { clientId: step.filing.clientId, taxableYear: step.filing.taxableYear } },
-    });
-    if (isElectionBlocked(step.filing.period, clientTaxYear?.electionStatus)) return;
-
     const updated = await prisma.workflowStep.update({
       where: { id: step.id },
       data: {

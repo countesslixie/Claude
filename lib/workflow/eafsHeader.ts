@@ -1,3 +1,5 @@
+import { NOT_APPLICABLE_PILL, naGroupHeader } from "@/lib/workflow/naGroupHeader";
+
 /**
  * D134 — eAFS's header on a filing with no Form 2307: "Pending" while step 2
  * is still open (nobody knows yet whether certificates will come), then a grey
@@ -7,7 +9,7 @@
  * or the group still has applicable steps).
  */
 export interface EafsHeaderDisplay {
-  pillLabel: "Pending" | "Not applicable";
+  pillLabel: "Pending" | typeof NOT_APPLICABLE_PILL;
   text: string;
 }
 
@@ -19,6 +21,6 @@ export function eafsHeaderDisplay(input: {
   if (input.certificateCount > 0 || input.applicableStepCount > 0) return null;
   const settled = input.step2Status === "DONE" || input.step2Status === "SKIPPED";
   return settled
-    ? { pillLabel: "Not applicable", text: "No Form 2307" }
+    ? naGroupHeader("No Form 2307")
     : { pillLabel: "Pending", text: "Depends on Form 2307s (step 2)" };
 }

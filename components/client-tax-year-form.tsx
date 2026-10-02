@@ -13,12 +13,6 @@ const REGIMES = [
   { value: "GRADUATED_ITEMIZED", label: "Graduated, itemized" },
 ];
 
-const ELECTION_STATUSES = [
-  { value: "NOT_YET_ELECTED", label: "Not yet elected" },
-  { value: "ELECTED", label: "Elected" },
-  { value: "DEFAULTED_GRADUATED", label: "Defaulted to graduated" },
-];
-
 const YEAR_END_ELECTIONS = [
   { value: "NA", label: "N/A" },
   { value: "REFUND", label: "Refund" },
@@ -72,24 +66,6 @@ export function ClientTaxYearForm({
           </Label>
           <Select id="regime" name="regime" defaultValue={v("regime") || "RATE_8_PERCENT"} required>
             {REGIMES.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </Select>
-        </div>
-
-        <div className="flex flex-col gap-1">
-          <Label htmlFor="electionStatus">
-            Election status<span className="text-red"> *</span>
-          </Label>
-          <Select
-            id="electionStatus"
-            name="electionStatus"
-            defaultValue={v("electionStatus") || "NOT_YET_ELECTED"}
-            required
-          >
-            {ELECTION_STATUSES.map((o) => (
               <option key={o.value} value={o.value}>
                 {o.label}
               </option>

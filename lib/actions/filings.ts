@@ -245,9 +245,8 @@ export type SavePaymentFormState = {
  * long-standing payment fields (amountPaidCents/paymentDate/
  * paymentChannel — SPEC.md already named these; nothing writes them from
  * inside the app until now). Marks step 8 Done via the ordinary
- * markStepDone (so the File-done gate — payGroupBlockReason — and the
- * election hard-blocker both still apply, the same reasoning every other
- * step's own action already follows).
+ * markStepDone (so the File-done gate — payGroupBlockReason — still applies, the
+ * same reasoning every other step's own action already follows).
  *
  * Editable afterwards (an Edit/Save/Cancel round-trip, same pattern as
  * D40/D55) until isPaymentLocked (lib/filingComputation.ts) says the next

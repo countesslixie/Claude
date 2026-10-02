@@ -339,7 +339,7 @@ model ClientTaxYear {
   taxableYear Int
 
   regime                Regime
-  electionStatus        ElectionStatus @default(NOT_YET_ELECTED)
+  electionStatus        ElectionStatus @default(ELECTED)
   electionEvidenceDocId String?
 
   // Brief #5f §4 — item 55, display-only from here on. The only place it

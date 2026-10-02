@@ -41,6 +41,7 @@ import { formLabel } from "@/lib/workflow/eSubmissionEmail";
 import { FilingSummaryStrip } from "@/components/filing-summary-strip";
 import { deriveStepAging, BIR_WAIT_SHORT_NAME } from "@/lib/workflow/aging";
 import { eafsHeaderDisplay } from "@/lib/workflow/eafsHeader";
+import { payHeaderDisplay } from "@/lib/workflow/naGroupHeader";
 import { filingStatusLabel } from "@/lib/workflow/status";
 import {
   WORKFLOW_GROUPS,
@@ -344,6 +345,8 @@ export default async function FilingDetailPage({
   const payStep9Status = filing.workflowSteps.find((s) => s.stepCode === "SAVE_PROOF_PAYMENT")?.status;
   const payNothingToPayLabel =
     payStep8Status === "NA" && payStep9Status === "NA" ? nothingToPayLabel(sheet.isOverpayment, sheet.overpaymentCents) : null;
+
+  const payHeader = payHeaderDisplay(payNothingToPayLabel); // D135 — grey "Not applicable", not green Done
 
   // Brief #5d — the sheet's shape now depends on formType (1701Q/1701A get
   // the new item-numbered result, MIXED_INCOME's 1701 keeps the old
@@ -657,7 +660,7 @@ export default async function FilingDetailPage({
                       ? eafsHeader.text // D93/D134: eAFS applies only when there are certificates
                       : null
                 }
-                pillOverride={def.code === "EAFS" ? (eafsHeader?.pillLabel ?? null) : null}
+                pillOverride={def.code === "EAFS" ? (eafsHeader?.pillLabel ?? null) : def.code === "PAY" ? (payHeader?.pillLabel ?? null) : null}
                 notApplicable={(def.code === "EAFS" && eafsHeader !== null) || (summary.totalCount === 0 && steps.length === 0)}
                 defaultOpen={def.code === activeGroupCode}
                 stepCodes={def.stepCodes}
