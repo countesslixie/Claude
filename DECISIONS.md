@@ -2,7 +2,7 @@
 
 *Append new decisions. Mark superseded ones rather than deleting them.*
 *Dates during the build are approximate — most work happened across August 2026.*
-*Last reconciled: 2026-09-30 — brief #5u documentation pass (checked D97–D114 against the tree at brief #5t's tip `f2bdbe1`; supersession markers added on D14, D51, D70, D102 and the D29/D70 line about step 16's readiness check), on top of brief #5t (D110–D114), brief #5s (D106–D109), brief #5r (D100–D105), brief #5q (D95–D99, built; D97–D99 new), brief #5p (D94–D96, markers on D6, D17, D27, D70, D73, D76, D82, D92), brief #5o (D83-D93), brief #5n (D78-D82), brief #5m (D70-D77, six groups, BIR Confirmations and the Pay group built), brief #5l (D68-D69), brief #5k (D64-D67), brief #5j (D60-D63), brief #5i, brief #5h (D49-D59, briefs #5d-#5g), brief #5c, brief #5b (D48), brief #5a (D43-D47) and the documentation pass (brief #4f) through briefs #4c-#4e.*
+*Last reconciled: 2026-10-02 — brief #6a documentation pass (checked D115–D142 against the tree at brief #5z's tip `e761a74`; supersession markers added on D27, D43, D58, D60, D67, D70, D72, D74, D79, D81, D84, D87, D91, D93, D101, D115, D119, D121, D126 and D136), on top of brief #5z (D140–D142), brief #5y (D135–D139), brief #5x (D131–D134), brief #5w (D121–D130), brief #5v (D115–D120); earlier passes: brief #5t (D110–D114), brief #5s (D106–D109), brief #5r (D100–D105), brief #5q (D95–D99, built; D97–D99 new), brief #5p (D94–D96, markers on D6, D17, D27, D70, D73, D76, D82, D92), brief #5o (D83-D93), brief #5n (D78-D82), brief #5m (D70-D77, six groups, BIR Confirmations and the Pay group built), brief #5l (D68-D69), brief #5k (D64-D67), brief #5j (D60-D63), brief #5i, brief #5h (D49-D59, briefs #5d-#5g), brief #5c, brief #5b (D48), brief #5a (D43-D47) and the documentation pass (brief #4f) through briefs #4c-#4e.*
 
 ---
 
@@ -140,6 +140,8 @@ Supersedes the *"nothing blocks"* position taken earlier the same day, which was
 **❌ SUPERSEDED 2026-09-26 by D37 (briefs #4c/#4d).** This field, and the attachment slot it carried, are both gone. See D37 for what the bookkeeper decided and why.
 
 *Unaffected:* the election hard-blocker still blocks. It guards a wrong tax rate, not a missing file.
+
+**❌ SUPERSEDED 2026-10-02 by D136 (brief #5y).** There is no election check any more: no election is recorded or confirmed, `isElectionBlocked` and `lib/workflow/election.ts` are deleted, and no step of a Q1 filing is locked for it. The blocking rule itself (documents she receives) is unchanged.
 
 **D28 — Quarterly sales are recorded before certificates** *(2026-09-20)*
 Step 1 is **Record quarterly sales**; step 2 is **Receive Form 2307 from client**. Steps 3–16 keep their numbers.
@@ -301,6 +303,8 @@ Supersedes the `scripts/verify-real.ts` / `scripts/real-fixture.local.ts` arrang
 ## 2026-09-26 — brief #5a (bookkeeper's walkthrough of step 2: ATC codes, a saved customer/payor list, entry fixes)
 
 **D43 — ATC codes get a maintenance screen, and the rate becomes a property of the code, not a separately-typed figure** *(2026-09-26, brief #5a)*
+
+**⚠️ Superseded in part by D132 (brief #5x), 2026-10-01:** the certificate form has no Rate field, so there is no on-screen rate override; `addCertificate` saves the chosen ATC code's rate with `rateOverridden` false. The `rateOverridden` column still exists (default false) and is still read in one place — step 2's row detail shows "(overridden from the ATC code's rate)" on an old certificate that has it set. Existing rows were left as they were. The picker, the maintenance screen and everything else here stand; the form's layout is D131.
 
 *The rule:* Settings gains an ATC codes screen (alongside Holidays and Tax rule sets, `lib/actions/atcCodes.ts`, `app/(app)/settings/atc-codes/`), backed by the existing `AtcCode` table (D19) — add, edit, deactivate (no hard delete; `isActive` is how a code stops being offered). `verifiedAgainstIssuance` is shown plainly everywhere a code appears — the list, the edit form, the certificate form's picker — never tucked away, per D19: an unverified code must never look authoritative.
 
@@ -485,6 +489,8 @@ A `postinstall` script now runs `prisma generate` (`package.json`). *Why:* she h
 
 **D58 — The new look** *(2026-09-27/28, brief #5g, her decisions)*
 
+**⚠️ Superseded in part, 2026-10-02:** the menu now reads **Dashboard · Kanban · Clients · Tax Rules · ATC · Holidays** (D140, brief #5z) — Work holds Kanban and Clients, Settings holds Tax Rules, ATC and Holidays — and the Settings hub lists the same names, still showing only Backup as "not built". The status colours gain a grey "Not applicable" pill (D134, D135). Palette, font, archive-documents and the rest of this decision stand.
+
 *Palette,* copied from her other app and defined once as CSS variables in `app/globals.css`, exposed to Tailwind via `@theme inline` (Tailwind v4 — confirmed via `@import "tailwindcss"` and the absence of a `tailwind.config.*` file; no upgrade, per locked rule #9): purple `#7046C6` (`--purple-600`) for place and clickable things, her own red/green/amber, a lavender-grey page background (`--background`), white cards (`--surface`).
 - Status colours: grey pending, **purple** in progress (was blue — her decision), amber waiting, red overdue, green done.
 - The `--faint` grey (`#8a879a`) measures 3.49:1 against white — below the usual 4.5:1 text minimum. **Kept knowingly:** she read it and found it fine. (Flagged again here rather than silently accepted, since it's a real accessibility number, not a design opinion.)
@@ -510,6 +516,8 @@ A `postinstall` script now runs `prisma generate` (`package.json`). *Why:* she h
 ## 2026-09-28 — brief #5i (the Prepare group's remaining walkthrough: skipped steps, the group button, the counter, status labels)
 
 **D60 — A skipped step stays in its group, and can be undone** *(2026-09-28, brief #5i, her decision)*
+
+**⚠️ Superseded in part by D124 (brief #5w), 2026-10-01:** a skipped count is never shown — not in the group counter ("N of N") and not in the filing status ("Complete", not "Complete (N steps skipped)"). The counting itself is unchanged: a skipped step still counts toward the group's N of N, and its own card keeps Skipped, its reason and Undo skip.
 
 *The rule.* A skipped step is a decision she made, not a step that doesn't apply — it must never be hidden the way `NA` is. It renders in place inside its group, in step order, collapsed by default like Done, with a grey Skipped pill and its reason on one line. A new **Undo skip** control (`unskipStep`, `lib/actions/workflowSteps.ts`) restores the step to whatever its own rules say next — step 2 reruns `recomputeReceive2307Status` (via `reopenSkippedReceive2307`) rather than being forced back to "Not started"; every other skippable step returns to `PENDING`, its ordinary state before it was ever skipped. Refused once the filing's own step 5 (`FILE_RETURN`) is Done — the same lock step 2's certificate list already has (D34/D11). The skip reason is never silently discarded: it's kept in the `ActivityLog` "before" snapshot even once the live row's own `skippedReason` is cleared.
 
@@ -573,6 +581,9 @@ She doesn't use eFPS. `WorkflowStepTemplate`'s seed row for `FILE_RETURN` drops 
 
 **D67 — Steps 6, 7 and 10 unlock once step 5 is Done, show the upload box directly, and complete themselves on upload; step 10 alone keeps Mark waiting** *(2026-09-28, brief #5k, her decisions)*
 
+**⚠️ Note (D119, brief #5v), 2026-10-01:** upload boxes have no date field and a saved file's line shows no date; `uploadDocument` records today (Manila). The Replace behaviour here is unchanged.
+
+
 *The problem.* Each of File's three document steps hid its upload box behind an "Attach" link, could be worked on before the return was even filed, and still needed a separate Mark done after the file was attached — three extra clicks around a fact that was already true the moment the file existed (D27: the file is the step).
 
 *The new shape, one bespoke card (`components/file-group-doc-step-card.tsx`) for all three:*
@@ -633,6 +644,8 @@ Since `summarizeGroup` is the one function both the filing page's own group card
 
 **D70 — Six groups: Prepare, File, Pay, eAFS, BIR Confirmations, Client package** *(2026-09-29, brief #5m §1, her decision)*
 
+**⚠️ Superseded in part, 2026-10-02:** the board has six group columns and **no Complete column and no filter bar** (D138); a card appears only once its period has ended (D139); the board fills the window (D141). The six groups, their membership and the "never renumbered" rule stand.
+
 **Supersedes D32's table of five entirely.** The groups, in order:
 
 | # | Group | Steps |
@@ -666,6 +679,8 @@ Locked ("Available once step 13 is done.") until step 13 (`SAWT_ACK`) is Done. T
 
 **D72 — No Log follow-up on any BIR wait; one combined "Waiting on BIR · Nd" pill** *(2026-09-29, brief #5m §2, her decision)*
 
+**⚠️ Superseded in part by D117 (brief #5v), 2026-10-01:** days are spelled out — "Waiting on BIR · 3 days", never "3d" (`formatDays`). One pill, amber, red past twice the expected days, never green: unchanged.
+
 *Log follow-up is gone, not just hidden.* She can't follow up with BIR on any of steps 10, 13 or 14 — there's no phone number to call, no portal to check. The button is removed from every card that can show one of these three (the bespoke self-completing card for 10/14, the generic `WorkflowStepCard` for 13) and from the dashboard's "Waiting on BIR" row. `lib/actions/workflowSteps.ts`'s `logFollowUp` also refuses these three step codes server-side now — `BIR_WAIT_STEP_CODES` (`RECEIVE_TRRC`, `SAWT_ACK`, `SAWT_VALIDATION`) — so it can't be bypassed by calling the action directly. The day-count itself stays (aging is still computed and shown); only the follow-up button goes. `WorkflowStep.followUpCount` stays in the schema, unused for these three step codes from now on — no migration needed to drop a column that other rows/steps may still increment (Client waits, unaffected by this decision, still use it).
 
 *One pill, not three.* Before this, a waiting BIR step showed grey "waiting on BIR" text beside the title, a separate aging pill (green while young), and a separate amber "Waiting" status pill, all at once. Both `components/file-group-doc-step-card.tsx` and `components/workflow-step-card.tsx` now collapse all three into one: `"Waiting on BIR · Nd"`, toned amber while waiting and red once past twice `expectedResponseDays` (the same thresholds `deriveStepAging` already computed) — **never green**, even on day zero. This only fires when `waitingOnLabel === "BIR"`, so it applies to steps 10, 13 and 14 and nothing else (Client waits, e.g. step 1/2, keep their own separate rendering, untouched).
@@ -680,6 +695,8 @@ D69 (brief #5l) fixed this specifically for File. The same bug existed in the OL
 **✅ Update 2026-09-29:** eAFS was walked and built in brief #5o (D85–D89, D93), and Client package is the only group not yet walked. The eAFS header rule above still holds; when the whole group is `NA` it reads "Not applicable — no Form 2307" instead (D93).
 
 **D74 — The dashboard lists BIR waits independently and follows group order** *(2026-09-29, brief #5m §2, fixing the nuance brief #5l/D69 found but didn't fix)*
+
+**⚠️ Superseded in part, 2026-10-01/02:** the dashboard is now four collapsible, centred sections — Needs my action now · Waiting on client · Waiting on BIR · 3M Threshold Alert — every table sorted by due date then client (D126, D127, D129, D137). "Upcoming deadlines" and "Missing documents" and the election rows are gone; client-wait Due dates and visibility follow D130; no Log follow-up (D128). "Waiting on BIR" listing every step 10/13/14 waiting, independently of "Needs my action", still stands.
 
 *Before.* `app/(app)/page.tsx` picked exactly one "representative" step per filing via `lib/workflow/status.ts`'s `currentStepCode` — the earliest unresolved step by RAW SEQUENCE across all sixteen, regardless of group. A filing whose only genuinely outstanding work was step 10 waiting on BIR would still show under "Needs my action now" for whichever numerically-earlier step (6, 7, 8, 9) happened to still be open, and only migrate to "Waiting on BIR" once ALL of those resolved too — the exact bug D69 noted as "found while verifying this, not caused by it, not fixed."
 
@@ -768,6 +785,8 @@ D69 (brief #5l) fixed this specifically for File. The same bug existed in the OL
 
 **D79 — Board cards carry a "TRRC · Nd" / "SAWT validation · Nd" tag while waiting on BIR, outside the BIR Confirmations column** *(2026-09-29, brief #5n §2, her decision)*
 
+**⚠️ Superseded in part, 2026-10-01/02:** the tag reads "TRRC · 2 days" (D117), and is plain grey text at the bottom right of the card, no pill (D138). Cards appear only once the period has ended (D139). The six-columns-plus-Complete layout and the board's filters are gone (D138); the board fills the window (D141). The red wait line inside BIR Confirmations still stands.
+
 She keeps D70's rule (a card sits in its earliest unfinished group — one card per filing, in the column of her next piece of work), so a filed-and-paid filing with eAFS work still open sits in eAFS. New: when a card is in any column other than BIR Confirmations and step 10 and/or step 14 is `WAITING_EXTERNAL`, a small tag shows "TRRC · 2d" and/or "SAWT validation · 8d". Days and colour come from `deriveStepAging` — the same function as the step pill — via `lib/workflow/aging.ts`'s `birWaitTags` / `birWaitTone`; both step cards' "Waiting on BIR" pill now call `birWaitTone` too, so there is one copy of the amber/red rule (amber while waiting, red at twice `expectedResponseDays`, never green). A card already in BIR Confirmations gets no tag; its own wait line turns **red** once either wait is past twice its expected days (added while verifying the walkthrough — her scenario G expects that card to read red).
 
 **D80 — A slim bar pinned to the top of the filing page** *(2026-09-29, brief #5n §3, her decision)*
@@ -779,6 +798,8 @@ Once the page header scrolls out of view, a bar fixed to the content area (`left
 *Known, not changed here:* both the banner and the bar name the earliest unresolved step by raw step sequence (`currentStepCode`), so a filing whose only open work is eAFS reads "Next: Step 10 — TRRC" (a step she can only wait on), while the board and dashboard already pick by group order (D74). Left alone as outside the brief; see CURRENT_STATE.md.
 
 **D81 — "Nothing to pay — overpayment ₱X" in muted grey; no counter on an all-NA group** *(2026-09-29, brief #5n §4, her decision)*
+
+**⚠️ Superseded in part, 2026-10-01/02:** a group counter never shows "N skipped" (D124). Pay's "Nothing to pay" note now sits beside a grey "Not applicable" pill, not a green Done (D135). The muted-grey, never-amber rule stands.
 
 Pay's note after steps 8/9 both go NA reads "Nothing to pay — overpayment ₱8,200.00" (or plain "Nothing to pay" for exactly ₱0), built by `lib/workflow/groups.ts`'s `nothingToPayLabel` from `lib/money.ts`'s formatting, in muted grey (`text-faint`) — amber means waiting and nothing is waiting. The "0 of 0" counter is hidden for **any** group whose steps are all NA (`groupCounterLabel` returns null); the Done pill and the note are enough. Filings filed before brief #5m kept a live payment form because D76's NA rule only runs when step 5 is marked Done — no backfill, since the database is reseeded (D82), and the new seed reaches this state by really marking step 5 done.
 
@@ -813,6 +834,8 @@ The old seed mixed sample clients, hand-set step statuses and half-worked overdu
 
 **D84 — "Next" follows group order and skips locked and BIR-waiting steps; one shared helper** *(2026-09-29, brief #5o §2)*
 
+**⚠️ Superseded in part, 2026-10-01 (D117, D126):** the banner's wait text reads "waiting on BIR — TRRC, 3 days" (not "3d"), and the dashboard this feeds is the four-section one of D126/D137. `nextActionForFiling` itself is unchanged.
+
 `lib/workflow/groups.ts`'s `nextActionForFiling` (with `stepLockReason`, the one place that knows every gate): the first open step in group order that is her work — steps that are locked, or `WAITING_EXTERNAL` on 10/13/14, are skipped. Only when nothing of hers is left does it return the BIR wait ("Next: waiting on BIR — TRRC, 3d · eAFS validation, 3d", no button, no link); nothing open at all is "complete". The filing page's Next banner, the slim bar (D80) and the dashboard's "Needs my action" all call it, so they can't disagree. Before this the banner and bar named the lowest-numbered open step, so scenarios D/E/F read "Next: Step 10 — TRRC". `nextActionModeForStepCode` now treats 11 and 13 as go-to-step and 12 and 15 as Mark done only.
 
 **D85 — The eAFS group opens once File and Pay are Done** *(2026-09-29, brief #5o §3)*
@@ -824,6 +847,8 @@ Steps 11, 12, 13 and 15 are locked ("Available once Pay is done.") until File (5
 Generated report and DAT file, shown directly, no Attach link (D67's pattern). No Start, Mark done or Skip — all refused server-side. `recomputeFileGroupDocStepStatus` now requires **every** required slot to have a file (this is the first two-slot step on that machinery), so removing either file returns the step to Pending; Replace works per file. `FileGroupDocStepCard` takes a list of slots.
 
 **D87 — Step 12 shows the eSubmission email draft and saves it when marked Done** *(2026-09-29, brief #5o §4)*
+
+**⚠️ Superseded in part by D125 (brief #5w), 2026-10-01:** the collapsed line reads "Emailed on [date] — [subject]" (not "Emailed [date]").
 
 `lib/workflow/eSubmissionEmail.ts` (pure, like step 4's message) builds To / Subject / Body from her real sent email: subject `SAWT {1701Q|1701A|1701} {period end MMDDYYYY} {REGISTERED NAME IN CAPITALS} {12-digit TIN}`; body Name / TIN / RDO / Period, one per line. Period ends come from a fixed table (0331/0630/0930/1231 + year — no date arithmetic, D20); the 12-digit TIN is the 9-digit TIN plus the 3-digit branch code, digits only. **The address is a setting: `TaxRuleSet.eSubmissionEmail`** (default `esubmission@bir.gov.ph`, editable on the tax rule set screen; new migration — confirm it against BIR before live use, D19). The card shows Copy buttons for To, Subject and Body, names the DAT file saved on step 11 with a download link, and shows one muted "RDO code missing — add it on the client page" line (never blocking) when the client has none. Mark done only (no Start/Skip); locked until 11 is Done. Marking it Done saves the exact draft on the filing (new `Filing.dataEmailTo/Subject/Body/SavedAt`, D51's pattern) and the card collapses to "Emailed [date] — SAWT 1701Q …" with a Show email link. Uses the registered name uppercased, not a separately stored surname (her decision); the draft text on screen is editable for shortening by hand, but what's saved is the built draft.
 
@@ -837,6 +862,8 @@ The optional `eafs_confirmation` slot is gone from the template and from existin
 
 **D93 — The whole eAFS group (11, 12, 13, 15) is NA when no Form 2307 is saved on the filing** *(2026-09-29, brief #5o §4, her decision)*
 
+**⚠️ Superseded in part by D134 (brief #5x), 2026-10-01:** the header text "Not applicable — no Form 2307" is now a grey "Not applicable" pill with "No Form 2307", and reads "Pending" until step 2 is settled. How steps 11–15 are stored NA is unchanged.
+
 Step 15 joined the conditional steps (with 11–14): no certificate claimed on the filing (`requiresSawt` false) means 11, 12, 13, 14 and 15 are all `NA`. **This settles the open question "is eAFS required on quarterly returns?" (SPEC §17 item 2): eAFS only when there are certificates.** The NA state follows the live certificate list until step 5 is Done (D34 locks the list from then on): `recomputeRequiresSawt` — the mechanism that already set 11–14 NA at generation and un-NA'd them — now also sets untouched steps NA again when the last certificate is removed, and does nothing once the return is filed. The eAFS header for an all-NA group reads "Not applicable — no Form 2307" (muted grey, a Done pill, no counter, no Expand — same treatment as D81/D91). *Knock-ons, checked:* the board places a no-certificate filing past eAFS straight into BIR Confirmations (Rosario Garcia Q3); the Next helper skips the group; step 16's package-readiness check expected nothing from 11–15 (its dependencies are 7, 9, 10, 14, and 14 is NA too) *[⚠️ D109, 2026-09-30: the dependencies are now 7, 9, 10 and 13]* and Rosario's filing can still reach Complete once the TRRC is in. **Consequence for the sample data:** scenario F (Felipe Ocampo) now carries a certificate, otherwise his eAFS group would be NA rather than locked.
 
 **D90 — Step 10 renamed "Save TRRC email"** *(2026-09-29, brief #5o §4, her decision)*
@@ -847,6 +874,9 @@ Template, existing rows (seed backfill, same pattern as D66's rename of step 5),
 Template, rows and the readiness message, as D90. `BIR_WAIT_SHORT_NAME` (`lib/workflow/aging.ts`) is the one place the short names live: BIR Confirmations' header reads "waiting on eAFS validation, Nd"; the board tag reads "eAFS validation · Nd" (D79); the Next banner and bar use it too.
 
 **D91 — An all-NA group doesn't expand to an empty box** *(2026-09-29, brief #5o §5)*
+
+**⚠️ Superseded in part by D134 and D135 (briefs #5x, #5y), 2026-10-01/02:** a group whose every step is NA still has no Expand, but it never shows a green Done. eAFS shows a grey "Pending" ("Depends on Form 2307s (step 2)") until step 2 is Done or Skipped, then a grey "Not applicable" with "No Form 2307"; Pay shows a grey "Not applicable" with "Nothing to pay …". Display only — steps are stored NA as before.
+
 Chosen: **no Expand is offered** (rather than a "steps don't apply" line). A group whose every step is NA — and none is being shown by the "Show N not applicable" toggle — renders as a plain header with its note (Pay's "Nothing to pay — overpayment ₱X", eAFS's "Not applicable — no Form 2307") and no expandable body. If the toggle shows the NA steps, the group expands as usual.
 
 **Known stale list from this brief: resolved by brief #5p's documentation pass** (see the "Last reconciled" lines of each file).
@@ -891,6 +921,8 @@ Found on Ernesto Villamor's Q3: Prepare was pending and step 5's Mark done was l
 **✅ BUILT 2026-09-30, brief #5r.** `prepareFinishedBlockReason` (`lib/workflow/groups.ts`) is checked in `markStepDone`'s FILE_RETURN path before the filing-order check (D95) and before anything is written; `stepLockReason` returns it for FILE_RETURN, so the card's greyed-out Mark done carries it as a tooltip (D41). When both locks apply, the Prepare reason is shown — she can act on it on the same filing. Next (D84) and the Next banner (D77) never offer step 5 while it is locked, because `nextActionForFiling` skips locked steps and the open Prepare step comes first in group order. The seed needed no change: every scenario files through the app's own actions, and all six seeded filed returns have Prepare resolved (checked). Existing tests that filed step 5 directly now resolve Prepare first through `resolvePrepare` (`tests/helpers/filedEarlier.ts`).
 
 **D101 — Step 16 is Mark done only, saves its email when done, and collapses** *(2026-09-30, brief #5r, her decision after her first walk of the Client package group)*
+
+**⚠️ Superseded in part by D125 (brief #5w), 2026-10-01:** the collapsed line reads "Emailed on [date]: [subject]"; an old filing with no saved email reads "Done on [date]"; and a new subject ends "filed on [date]" (saved emails are unchanged).
 
 No Start, no Skip (and no skip-reason box); `skipStep` and `markStepInProgress` refuse `SEND_CLIENT_PACKAGE` server-side, by adding it to `NO_START_NO_SKIP_STEP_CODES` (D65/D75), and `nextActionModeForStepCode` returns "markDoneOnly" so the Next banner matches the card (D77). Marking it Done saves the exact email on the filing — new `Filing.clientPackageEmailTo/Subject/Body/SavedAt`, the same shape as step 12's (D87), chosen over a shared table because it is what steps 4 and 12 already do — and the card collapses to "Emailed [date]: [subject]" with a Show email link. The email box, Copy buttons and Download package are then hidden (Download was not kept on the collapsed line: the documents still live on their own steps). A filing whose step 16 was Done before this has no saved email and reads "Done [date]" with no Show email — nothing is invented. Step 2 is now the only step left that can be skipped; a step 16 skipped in old data still shows "Skipped" with Undo skip.
 
@@ -952,6 +984,8 @@ From steps 7, 9, 10 and 13 — skipping any that are NA, skipped or saved — in
 
 **D115 — Filing page header** *(2026-10-01, brief #5v, her decision)*
 
+**⚠️ Superseded in part by D123 (brief #5w), 2026-10-01:** the subtitle uses full month names ("1701Q - due November 16, 2026"), not "Nov."; `formatManilaDateDotted` is removed.
+
 No status pill beside the title (it stays on the tax payable line). The subtitle reads "1701Q - due Nov. 16, 2026" in normal muted text (`formatManilaDateDotted`, this line only: "Sep.", "Nov.", but "May"). The "(details)" link is gone; its two paragraphs (statutory due date when shifted, documents due from client and filing target) appeared nowhere else on the page, so they live under a small "Filing details" link at the bottom. The card heading is "Steps".
 
 **D116 — Fixed status and Expand/Collapse columns** *(2026-10-01, brief #5v)*
@@ -968,6 +1002,8 @@ Screens say "1701Q", never "F1701Q" (the stored `formType` is unchanged). Step 3
 
 **D119 — Upload boxes carry no date** *(2026-10-01, brief #5v)*
 
+**⚠️ Note (D122, brief #5w), 2026-10-01:** the certificate form's own "Scan date", left unchanged here, was removed the same day.
+
 The date input is gone from every step-card upload box; `uploadDocument` dates the document today (Manila) when none is supplied (it still accepts one — the seed back-dates). The only readers of `Document.documentDate` are the stored file name (YYYYMMDD) and the dates that used to follow file names on step cards (now removed). The certificate form's own "Scan date" is unchanged.
 
 **D120 — "Choose File" is a bordered button** *(2026-10-01, brief #5v)*
@@ -975,6 +1011,8 @@ The date input is gone from every step-card upload box; `uploadDocument` dates t
 One rule in `app/globals.css` styles `input[type="file"]` and its `::file-selector-button` (white, bordered, rounded, like Upload) for every upload control.
 
 **D121 — Sheet heading "Computation sheet (Filed)"; no preparation-aid sentence** *(2026-10-01, brief #5w, her decision)*
+
+**⚠️ Superseded by D133 (brief #5x), 2026-10-01:** the display filter and `lib/sheetText.ts` are removed — the sheet now shows form lines and figures only, with no explanation column and no "Show explanations". The "(Filed)" heading stands.
 
 The filed sheet's heading reads "Computation sheet (Filed)" (the live heading is unchanged). The "preparation aid" sentence is filtered out at display time (`lib/sheetText.ts`): in "Show explanations" and in newly saved sheet files, including the file's footer. Frozen snapshots and the engine's own notes are untouched; no figure changes.
 
@@ -995,6 +1033,8 @@ The upload day (today, Manila) is recorded. The scan date is read by nothing but
 Step 16 reads "Emailed on [date]: …", step 12 "Emailed on [date] — …", the old-filing fallback "Done on [date]". A new step 16 subject ends "filed on [date]"; saved emails are unchanged. The zip name and email body do not use the subject.
 
 **D126 — Dashboard sections** *(2026-10-01, brief #5w, her decision)*
+
+**⚠️ Superseded in part by D137 (brief #5y), 2026-10-02:** "Missing documents" and the election alerts are removed; the section is "3M Threshold Alert". Four sections, in the order given in D137.
 
 In order: Needs my action now, Waiting on client, Waiting on BIR, Missing documents, Threshold & election alerts (`lib/workflow/dashboardRows.ts`). Each is collapsible (chevron); open when it has entries, closed when empty, with the normal header and "Nothing here right now." when opened. Upcoming deadlines is removed.
 
@@ -1036,6 +1076,8 @@ When Pay is not applicable (an overpayment or exactly ₱0, D76) its header show
 
 **D136 — Every client is 8% elected, always** *(2026-10-02, brief #5y, her decision)*
 
+**⚠️ Superseded in part by D142 (brief #5z), 2026-10-02:** "so is `regime`" no longer holds — the Regime column and field are removed too, and every tax year is stored 8% flat rate.
+
 "This app only caters for 8%." There is no election to record or confirm. Removed: the election field on the tax-year form, the Election status column on the client page, the dashboard's election rows, and the lock (`isElectionBlocked`, `lib/workflow/election.ts` deleted) — which in fact stopped *every* step of a Q1 filing being marked done, not only step 5 (it sat in `markStepDone`, `recomputeReceive2307Status` and `recomputeFileGroupDocStepStatus`). Step 5 keeps its other two locks (D100, D95). `ClientTaxYear.electionStatus` stays as a column, now defaulting to `ELECTED`; a migration sets every existing row to `ELECTED`, and `createClientTaxYear` writes `ELECTED` itself. The computation never read the election (the engine takes no election input), so no figure changed. The year-end credit election (refund / TCC / carry over) is a different thing and is untouched; so is `regime`.
 
 **D137 — Dashboard trim** *(2026-10-02, brief #5y, her decision)*
@@ -1056,14 +1098,14 @@ A filing's card shows on the board from the day after its period ends (Asia/Mani
 
 The left menu reads Dashboard · Kanban · Clients · Tax Rules · ATC · Holidays (was Filings; Tax rule sets; ATC codes; Holidays now last). Page headings match ("Kanban", "Tax Rules", "ATC"), and so does the Settings hub list. URLs and form field labels (e.g. "ATC code" on the certificate form) are unchanged.
 
-**D141 — The Kanban fills the window** *(brief #5z, her request)*
+**D141 — The Kanban fills the window** *(2026-10-02, brief #5z, her request)*
 
 The board area takes the rest of the window height; columns scroll up and down inside themselves, and the sideways scroll bar sits on the window's bottom edge. The page itself never scrolls sideways.
 
-**D142 — No Regime column or field** *(brief #5z, her decision)*
+**D142 — No Regime column or field** *(2026-10-02, brief #5z, her decision)*
 
 The Taxable years table loses its Regime column and the tax year forms their Regime field. Every tax year is 8% flat rate: `createClientTaxYear` writes `RATE_8_PERCENT` (as D136 does for the election) and the edit action leaves the stored value alone. Nothing in the computation, form choice, mixed-income handling or threshold alert read `ClientTaxYear.regime`, but the column stays (no migration). All existing rows were 8% flat rate.
 
 ---
 
-**Documentation reconciled through brief #5t** (brief #5u, this pass; earlier passes: #5m, #5o's light additions D83–D93, #5p) — see the "Last reconciled" line at the top of this file, CURRENT_STATE.md, PROJECT_MASTER.md and CLAUDE.md.
+**Documentation reconciled through brief #5z** (brief #6a, this pass; earlier passes: #5u, #5m, #5o's light additions D83–D93, #5p) — see the "Last reconciled" line at the top of this file, CURRENT_STATE.md, PROJECT_MASTER.md and CLAUDE.md.
