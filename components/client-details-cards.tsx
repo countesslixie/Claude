@@ -39,7 +39,7 @@ function Field({ label, value, mono = false, className }: { label: string; value
 
 export function ClientDetailsCards({ client }: { client: ClientDetails }) {
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr]">
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       <Card className="h-full" data-card="registration">
         <CardHeader>
           <h2 className="text-sm font-semibold text-ink">Registration</h2>

@@ -32,6 +32,7 @@ export function EmailDatStepCard({
   rdoMissing,
   datFile,
   savedAtLabel,
+  readOnly = false,
 }: {
   stepId: string;
   clientId: string;
@@ -46,6 +47,8 @@ export function EmailDatStepCard({
   datFile: { id: string; filename: string } | null;
   /** Manila-formatted date the draft was saved, once Done. */
   savedAtLabel: string | null;
+  /** D156 — the filing is Complete: no Copy, the text is read-only. */
+  readOnly?: boolean;
 }) {
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
@@ -77,9 +80,11 @@ export function EmailDatStepCard({
     <div className="flex items-center gap-2 text-xs">
       <span className="w-14 flex-shrink-0 text-faint">{label}</span>
       <span className="min-w-0 flex-1 break-all text-ink">{value}</span>
-      <button type="button" onClick={() => copy(key, value)} className="flex-shrink-0 text-faint underline hover:text-ink">
-        {copied === key ? "Copied" : "Copy"}
-      </button>
+      {!readOnly && (
+        <button type="button" onClick={() => copy(key, value)} className="flex-shrink-0 text-faint underline hover:text-ink">
+          {copied === key ? "Copied" : "Copy"}
+        </button>
+      )}
     </div>
   );
 
@@ -100,7 +105,7 @@ export function EmailDatStepCard({
             {line("to", "To", to)}
             {line("subject", "Subject", subject)}
           </div>
-          <CopyTextarea key={body} defaultValue={body} rows={4} />
+          <CopyTextarea key={body} defaultValue={body} rows={4} readOnly={readOnly} hideCopy={readOnly} />
           {rdoMissing && (
             <p className="text-xs text-faint">
               RDO code missing —{" "}
@@ -138,7 +143,7 @@ export function EmailDatStepCard({
           {show && (
             <div className="flex flex-col gap-1">
               {line("to", "To", to)}
-              <CopyTextarea defaultValue={body} rows={4} readOnly />
+              <CopyTextarea defaultValue={body} rows={4} readOnly hideCopy={readOnly} />
             </div>
           )}
         </div>

@@ -481,6 +481,7 @@ export default async function FilingDetailPage({
       amountLabel={centsToPesos(sheet.isOverpayment ? sheet.overpaymentCents : sheet.taxPayableCents, { withSymbol: true })}
       subject={adviceMessage.subject}
       body={adviceMessage.body}
+      readOnly={isComplete}
     />
   ) : null;
 
@@ -699,7 +700,6 @@ export default async function FilingDetailPage({
                         sequence={step.sequence}
                         title={step.title}
                         status={step.status}
-                        skippedReason={step.skippedReason}
                         certificates={certificateRows}
                         allReceived={filing.certificatesAllReceivedAt != null}
                         locked={isFilingLocked || isComplete}
@@ -781,6 +781,7 @@ export default async function FilingDetailPage({
                         rdoMissing={liveEmail.rdoMissing}
                         datFile={datDoc ? { id: datDoc.id, filename: datDoc.originalFilename } : null}
                         savedAtLabel={filing.dataEmailSavedAt ? formatManilaDate(filing.dataEmailSavedAt) : null}
+                        readOnly={isComplete}
                       />
                     );
                   }

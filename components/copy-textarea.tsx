@@ -22,10 +22,13 @@ export function CopyTextarea({
   defaultValue,
   rows = 12,
   readOnly = false,
+  hideCopy = false,
 }: {
   defaultValue: string;
   rows?: number;
   readOnly?: boolean;
+  /** D156 — a Complete filing's texts have no Copy button. */
+  hideCopy?: boolean;
 }) {
   const [value, setValue] = useState(defaultValue);
   const [copied, setCopied] = useState(false);
@@ -49,11 +52,13 @@ export function CopyTextarea({
         rows={rows}
         className="font-mono text-xs"
       />
-      <div>
-        <Button type="button" size="sm" variant="secondary" onClick={copy}>
-          {copied ? "Copied" : "Copy"}
-        </Button>
-      </div>
+      {!hideCopy && (
+        <div>
+          <Button type="button" size="sm" variant="secondary" onClick={copy}>
+            {copied ? "Copied" : "Copy"}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

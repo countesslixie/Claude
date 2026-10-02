@@ -247,7 +247,7 @@ describe("workflow step actions", () => {
     });
   });
 
-  it("skipStep requires a non-empty reason — no silent skips (SPEC.md 7.2)", async () => {
+  it("D157: skipping step 2 needs no typed reason — it always stores the one fixed wording", async () => {
     const { filing } = await makeClientWithQ2Filing("p3-step-skip");
     // D75 (brief #5m §3) -- MAKE_PAYMENT can no longer be skipped at all
     // (see the dedicated Pay-group test below); D89 (brief #5o) took Skip away
@@ -259,14 +259,13 @@ describe("workflow step actions", () => {
       where: { filingId: filing.id, stepCode: "RECEIVE_2307" },
     });
 
-    const blocked = await skipStep(step.id, "");
-    expect(blocked.ok).toBe(false);
 
-    const allowed = await skipStep(step.id, "Client remitted directly, no separate payment step needed.");
+    // Whatever is typed (or nothing), the stored reason is the fixed wording.
+    const allowed = await skipStep(step.id, "");
     expect(allowed.ok).toBe(true);
     const updated = await prisma.workflowStep.findUniqueOrThrow({ where: { id: step.id } });
     expect(updated.status).toBe("SKIPPED");
-    expect(updated.skippedReason).toBeTruthy();
+    expect(updated.skippedReason).toBe("No Form 2307 received from this client.");
   });
 
   it("brief #5f §1: step 3 (PREPARE_RETURN) can never be skipped, even with a reason, enforced server-side", async () => {

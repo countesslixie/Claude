@@ -10,6 +10,8 @@ import { centsToPesos } from "@/lib/money";
 import { currentTaxableYearManila, formatManilaDate } from "@/lib/dates";
 import { ownSalesQuarterOf, filingPeriodForSalesQuarter, outsideSalesQuartersFor } from "@/lib/tax/periods";
 import { getStartingFigures } from "@/lib/startingFigures";
+import { getDeclaredIncome, incomeQuarterStatus, INCOME_QUARTER_STATUS_LABEL } from "@/lib/declaredIncome";
+import { StatusBadge, type StatusTone } from "@/components/status-badge";
 import type { SalesQuarter } from "@/lib/tax/types";
 
 const QUARTERS: SalesQuarter[] = ["Q1", "Q2", "Q3", "Q4"];
@@ -18,11 +20,11 @@ const QUARTERS: SalesQuarter[] = ["Q1", "Q2", "Q3", "Q4"];
  * Brief #4b (D33) — declared gross sales, now the sum of per-customer
  * rows for the quarter (still the only place income enters the system;
  * a Form 2307 never contributes to it). Opened from a filing
- * (`?filingId=`), only that filing's own quarter is editable; every
- * other quarter this taxable year renders read-only. Opened without a
- * filing (e.g. from the client page), every quarter renders read-only
- * with a link to its filing if one exists — the simplest reasonable
- * version of "no filing context to anchor an editable quarter to."
+ * (`?filingId=`, step 1's "Go to income entry"), only that filing's own
+ * quarter is editable; every other quarter this taxable year renders
+ * read-only. D158 — opened without a filing (the client page's Income
+ * button) it is a view-only table (see IncomeTable below): no entry
+ * fields, nothing clickable.
  *
  * Brief #4d — a quarter that's already final (step 1/RECORD_SALES Done)
  * but not yet filed now opens read-only with an Edit button, inside
@@ -50,6 +52,9 @@ export default async function IncomePage({
   }
 
   const taxableYear = openFiling ? openFiling.taxableYear : year ? Number(year) : currentTaxableYearManila();
+
+
+  if (!openFiling) return <IncomeTable clientId={id} client={client} taxableYear={taxableYear} />;
 
   const rows = await prisma.quarterlySales.findMany({
     where: { clientId: id, taxableYear },
@@ -137,7 +142,9 @@ export default async function IncomePage({
     );
   }
 
-  const otherQuarters = QUARTERS.filter((q) => q !== editableQuarter);
+  // D159 — the outside quarters read as ONE row, "Previous quarters", not Q1/Q2 rows.
+  const otherQuarters = QUARTERS.filter((q) => q !== editableQuarter && !outsideQuarters.has(q));
+  const showPreviousQuarters = [...outsideQuarters].some((q) => q !== editableQuarter);
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -153,27 +160,11 @@ export default async function IncomePage({
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {!openFiling && (
-            <form method="get" className="flex items-center gap-2">
-              <label className="text-sm text-ink-secondary">Year</label>
-              <input
-                type="number"
-                name="year"
-                defaultValue={taxableYear}
-                className="h-8 w-24 rounded-md border border-line px-2 text-sm"
-              />
-              <Button type="submit" variant="secondary" size="sm">
-                Go
-              </Button>
-            </form>
-          )}
-          {openFiling && (
-            <Link href={`/clients/${id}/filings/${openFiling.id}`}>
-              <Button variant="secondary" size="sm">
-                Back to filing
-              </Button>
-            </Link>
-          )}
+          <Link href={`/clients/${id}/filings/${openFiling.id}`}>
+            <Button variant="secondary" size="sm">
+              Back to filing
+            </Button>
+          </Link>
         </div>
       </div>
 
@@ -223,67 +214,6 @@ export default async function IncomePage({
           );
         })()}
 
-      {!editableQuarter && (
-        <div className="mb-4 flex flex-col gap-4">
-          {QUARTERS.map((quarter) => {
-            const row = byQuarter.get(quarter);
-            const { locked, finalized, filing } = lockInfoFor(quarter);
-            if (outsideQuarters.has(quarter)) {
-              return (
-                <div key={quarter} className="rounded-lg border border-line bg-background p-4">
-                  <div className="mb-1 flex items-baseline justify-between">
-                    <h2 className="text-sm font-semibold text-ink">{quarter}</h2>
-                    <span className="text-xs text-faint">filed outside the app</span>
-                  </div>
-                  <p className="text-sm text-faint">
-                    Covered by this client&apos;s starting figures — see the client&apos;s Taxable years row.
-                  </p>
-                </div>
-              );
-            }
-            if (locked) {
-              return (
-                <div key={quarter} className="rounded-lg border border-line bg-background p-4">
-                  <div className="mb-1 flex items-baseline justify-between">
-                    <h2 className="text-sm font-semibold text-ink">{quarter}</h2>
-                    <span className="text-xs text-faint">read-only — filed</span>
-                  </div>
-                  <p className="text-sm text-ink-secondary">
-                    Total: {row ? centsToPesos(row.grossSalesCents, { withSymbol: true }) : "—"}
-                  </p>
-                  {filing && (
-                    <Link href={`/clients/${id}/filings/${filing.id}`} className="mt-1 inline-block text-sm underline">
-                      Go to filing
-                    </Link>
-                  )}
-                </div>
-              );
-            }
-            const boundAction = saveQuarterlySales.bind(null, id, taxableYear, quarter);
-            return (
-              <QuarterlySalesCard
-                key={quarter}
-                quarter={quarter}
-                isQ4={quarter === "Q4"}
-                action={boundAction}
-                initialValues={{
-                  customers: row ? row.customers.map((c) => ({ customerName: c.customerName, amount: centsToPesos(c.amountCents) })) : [],
-                  nonOperatingIncome: row ? centsToPesos(row.nonOperatingIncomeCents) : "0",
-                  notes: row?.notes ?? "",
-                  noSalesThisQuarter: row?.noSalesThisQuarter ?? false,
-                }}
-                initialFinalized={finalized}
-                initialSavedAt={row ? formatManilaDate(row.updatedAt) : null}
-                filingHref={filing ? `/clients/${id}/filings/${filing.id}` : `/clients/${id}/income`}
-                payors={payors}
-                atcCodes={atcCodes}
-                onSaveNewPayor={boundSaveNewPayor}
-              />
-            );
-          })}
-        </div>
-      )}
-
       {editableQuarter && (
         <div className="overflow-x-auto rounded-lg border border-line bg-surface">
           <p className="border-b border-line px-3 py-2 text-xs font-medium uppercase tracking-wide text-faint">
@@ -298,10 +228,133 @@ export default async function IncomePage({
                 <th></th>
               </tr>
             </thead>
-            <tbody>{otherQuarters.map((q) => readOnlyRow(q))}</tbody>
+            <tbody>
+              {showPreviousQuarters && (
+                <tr>
+                  <td>Previous quarters</td>
+                  <td colSpan={3} className="text-faint">
+                    Filed outside the app
+                  </td>
+                </tr>
+              )}
+              {otherQuarters.map((q) => readOnlyRow(q))}
+            </tbody>
           </table>
         </div>
       )}
+    </div>
+  );
+}
+
+const STATUS_TONE: Record<string, StatusTone> = { NOT_ENTERED: "pending", DRAFT: "waiting", SAVED: "progress", FILED: "done" };
+
+/**
+ * D158 — Client page → Income: a view-only table of the year's declared
+ * income. Every column centred; nothing clickable, no entry fields. The
+ * figures come from getDeclaredIncome (lib/declaredIncome.ts), the same
+ * function the certificates-vs-declared-sales check reads, so the Total row
+ * and that check always agree. A missing figure is "—", never a silent
+ * ₱0.00; "No sales this quarter" is a real ₱0.00.
+ */
+async function IncomeTable({
+  clientId,
+  client,
+  taxableYear,
+}: {
+  clientId: string;
+  client: { registeredName: string; tin: string };
+  taxableYear: number;
+}) {
+  const [declared, filings] = await Promise.all([
+    getDeclaredIncome(clientId, taxableYear),
+    prisma.filing.findMany({
+      where: { clientId, taxableYear, deletedAt: null },
+      include: { workflowSteps: { where: { stepCode: { in: ["FILE_RETURN", "RECORD_SALES"] } }, select: { stepCode: true, status: true } } },
+    }),
+  ]);
+  const byQuarter = new Map(declared.rows.map((r) => [r.quarter, r]));
+  const outside = new Set(outsideSalesQuartersFor((await getStartingFigures(clientId, taxableYear))?.latestOutsideReturn ?? "NONE"));
+  const money = (cents: number) => centsToPesos(cents, { withSymbol: true });
+  // Non-operating income of ₱0 is "nothing entered", shown as a dash.
+  const nonOp = (cents: number) => (cents > 0 ? money(cents) : "—");
+
+  const quarterRows = QUARTERS.filter((q) => !outside.has(q)).map((quarter) => {
+    const f = filings.find((x) => x.period === filingPeriodForSalesQuarter(quarter));
+    const stepDone = (code: string) => f?.workflowSteps.find((s) => s.stepCode === code)?.status === "DONE";
+    const row = byQuarter.get(quarter);
+    const status = incomeQuarterStatus({ hasRow: !!row, finalized: stepDone("RECORD_SALES"), filed: stepDone("FILE_RETURN") });
+    return { quarter, row, status };
+  });
+  const hasAnyFigure = declared.previousQuarters != null || declared.rows.length > 0;
+  const prev = declared.previousQuarters;
+
+  return (
+    <div className="mx-auto max-w-4xl">
+      <ClientStickyBar headerId="client-page-header" clientId={clientId} name={client.registeredName} tin={client.tin} />
+      <div id="client-page-header" className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <h1 className="text-2xl font-semibold text-ink">Income — {client.registeredName}</h1>
+        <div className="flex flex-wrap items-center gap-2">
+          <form method="get" className="flex items-center gap-2">
+            <label className="text-sm text-ink-secondary">Year</label>
+            <input type="number" name="year" defaultValue={taxableYear} className="h-8 w-24 rounded-md border border-line px-2 text-sm" />
+            <Button type="submit" variant="secondary" size="sm">
+              Go
+            </Button>
+          </form>
+          <Link href={`/clients/${clientId}`}>
+            <Button variant="secondary" size="sm">
+              Back to client
+            </Button>
+          </Link>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto rounded-lg border border-line bg-surface">
+        <table className="data-table data-table-centered">
+          <thead>
+            <tr>
+              <th>Period</th>
+              <th>Gross sales</th>
+              <th>Non-operating income</th>
+              <th>Total</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {prev && (
+              <tr>
+                <td>Previous quarters</td>
+                <td className="tabular-nums">{money(prev.grossSalesCents)}</td>
+                <td className="tabular-nums">{nonOp(prev.nonOperatingIncomeCents)}</td>
+                <td className="tabular-nums">{money(prev.grossSalesCents + prev.nonOperatingIncomeCents)}</td>
+                <td>
+                  <StatusBadge tone="pending">Filed outside the app</StatusBadge>
+                </td>
+              </tr>
+            )}
+            {quarterRows.map(({ quarter, row, status }) => (
+              <tr key={quarter}>
+                <td>
+                  {quarter} {taxableYear}
+                </td>
+                <td className="tabular-nums">{row ? money(row.grossSalesCents) : "—"}</td>
+                <td className="tabular-nums">{row ? nonOp(row.nonOperatingIncomeCents) : "—"}</td>
+                <td className="tabular-nums">{row ? money(row.grossSalesCents + row.nonOperatingIncomeCents) : "—"}</td>
+                <td>
+                  <StatusBadge tone={STATUS_TONE[status]}>{INCOME_QUARTER_STATUS_LABEL[status]}</StatusBadge>
+                </td>
+              </tr>
+            ))}
+            <tr className="font-semibold">
+              <td>Total {taxableYear}</td>
+              <td className="tabular-nums">{hasAnyFigure ? money(declared.grossSalesTotalCents) : "—"}</td>
+              <td className="tabular-nums">{hasAnyFigure ? nonOp(declared.nonOperatingTotalCents) : "—"}</td>
+              <td className="tabular-nums">{hasAnyFigure ? money(declared.grossSalesTotalCents + declared.nonOperatingTotalCents) : "—"}</td>
+              <td></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

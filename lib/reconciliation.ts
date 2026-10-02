@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { getStartingFigures } from "@/lib/startingFigures";
+import { getDeclaredIncome } from "@/lib/declaredIncome";
 
 /**
  * Rework brief §5.2 — of the three reconciliation panels this file used
@@ -32,24 +32,18 @@ export async function getAnnualCertificatesVsSalesReconciliation(
   clientId: string,
   taxableYear: number,
 ): Promise<AnnualCertificatesVsSalesReconciliation> {
-  const [certificates, salesRows, startingFigures] = await Promise.all([
+  const [certificates, declared] = await Promise.all([
     prisma.form2307.findMany({ where: { clientId, taxableYear, deletedAt: null } }),
-    prisma.quarterlySales.findMany({ where: { clientId, taxableYear } }),
-    getStartingFigures(clientId, taxableYear),
+    getDeclaredIncome(clientId, taxableYear),
   ]);
 
   const certificatesTotalCents = certificates.reduce((sum, c) => sum + c.incomePaymentCents, 0);
   // Brief #5f §8 — a mid-year client's declared sales for the year include
-  // her starting gross sales (cumulative income minus its own
-  // non-operating slice) as well as the in-app quarters' own rows — this
-  // check only ever sees certificates entered in the app, so leaving the
-  // starting sales out would understate declared sales and could falsely
-  // flag a variance that isn't there.
-  const startingGrossOnlyCents =
-    startingFigures && startingFigures.latestOutsideReturn !== "NONE"
-      ? startingFigures.cumulativeIncomeCents - startingFigures.nonOperatingIncomeCents
-      : 0;
-  const declaredSalesTotalCents = startingGrossOnlyCents + salesRows.reduce((sum, r) => sum + r.grossSalesCents, 0);
+  // her starting gross sales as well as the in-app quarters' own rows (this
+  // check only sees certificates entered in the app, so leaving them out
+  // could falsely flag a variance). D158 — read from the one shared function
+  // the Income table also uses, so the two always show the same total.
+  const declaredSalesTotalCents = declared.grossSalesTotalCents;
   const varianceCents = certificatesTotalCents - declaredSalesTotalCents;
 
   return {

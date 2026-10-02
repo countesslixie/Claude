@@ -34,6 +34,7 @@ import { addCertificate } from "../lib/actions/form2307";
 import { saveStartingFigures } from "../lib/actions/startingFigures";
 import { uploadDocument } from "../lib/actions/documents";
 import { markStepDone, skipStep } from "../lib/actions/workflowSteps";
+import { RECEIVE_2307_SKIPPED_TEXT } from "../lib/workflow/receive2307";
 import { assembleAndComputeFiling } from "../lib/filingComputation";
 import { centsToPesos } from "../lib/money";
 import { manilaDateInputToJsDate } from "../lib/dates";
@@ -287,7 +288,7 @@ export async function seedScenarios(prisma: PrismaClient, actorId: string): Prom
    */
   async function skipReceive2307(filingId: string) {
     const step = await stepOf(filingId, "RECEIVE_2307");
-    const result = await skipStep(step.id, "No withholding agents — no Form 2307 expected for this client.");
+    const result = await skipStep(step.id, RECEIVE_2307_SKIPPED_TEXT);
     if (!result.ok) throw new Error(`Seed: could not skip step 2 — ${result.error}`);
   }
 

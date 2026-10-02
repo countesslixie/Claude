@@ -19,6 +19,7 @@ export function AdviceMessageCard({
   amountLabel,
   subject,
   body,
+  readOnly = false,
 }: {
   isDone: boolean;
   /** Manila-formatted date the message was saved, e.g. "Sep 27, 2026". Only meaningful when isDone. */
@@ -28,6 +29,8 @@ export function AdviceMessageCard({
   amountLabel: string;
   subject: string;
   body: string;
+  /** D156 — the filing is Complete: the saved text can be shown but not copied or typed in. */
+  readOnly?: boolean;
 }) {
   const [showMessage, setShowMessage] = useState(false);
 
@@ -36,7 +39,7 @@ export function AdviceMessageCard({
       <div className="flex flex-col gap-1">
         <p className="text-xs font-medium text-ink-secondary">Message to client</p>
         <p className="text-xs text-faint">Subject: {subject}</p>
-        <CopyTextarea key={body} defaultValue={body} rows={8} />
+        <CopyTextarea key={body} defaultValue={body} rows={8} readOnly={readOnly} hideCopy={readOnly} />
       </div>
     );
   }
@@ -57,7 +60,7 @@ export function AdviceMessageCard({
       {showMessage && (
         <div className="flex flex-col gap-1">
           <p className="text-xs text-faint">Subject: {subject}</p>
-          <CopyTextarea defaultValue={body} rows={8} readOnly />
+          <CopyTextarea defaultValue={body} rows={8} readOnly hideCopy={readOnly} />
         </div>
       )}
     </div>

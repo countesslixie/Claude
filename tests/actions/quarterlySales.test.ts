@@ -248,7 +248,7 @@ describe("saveQuarterlySales", () => {
         orderBy: { at: "desc" },
       });
       const before = JSON.parse(logEntry?.beforeJson as string);
-      expect(before).toMatchObject({ skippedReason: "No 2307s expected this quarter." });
+      expect(before).toMatchObject({ skippedReason: "No Form 2307 received from this client." });
     });
 
     it("a draft save of a previously-final step 1 also un-skips step 2", async () => {

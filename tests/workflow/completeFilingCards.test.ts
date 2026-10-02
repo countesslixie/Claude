@@ -7,6 +7,9 @@ import { FileGroupDocStepCard } from "@/components/file-group-doc-step-card";
 import { ClientPackageStepCard } from "@/components/client-package-step-card";
 import { RecordSalesStepCard } from "@/components/record-sales-step-card";
 import { MakePaymentStepCard } from "@/components/make-payment-step-card";
+import { AdviceMessageCard } from "@/components/advice-message-card";
+import { EmailDatStepCard } from "@/components/email-dat-step-card";
+import { RECEIVE_2307_SKIPPED_TEXT } from "@/lib/workflow/receive2307";
 
 const render = (component: unknown, props: Record<string, unknown>) =>
   renderToStaticMarkup(createElement(component as never, props as never, null));
@@ -88,5 +91,44 @@ describe("D153 — a Complete filing's cards carry no control that changes anyth
     expect(html).not.toContain("Edit");
     expect(render(MakePaymentStepCard, { ...pay, locked: false })).toContain("Edit");
 
+  });
+
+  it("D156: a Complete filing's step 4, 12 and 16 texts have no Copy button and cannot be typed in; in-progress ones keep Copy", () => {
+    const advice = { isDone: true, savedAtLabel: "Oct 3, 2026", isOverpayment: false, amountLabel: "₱1.00", subject: "S", body: "B" };
+    const shown = (html: string) => html.replace(/Show message|Hide message/g, "");
+    expect(render(AdviceMessageCard, { ...advice, readOnly: true })).toContain("Show message");
+    expect(shown(render(AdviceMessageCard, { ...advice, readOnly: true }))).not.toContain("Copy");
+    // the in-progress live preview keeps its Copy and stays editable
+    const live = render(AdviceMessageCard, { ...advice, isDone: false });
+    expect(live).toContain("Copy");
+    expect(live).not.toMatch(/readonly/i);
+    expect(render(AdviceMessageCard, { ...advice, isDone: false, readOnly: true })).not.toContain("Copy");
+
+    const pkg = {
+      stepId: "s16", clientId: "c", sequence: 16, title: "Email package", status: "PENDING", lockedMessage: null, to: "a@b.c",
+      subject: "s", body: "b", hasSavedEmail: false, doneDateLabel: null, savedAtLabel: null, skippedReason: null, downloadHref: "/d",
+    };
+    expect(render(ClientPackageStepCard, pkg)).toContain("Copy");
+    const ro = render(ClientPackageStepCard, { ...pkg, readOnly: true });
+    expect(ro).not.toContain("Copy");
+    expect(ro).toMatch(/readonly/i);
+
+    const dat = { stepId: "s12", clientId: "c", sequence: 12, title: "Email DAT", status: "PENDING", lockedMessage: null, to: "t", subject: "s", body: "b", rdoMissing: false, datFile: null, savedAtLabel: null };
+    expect(render(EmailDatStepCard, dat)).toContain("Copy");
+    expect(render(EmailDatStepCard, { ...dat, readOnly: true })).not.toContain("Copy");
+  });
+
+  it("D157: a skipped step 2 reads exactly the one wording, whatever reason an older row stored", () => {
+    const html = render(Receive2307StepCard, {
+      stepId: "s2", sequence: 2, title: "Receive Form 2307 from client", status: "SKIPPED",
+      skippedReason: "No withholding agents — no Form 2307 expected for this client.", certificates: [], allReceived: false, locked: false,
+      addCertificateAction: async () => ({}), toggleAllReceivedAction: async () => {}, defaultPeriodFrom: "", defaultPeriodTo: "", payors: [], atcCodes: [],
+      onSaveNewPayor: async () => ({ ok: false, error: "" }), onFillPayorDetail: async () => ({ ok: false, error: "" }),
+    });
+    expect(RECEIVE_2307_SKIPPED_TEXT).toBe("No Form 2307 received from this client.");
+    expect(html).toContain("No Form 2307 received from this client.");
+    expect(html).not.toContain("No withholding agents");
+    expect(html).not.toContain("Skipped:");
+    expect(html).not.toContain("Skip reason");
   });
 });

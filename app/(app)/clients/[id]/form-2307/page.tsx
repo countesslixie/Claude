@@ -8,8 +8,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { centsToPesos, bpsToPercentLabel } from "@/lib/money";
 import { currentTaxableYearManila } from "@/lib/dates";
 import { getAnnualCertificatesVsSalesReconciliation } from "@/lib/reconciliation";
-import { ALL_PERIODS, periodToQuarters } from "@/lib/tax/periods";
-import type { Period } from "@/lib/tax/types";
+import { loadRegisterRows } from "@/lib/form2307Register";
 
 const STATUS_TONE: Record<string, "pending" | "progress" | "waiting" | "overdue" | "done"> = {
   RECEIVED: "pending",
@@ -20,121 +19,100 @@ const STATUS_TONE: Record<string, "pending" | "progress" | "waiting" | "overdue"
   VALIDATED: "done",
 };
 
+/**
+ * D160 — the Form 2307 register: one year at a time (opens on the current
+ * Manila year), every column centred, Period first (the period of the filing
+ * the certificate was entered under), in chronological order, with each
+ * certificate's current scan to download and a Download all zip.
+ */
 export default async function Form2307RegisterPage({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ year?: string; period?: string }>;
+  searchParams: Promise<{ year?: string }>;
 }) {
   const { id } = await params;
-  const { year, period: periodParam } = await searchParams;
+  const { year } = await searchParams;
 
   const client = await prisma.client.findUnique({ where: { id } });
   if (!client) notFound();
 
-  const taxableYear = year ? Number(year) : currentTaxableYearManila();
-  // D105 (brief #5r) — opens on the whole year ("All periods"), not Q1, so a
-  // client whose certificates are all on Q3 doesn't open on an empty table.
-  const selection: Period | "ALL" = ALL_PERIODS.includes(periodParam as Period) ? (periodParam as Period) : "ALL";
-  const period: Period = selection === "ALL" ? "ANNUAL" : selection; // the whole year's certificates are the same set as Annual's
-  const quarters = periodToQuarters(period);
-
-  const certificates = await prisma.form2307.findMany({
-    where: { clientId: id, taxableYear, quarterCovered: { in: [...quarters] }, deletedAt: null },
-    include: { claimedOnFiling: { select: { id: true, period: true } } },
-    orderBy: [{ payorName: "asc" }, { payorTin: "asc" }],
-  });
-
+  const taxableYear = year && Number.isInteger(Number(year)) ? Number(year) : currentTaxableYearManila();
+  const rows = await loadRegisterRows(id, taxableYear);
+  const hasScans = rows.some((r) => r.scan);
   const reconciliation = await getAnnualCertificatesVsSalesReconciliation(id, taxableYear);
 
   return (
     <div className="mx-auto max-w-5xl">
       <ClientStickyBar headerId="client-page-header" clientId={id} name={client.registeredName} tin={client.tin} />
-      <div id="client-page-header" className="mb-4 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-ink">
-            Form 2307 register — {client.registeredName}
-          </h1>
-          <p className="text-sm text-faint">
-            Read-only. Certificates are entered under step 2 of the filing they belong to —
-            open a filing and go to &quot;Receive Form 2307&quot; to add or remove one. A 2307 is a credit
-            record — what one payor paid and withheld. It never contributes to gross sales; declared
-            income is entered separately on the{" "}
-            <Link href={`/clients/${id}/income`} className="underline">
-              income page
-            </Link>
-            .
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Link href={`/clients/${id}/sawt-worksheet?year=${taxableYear}&period=${period}`}>
-            <Button variant="secondary">Keying worksheet</Button>
+      <div id="client-page-header" className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <h1 className="text-2xl font-semibold text-ink">Form 2307 register — {client.registeredName}</h1>
+        <div className="flex flex-wrap gap-2">
+          {hasScans && (
+            <a href={`/api/clients/${id}/form-2307-scans?year=${taxableYear}`}>
+              <Button variant="secondary" size="sm">
+                Download all
+              </Button>
+            </a>
+          )}
+          <Link href={`/clients/${id}`}>
+            <Button variant="secondary" size="sm">
+              Back to client
+            </Button>
           </Link>
         </div>
       </div>
 
       <form className="mb-4 flex items-center gap-2" method="get">
         <label className="text-sm text-ink-secondary">Year</label>
-        <input
-          type="number"
-          name="year"
-          defaultValue={taxableYear}
-          className="h-8 w-24 rounded-md border border-line px-2 text-sm"
-        />
-        <label className="text-sm text-ink-secondary">Period</label>
-        <select name="period" defaultValue={selection} className="h-8 rounded-md border border-line px-2 text-sm">
-          <option value="ALL">All periods</option>
-          {ALL_PERIODS.map((p) => (
-            <option key={p} value={p}>
-              {p === "ANNUAL" ? "Annual" : p}
-            </option>
-          ))}
-        </select>
+        <input type="number" name="year" defaultValue={taxableYear} className="h-8 w-24 rounded-md border border-line px-2 text-sm" />
         <Button type="submit" variant="secondary" size="sm">
-          Filter
+          Go
         </Button>
       </form>
 
       <div className="overflow-x-auto rounded-lg border border-line bg-surface">
-        <table className="data-table">
+        <table className="data-table data-table-centered">
           <thead>
             <tr>
+              <th>Period</th>
               <th>Payor</th>
               <th>ATC</th>
-              <th className="text-right">Income payment</th>
-              <th className="text-right">Tax withheld</th>
+              <th>Income payment</th>
+              <th>Tax withheld</th>
               <th>Rate</th>
               <th>Status</th>
-              <th>Entered under</th>
+              <th>Scan</th>
             </tr>
           </thead>
           <tbody>
-            {certificates.map((c) => (
+            {rows.map((c) => (
               <tr key={c.id}>
+                <td>{c.periodLabel}</td>
                 <td>{c.payorName}</td>
                 <td className="font-mono text-xs">{c.atcCode || "—"}</td>
-                <td className="text-right tabular-nums">{centsToPesos(c.incomePaymentCents, { withSymbol: true })}</td>
-                <td className="text-right tabular-nums">{centsToPesos(c.taxWithheldCents, { withSymbol: true })}</td>
+                <td className="tabular-nums">{centsToPesos(c.incomePaymentCents, { withSymbol: true })}</td>
+                <td className="tabular-nums">{centsToPesos(c.taxWithheldCents, { withSymbol: true })}</td>
                 <td>{bpsToPercentLabel(c.withholdingRateBps)}</td>
                 <td>
                   <StatusBadge tone={STATUS_TONE[c.status] ?? "pending"}>{form2307StatusLabel(c.status)}</StatusBadge>
                 </td>
                 <td>
-                  {c.claimedOnFiling ? (
-                    <Link href={`/clients/${id}/filings/${c.claimedOnFiling.id}`} className="underline">
-                      {c.claimedOnFiling.period}
-                    </Link>
+                  {c.scan ? (
+                    <a href={`/api/documents/${c.scan.id}/download`} className="text-sm underline">
+                      Download
+                    </a>
                   ) : (
                     "—"
                   )}
                 </td>
               </tr>
             ))}
-            {certificates.length === 0 && (
+            {rows.length === 0 && (
               <tr>
-                <td colSpan={7} className="py-8 text-center text-sm text-faint">
-                  No Form 2307 certificates for this period.
+                <td colSpan={8} className="py-8 text-center text-sm text-faint">
+                  No Form 2307 certificates for this year.
                 </td>
               </tr>
             )}
@@ -144,11 +122,6 @@ export default async function Form2307RegisterPage({
 
       <div className="mt-6 rounded-lg border border-line bg-surface p-4">
         <h2 className="text-sm font-semibold text-ink">Certificates vs. declared sales — TY{taxableYear}</h2>
-        <p className="mt-1 text-xs text-faint">
-          Runs over the whole taxable year, not per quarter — a certificate is credited to whichever
-          period is open when it arrives, so a per-quarter comparison would flag a variance almost every
-          time.
-        </p>
         <p className="mt-3 text-sm text-ink-secondary">
           Certificates for TY{taxableYear} total{" "}
           <span className="font-medium">{centsToPesos(reconciliation.certificatesTotalCents, { withSymbol: true })}</span>{" "}

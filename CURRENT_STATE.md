@@ -1,13 +1,13 @@
 # CURRENT_STATE.md
 
 *Living snapshot. Replace stale content rather than appending.*
-*Last reconciled: 2026-10-03 — brief #6c (D151–D154), on top of brief #6b (D143–D150) and brief #6a's documentation pass (D115–D142, checked at brief #5z's tip `e761a74`). **578 tests in 61 files pass, the build passes, and typecheck is clean once Next's route types exist** — see Known limitations for the one-line `LayoutProps` catch. Per-brief history lives in DECISIONS.md, not here.*
+*Last reconciled: 2026-10-03 — brief #6d (D155–D161), on top of brief #6c (D151–D154) and brief #6b (D143–D150) and brief #6a's documentation pass (D115–D142, checked at brief #5z's tip `e761a74`). **588 tests in 63 files pass, the build passes, and typecheck is clean once Next's route types exist** — see Known limitations for the one-line `LayoutProps` catch. Per-brief history lives in DECISIONS.md, not here.*
 
 ---
 
 ## Where the code is
 
-**Working branch: `claude/serene-hypatia-rs67pw`.** Tip at the start of brief #6c: `93f56c2` (brief #6b), on top of brief #6a's documentation-only commit (`b378c1e`) and brief #5z (`e761a74`). Briefs #5a through #5z and #6a all landed on this one branch — no new branch since it was cut for brief #5a.
+**Working branch: `claude/serene-hypatia-rs67pw`.** Tip at the start of brief #6d: `548b5f1` (brief #6c), on top of brief #6b (`93f56c2`) and brief #6a's documentation-only commit (`b378c1e`) and brief #5z (`e761a74`). Briefs #5a through #5z and #6a all landed on this one branch — no new branch since it was cut for brief #5a.
 
 Standing rules:
 - `git fetch origin <branch>` first, every pass; a local checkout has been behind the remote more than once (briefs #5g, #5n).
@@ -90,6 +90,9 @@ The New/Edit client form (one component, `components/client-form.tsx`) reads: Re
 
 ### The client page (D154, brief #6c)
 After the header row (name, Active pill, Back to list · Income · Form 2307s · Payors · Edit — unchanged), two same-height cards side by side, stacked on a narrow window (`components/client-details-cards.tsx`): **Registration** (TIN · Branch code · RDO code; Trade name; Registered address; Birthday · Client code) and **Contact & business** (Email · Mobile phone number; Line of business · PSIC code; Engaged since · Notes). Then Taxable years and Filings, unchanged. No Books & compliance card and no taxpayer type, civil status, default WHT rate or revenue recognition (columns kept). Full-month dates, a muted "—" for empty values, TIN and client code monospace. Engaged since, Active and Notes stay at the bottom of the form (D151).
+
+### The client's Income, Form 2307s and Payors pages (D158–D161, brief #6d)
+No grey instructional text on any of the three. **Income** (client page button) is a view-only table — Previous quarters (one row, from the starting figures, when they name an outside return) · one row per in-app quarter with a status (Not yet entered, Draft, Saved, Filed) · Total — every column centred, nothing clickable; its total and the Form 2307 page's certificates-vs-sales check come from one function, so they agree (Gloria Tolentino's ₱300,000 was only her Q3; with her ₱300,000 of earlier quarters it is ₱600,000 on both). Step 1's "Go to income entry" opens the unchanged entry screen (`?filingId=`), whose "Other quarters" table now shows one "Previous quarters" row. **Form 2307 register:** Year filter only (opens on the current year), Download all (zip of current scans), no Keying worksheet button, columns PERIOD · PAYOR · ATC · INCOME PAYMENT · TAX WITHHELD · RATE · STATUS · SCAN centred and in chronological order. **Payors:** Add payor button opens the form above the table; Save or Cancel closes it. A Complete filing also shows no Copy buttons (D156), and a skipped step 2 reads "No Form 2307 received from this client." (D157). The client page's two cards are 50/50 and the page no longer scrolls sideways (D155).
 
 ### A Complete filing is locked (D153, brief #6c)
 A filing whose status is Complete shows no control that changes anything (no Undo skip, Skip, Mark done, upload/Replace/Remove, Add certificate, "all received" tick, payment or item 61 edit, "Go to income entry"), and the server refuses every such action with "This filing is complete and locked." No Unlock. Opening documents, Show/Hide, Collapse/Expand and the links still work. The amber amendment alert's Dismiss stays. In the sample data the Complete filings are **Villamor Q1 and Q2** (Rosario Garcia's Q3 is Waiting on BIR with step 16 unsent until the TRRC is saved).
@@ -234,7 +237,8 @@ Annual filings for A, B, D, E, F, G, H exist, Not started, due April 2027; the b
 
 ## Known limitations
 
-- **The client page scrolls sideways on a very narrow window (about 420 px)** because of the header row's five buttons (left alone on purpose in brief #6c; she is walking those buttons next). The two cards stack and fit.
+- **The SAWT keying worksheet is no longer linked from anywhere in the app (D160)**; the page (`/clients/[id]/sawt-worksheet`) and its xlsx export still work by URL.
+- **The step 1 entry screen's grey "Declared gross sales for TY…" subtitle still shows only the quarters entered in the app** (it leaves out earlier quarters from the starting figures); left alone because D159 changes nothing else on that screen.
 - **`generateSawtBatch` is not covered by the Complete lock (D153):** it writes the batch marker on certificates, including ones claimed on a Complete filing, and the worksheet needs that. Her call whether to lock it.
 - **`Client.defaultWithholdingRateBps` has no reader left** (D152); the column stays and the seed still fills it.
 

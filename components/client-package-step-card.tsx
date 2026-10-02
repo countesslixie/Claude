@@ -52,7 +52,7 @@ export function ClientPackageStepCard({
   savedAtLabel: string | null;
   skippedReason: string | null;
   downloadHref: string;
-  /** D153 — the filing is Complete: no Undo skip (the saved email can still be shown). */
+  /** D153/D156 — the filing is Complete: no Undo skip, no Copy, the text is read-only (the saved email can still be shown). */
   readOnly?: boolean;
 }) {
   const [isPending, startTransition] = useTransition();
@@ -86,9 +86,11 @@ export function ClientPackageStepCard({
     <div className="flex items-center gap-2 text-xs">
       <span className="w-14 flex-shrink-0 text-faint">{label}</span>
       <span className="min-w-0 flex-1 break-all text-ink">{value}</span>
-      <button type="button" onClick={() => copy(key, value)} className="flex-shrink-0 text-faint underline hover:text-ink">
-        {copied === key ? "Copied" : "Copy"}
-      </button>
+      {!readOnly && (
+        <button type="button" onClick={() => copy(key, value)} className="flex-shrink-0 text-faint underline hover:text-ink">
+          {copied === key ? "Copied" : "Copy"}
+        </button>
+      )}
     </div>
   );
 
@@ -127,7 +129,7 @@ export function ClientPackageStepCard({
             {toLine}
             {line("subject", "Subject", subject)}
           </div>
-          <CopyTextarea key={body} defaultValue={body} rows={14} />
+          <CopyTextarea key={body} defaultValue={body} rows={14} readOnly={readOnly} hideCopy={readOnly} />
           <div>
             <Button size="sm" disabled={isPending} onClick={() => run(() => markStepDone(stepId))}>
               Mark done
@@ -162,7 +164,7 @@ export function ClientPackageStepCard({
           {show && (
             <div className="flex flex-col gap-1">
               {toLine}
-              <CopyTextarea defaultValue={body} rows={14} readOnly />
+              <CopyTextarea defaultValue={body} rows={14} readOnly hideCopy={readOnly} />
             </div>
           )}
         </div>

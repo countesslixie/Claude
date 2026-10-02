@@ -11,6 +11,8 @@ export type PayorFormState = {
   error?: string;
   fieldErrors?: Record<string, string[]>;
   values?: Record<string, string>;
+  /** D161 — set by createPayor on success, so the Add form can close itself. */
+  saved?: boolean;
 };
 
 export interface SavedPayor {
@@ -84,7 +86,7 @@ export async function createPayor(
   await logActivity({ entityType: "Payor", entityId: payor.id, action: "CREATE", after: payor, actorId });
 
   revalidatePath(`/clients/${clientId}/payors`);
-  return {};
+  return { saved: true };
 }
 
 export async function updatePayor(

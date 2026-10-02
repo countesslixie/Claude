@@ -2,9 +2,8 @@ import Link from "next/link";
 import { ClientStickyBar } from "@/components/client-sticky-bar";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/status-badge";
-import { PayorForm } from "@/components/payor-form";
+import { PayorsHeader } from "@/components/payors-header";
 import { createPayor } from "@/lib/actions/payors";
 import { bpsToPercentLabel } from "@/lib/money";
 
@@ -35,31 +34,10 @@ export default async function PayorsPage({
   return (
     <div className="mx-auto max-w-3xl">
       <ClientStickyBar headerId="client-page-header" clientId={id} name={client.registeredName} tin={client.tin} />
-      <div id="client-page-header" className="mb-4 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-ink">
-            Payors — {client.registeredName}
-          </h1>
-          <p className="mt-1 text-sm text-faint">
-            One shared list of names and details for this client — a company entered on a step 1 row is
-            usually the same one that issues a 2307 in step 2. Picking a saved entry fills the details on
-            that one row or certificate; nothing here affects income or credit amounts.
-          </p>
-        </div>
-        <Link href={`/clients/${id}`}>
-          <Button variant="secondary" size="sm">
-            Back to client
-          </Button>
-        </Link>
-      </div>
-
-      <div className="mb-4 rounded-lg border border-line bg-surface p-4">
-        <h2 className="mb-2 text-sm font-semibold text-ink">Add</h2>
-        <PayorForm action={boundCreate} atcCodes={atcCodes} submitLabel="Add" resetOnSuccess />
-      </div>
+      <PayorsHeader title={`Payors — ${client.registeredName}`} clientId={id} atcCodes={atcCodes} action={boundCreate} />
 
       <div className="overflow-x-auto rounded-lg border border-line bg-surface">
-        <table className="data-table">
+        <table className="data-table data-table-centered">
           <thead>
             <tr>
               <th>Name</th>

@@ -2,7 +2,7 @@
 
 *Append new decisions. Mark superseded ones rather than deleting them.*
 *Dates during the build are approximate — most work happened across August 2026.*
-*Last reconciled: 2026-10-03 — brief #6c (D151–D154), on top of the 2026-10-02 brief #6a documentation pass (checked D115–D142 against the tree at brief #5z's tip `e761a74`; supersession markers added on D27, D43, D58, D60, D67, D70, D72, D74, D79, D81, D84, D87, D91, D93, D101, D115, D119, D121, D126 and D136), on top of brief #5z (D140–D142), brief #5y (D135–D139), brief #5x (D131–D134), brief #5w (D121–D130), brief #5v (D115–D120); earlier passes: brief #5t (D110–D114), brief #5s (D106–D109), brief #5r (D100–D105), brief #5q (D95–D99, built; D97–D99 new), brief #5p (D94–D96, markers on D6, D17, D27, D70, D73, D76, D82, D92), brief #5o (D83-D93), brief #5n (D78-D82), brief #5m (D70-D77, six groups, BIR Confirmations and the Pay group built), brief #5l (D68-D69), brief #5k (D64-D67), brief #5j (D60-D63), brief #5i, brief #5h (D49-D59, briefs #5d-#5g), brief #5c, brief #5b (D48), brief #5a (D43-D47) and the documentation pass (brief #4f) through briefs #4c-#4e.*
+*Last reconciled: 2026-10-03 — brief #6d (D155–D161), brief #6c (D151–D154), on top of the 2026-10-02 brief #6a documentation pass (checked D115–D142 against the tree at brief #5z's tip `e761a74`; supersession markers added on D27, D43, D58, D60, D67, D70, D72, D74, D79, D81, D84, D87, D91, D93, D101, D115, D119, D121, D126 and D136), on top of brief #5z (D140–D142), brief #5y (D135–D139), brief #5x (D131–D134), brief #5w (D121–D130), brief #5v (D115–D120); earlier passes: brief #5t (D110–D114), brief #5s (D106–D109), brief #5r (D100–D105), brief #5q (D95–D99, built; D97–D99 new), brief #5p (D94–D96, markers on D6, D17, D27, D70, D73, D76, D82, D92), brief #5o (D83-D93), brief #5n (D78-D82), brief #5m (D70-D77, six groups, BIR Confirmations and the Pay group built), brief #5l (D68-D69), brief #5k (D64-D67), brief #5j (D60-D63), brief #5i, brief #5h (D49-D59, briefs #5d-#5g), brief #5c, brief #5b (D48), brief #5a (D43-D47) and the documentation pass (brief #4f) through briefs #4c-#4e.*
 
 ---
 
@@ -1193,4 +1193,44 @@ Removed from the page: the whole Books & compliance card, Taxpayer type, Civil s
 
 ---
 
-**Documentation reconciled through brief #6c** (brief #6a, then #6c's own additions D151–D154; earlier passes: #5u, #5m, #5o's light additions D83–D93, #5p) — see the "Last reconciled" line at the top of this file, CURRENT_STATE.md, PROJECT_MASTER.md and CLAUDE.md.
+## 2026-10-03 — brief #6d (the client's Income, Form 2307s and Payors pages; Complete-filing and client-page fixes)
+
+**Screen-wide rule for the three sub-pages (her decision):** no grey instructional text — headings, labels, figures and status pills only. The explanatory sentences under the headings and in the cards are gone from Income, the Form 2307 register and Payors.
+
+**D155 — The client page: even cards, no sideways scroll** *(her decision)*
+
+Registration and Contact & business are equal width (50/50, was 3:2), same height. At about 420 px the page must not scroll sideways: the header's five buttons wrap onto a second line (the buttons themselves are unchanged), and the same wrapping was needed on the Taxable years and Filings card headers (their "New tax year" and "Generate" controls), with the two tables scrolling inside their cards. Measured in a browser at 420 px: the page's scroll width equals the window's.
+
+**D156 — A Complete filing: no Copy, text can't be typed in** *(her decision; extends D153)*
+
+On a Complete filing every Copy button is gone — step 4's message, step 16's email, step 12's email, and each "To"/"Subject" line's Copy — and the saved text boxes are read-only. Show/Hide message and Show/Hide email stay. In-progress filings are unchanged (Copy and the editable live preview stay). The saved texts were already read-only; the Copy buttons were what remained.
+
+**D157 — Step 2's skipped line** *(her decision)*
+
+A skipped step 2 reads exactly "No Form 2307 received from this client." (`RECEIVE_2307_SKIPPED_TEXT`, `lib/workflow/receive2307.ts`). *How the reason was stored:* a mix — typed by her in the Skip reason box on step 2's card; fixed long text from the seed ("No withholding agents — no Form 2307 expected for this client."); and, before D152, the same long text written by generation. *Now:* step 2's card has no Skip reason box, Skip is always available, `skipStep` ignores any text for step 2 and stores the fixed wording (so a direct call with an empty reason works too), the seed passes the constant, and the card shows the constant whatever an older row stored — **no backfill; old rows keep their text in the database, only the display changed.** Other steps' reasons are untouched (no other step can be skipped in practice). Two older tests that encoded the typed-reason rule for step 2 were updated.
+
+**D158 — Client → Income is a read-only table** *(her decision)*
+
+*Routing, verified in the tree:* one route, `/clients/[id]/income`. With `?filingId=` (step 1's "Go to income entry") it is the single-quarter entry screen — unchanged. Without it, it used to show an editable card for every quarter; it is now the view-only table (heading "Income — [name]", Year box with Go, Back to client): PERIOD · GROSS SALES · NON-OPERATING INCOME · TOTAL · STATUS, every column centred, nothing clickable.
+
+Rows: **Previous quarters** (one row, only when the year's starting figures name an outside return; gross = cumulative income (item 51) minus non-operating, `previousQuartersFromStartingFigures` in `lib/declaredIncome.ts` — the same `cumulative − non-operating` derivation `lib/filingComputation.ts` and the old reconciliation used, not a new formula; status pill "Filed outside the app"), one row per in-app quarter labelled "Q3 2026" (Q4 is the Annual's), and a Total row. *Statuses used:* **Not yet entered** (no saved row, grey), **Draft** (a row whose step 1 isn't Done, amber), **Saved** (step 1 Done, purple), **Filed** (that quarter's filing has step 5 Done — the Annual's for Q4, green). A missing figure is "—"; ₱0 of non-operating income is shown "—"; "No sales this quarter" is a real ₱0.00. The grey "Declared gross sales for TY…" subtitle is gone.
+
+*The ₱300,000 vs ₱600,000 mismatch (Gloria Tolentino):* the old Income page's subtitle summed only the quarters entered in the app (her Q3, ₱300,000). Her Form 2307 page's check, since #5f, also added the starting figures' earlier quarters (₱300,000 of Q1+Q2 filed outside the app) — ₱600,000. Both were "right" for what each summed; they just summed different things. Now both read `getDeclaredIncome` (`lib/declaredIncome.ts`), which `lib/reconciliation.ts` calls — the Income Total row and the check show the same declared gross total (₱600,000 for her). The reconciliation's rule (D37/D49: unrounded figures, certificates vs declared gross) and every tax computation are untouched; `filingComputation.ts` was not changed (it has its own copy of the same derivation, left alone to keep this brief away from the computation).
+
+*Readers of the figures this shows (all unchanged except reconciliation's source):* `lib/filingComputation.ts` (computation), `lib/vatThreshold.ts` (the 3M alert), `lib/reconciliation.ts` (now via the shared function), the starting-figures form and page. A before/after dump of every sample filing's snapshot and live computation is identical.
+
+**D159 — Step 1's entry screen: Previous quarters** *(her decision)*
+
+Its "Other quarters this year — read-only" table shows the outside quarters as one row, "Previous quarters" · Filed outside the app, instead of separate Q1/Q2 rows. Nothing else on that screen changes (including its grey subtitle, which still sums only the in-app quarters — reported in Known limitations).
+
+**D160 — The Form 2307 register** *(her decision)*
+
+Header "Form 2307 register — [name]" with Download all and Back to client. **The Keying worksheet button is removed** (only that button). *Other links to the worksheet:* none in the app — the register's button was the only link to the page; the worksheet page (`/clients/[id]/sawt-worksheet`) and its xlsx download (`/api/clients/[id]/sawt-worksheet`, linked from inside that page) are left in place, reachable by URL. Filter: Year only, with Go (the Period filter is gone); the page opens on the current Manila year (2026 today). Table, centred, in order: PERIOD · PAYOR · ATC · INCOME PAYMENT · TAX WITHHELD · RATE · STATUS · SCAN. PERIOD (first column) is the period of the filing the certificate was entered under, "Q3 2026" / "Annual 2026", plain text. SCAN is a Download link to the certificate's current scan (the newest non-deleted document; a replaced one is never offered). Order: Q1 → Q2 → Q3 → Annual, then the day entered. **Download all** (`/api/clients/[id]/form-2307-scans?year=`, hidden when the year has no scans): one flat zip of the current scans, named "[Name] - Form 2307s [year].zip", entries under their saved file names with " (2)" before the extension on a collision, as the package zip does (D103). The certificates-vs-declared-sales card keeps its heading and two result lines, follows the Year shown, and reads the total from D158's shared function.
+
+**D161 — The Payors page** *(her decision)*
+
+Header "Payors — [name]" with Add payor (primary) and Back to client on the right. The Add form is hidden until Add payor is clicked; it opens above the table with the same fields, **Save** adds the payor and closes the form, **Cancel** closes it unsaved. The checkbox label "Active — offered on the picker" is now "Active" (on the Add and Edit forms; the ATC code form's own label is another screen and is unchanged). Table centred; Edit works as before; the intro paragraph is gone. `createPayor` now returns `saved: true` so the form can close itself.
+
+---
+
+**Documentation reconciled through brief #6d** (brief #6a, then #6c's D151–D154 and #6d's D155–D161; earlier passes: #5u, #5m, #5o's light additions D83–D93, #5p) — see the "Last reconciled" line at the top of this file, CURRENT_STATE.md, PROJECT_MASTER.md and CLAUDE.md.

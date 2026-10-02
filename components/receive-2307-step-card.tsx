@@ -8,6 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { CertificateForm } from "@/components/certificate-form";
 import { deleteCertificate, type CertificateFormState } from "@/lib/actions/form2307";
 import { skipStep, unskipStep } from "@/lib/actions/workflowSteps";
+import { RECEIVE_2307_SKIPPED_TEXT } from "@/lib/workflow/receive2307";
 import { uploadDocument } from "@/lib/actions/documents";
 import { fileTooLargeMessage } from "@/lib/upload";
 import { centsToPesos, bpsToPercentLabel } from "@/lib/money";
@@ -63,7 +64,6 @@ export function Receive2307StepCard({
   sequence,
   title,
   status,
-  skippedReason,
   certificates,
   allReceived,
   locked,
@@ -81,7 +81,6 @@ export function Receive2307StepCard({
   sequence: number;
   title: string;
   status: string;
-  skippedReason: string | null;
   certificates: CertificateRow[];
   allReceived: boolean;
   locked: boolean;
@@ -108,7 +107,6 @@ export function Receive2307StepCard({
 }) {
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
-  const [skipReason, setSkipReason] = useState("");
   const [showAddForm, setShowAddForm] = useState(false);
   const [openMore, setOpenMore] = useState<Set<string>>(new Set());
   const [openScanUpload, setOpenScanUpload] = useState<Set<string>>(new Set());
@@ -201,7 +199,7 @@ export function Receive2307StepCard({
 
       {status === "SKIPPED" && (
         <div className="mt-1 flex flex-wrap items-center gap-2">
-          {skippedReason && <p className="text-xs text-faint">Skipped: {skippedReason}</p>}
+          <p className="text-xs text-faint">{RECEIVE_2307_SKIPPED_TEXT}</p>
           {!readOnly && (
             <Button size="sm" variant="secondary" disabled={isPending} onClick={() => run(() => unskipStep(stepId))}>
               Undo skip
@@ -406,18 +404,7 @@ export function Receive2307StepCard({
       {/* Brief #4d — Skip only makes sense before any certificate is entered; once one exists, "All certificates received" replaces it. */}
       {!locked && !isResolved && certificates.length === 0 && (
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
-          <Input
-            placeholder="Skip reason"
-            value={skipReason}
-            onChange={(e) => setSkipReason(e.target.value)}
-            className="h-8 w-40 text-xs"
-          />
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={isPending || !skipReason.trim()}
-            onClick={() => run(() => skipStep(stepId, skipReason))}
-          >
+          <Button size="sm" variant="ghost" disabled={isPending} onClick={() => run(() => skipStep(stepId, RECEIVE_2307_SKIPPED_TEXT))}>
             Skip
           </Button>
         </div>

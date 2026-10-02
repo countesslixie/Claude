@@ -21,6 +21,7 @@ import {
   stepLockReason,
 } from "@/lib/workflow/groups";
 import { loadFilingOrderBlockReason } from "@/lib/workflow/filingOrderData";
+import { RECEIVE_2307_SKIPPED_TEXT } from "@/lib/workflow/receive2307";
 import { FILING_LOCKED_MESSAGE, filingLockedReason, isFilingComplete } from "@/lib/workflow/filingLock";
 import { buildESubmissionEmail } from "@/lib/workflow/eSubmissionEmail";
 import { buildClientPackageEmailForFiling } from "@/lib/workflow/clientPackageEmailData";
@@ -723,10 +724,11 @@ export async function markStepWaitingExternal(stepId: string): Promise<StepActio
 
 /** A step may be SKIPPED only with a written reason — no silent skips (SPEC.md 7.2). */
 export async function skipStep(stepId: string, reason: string): Promise<StepActionResult> {
-  if (!reason.trim()) return { ok: false, error: "A reason is required to skip a step." };
-
   const step = await prisma.workflowStep.findUnique({ where: { id: stepId }, include: { filing: true } });
   if (!step) return { ok: false, error: "Step not found." };
+  // D157 — step 2's skip needs no typed reason: it always stores the one fixed wording.
+  if (step.stepCode === "RECEIVE_2307") reason = RECEIVE_2307_SKIPPED_TEXT;
+  if (!reason.trim()) return { ok: false, error: "A reason is required to skip a step." };
   // D153 — a Complete filing is read-only for good.
   if (isFilingComplete(step.filing)) return { ok: false, error: FILING_LOCKED_MESSAGE };
 

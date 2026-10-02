@@ -22,6 +22,8 @@ export function PayorForm({
   initialValues,
   submitLabel,
   resetOnSuccess,
+  onSaved,
+  onCancel,
 }: {
   action: (state: PayorFormState, formData: FormData) => Promise<PayorFormState>;
   atcCodes: SelectableAtcCode[];
@@ -29,6 +31,10 @@ export function PayorForm({
   submitLabel: string;
   /** True for the inline "add" form (clears back to blank after a successful save); false for the edit screen. */
   resetOnSuccess?: boolean;
+  /** D161 — the Add form closes itself after a successful save. */
+  onSaved?: () => void;
+  /** D161 — shows a Cancel button that closes the form without saving. */
+  onCancel?: () => void;
 }) {
   const [state, formAction, isPending] = useActionState<PayorFormState, FormData>(action, {
     values: initialValues,
@@ -41,6 +47,8 @@ export function PayorForm({
       formRef.current.reset();
       setUsualAtcCode("");
     }
+    if (state.saved) onSaved?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state, resetOnSuccess]);
 
   const v = (key: string) => state.values?.[key] ?? initialValues?.[key] ?? "";
@@ -85,13 +93,18 @@ export function PayorForm({
 
       <label className="flex items-center gap-1.5 text-sm text-ink-secondary">
         <Checkbox name="isActive" defaultChecked={activeDefault} />
-        Active — offered on the picker
+        Active
       </label>
 
-      <div>
+      <div className="flex items-center gap-2">
         <Button type="submit" size="sm" disabled={isPending}>
           {isPending ? "Saving…" : submitLabel}
         </Button>
+        {onCancel && (
+          <Button type="button" size="sm" variant="secondary" onClick={onCancel}>
+            Cancel
+          </Button>
+        )}
       </div>
     </form>
   );

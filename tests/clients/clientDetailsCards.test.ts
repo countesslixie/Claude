@@ -58,6 +58,6 @@ describe("client page cards (D154)", () => {
     expect(h).toMatch(/font-mono[^>]*>123456789</);
     expect(h).toMatch(/font-mono[^>]*>pangilinan-a</);
     expect(h).toContain("grid-cols-1");
-    expect(h).toContain("lg:grid-cols-[3fr_2fr]");
+    expect(h).toContain("lg:grid-cols-2");
   });
 });
