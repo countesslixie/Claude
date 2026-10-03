@@ -103,7 +103,7 @@ export default async function ClientDetailPage({
               </p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="data-table">
+                <table className="data-table data-table-centered">
                   <thead>
                     <tr>
                       <th>Year</th>
@@ -152,7 +152,7 @@ export default async function ClientDetailPage({
               <p className="text-sm text-faint">No filings yet.</p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="data-table">
+                <table className="data-table data-table-centered">
                   <thead>
                     <tr>
                       <th>Year</th>

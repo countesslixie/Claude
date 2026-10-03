@@ -20,8 +20,6 @@ export const atcCodeSchema = z.object({
     .string()
     .trim()
     .regex(/^\d+(\.\d{1,2})?$/, "Enter a non-negative percent, e.g. 5 or 5.00"),
-  payeeType: optionalText,
-  verifiedAgainstIssuance: z.boolean().default(false),
   isActive: z.boolean().default(true),
   notes: optionalText,
 });

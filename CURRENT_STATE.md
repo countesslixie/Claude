@@ -1,7 +1,7 @@
 # CURRENT_STATE.md
 
 *Living snapshot. Replace stale content rather than appending.*
-*Last reconciled: 2026-10-03 — brief #6d (D155–D161), on top of brief #6c (D151–D154) and brief #6b (D143–D150) and brief #6a's documentation pass (D115–D142, checked at brief #5z's tip `e761a74`). **588 tests in 63 files pass, the build passes, and typecheck is clean once Next's route types exist** — see Known limitations for the one-line `LayoutProps` catch. Per-brief history lives in DECISIONS.md, not here.*
+*Last reconciled: 2026-10-03 — brief #6e (D162–D165: centred client-page tables, the ATC list and form, no verified state), on top of brief #6d (D155–D161), on top of brief #6c (D151–D154) and brief #6b (D143–D150) and brief #6a's documentation pass (D115–D142, checked at brief #5z's tip `e761a74`). **592 tests in 64 files pass, the build passes, and typecheck is clean once Next's route types exist** — see Known limitations for the one-line `LayoutProps` catch. Per-brief history lives in DECISIONS.md, not here.*
 
 ---
 
@@ -221,7 +221,7 @@ Annual filings for A, B, D, E, F, G, H exist, Not started, due April 2027; the b
 
 ## Needs the bookkeeper's review
 
-1. **ATC codes** — only WI010 and WI011 seeded, both `verifiedAgainstIssuance: false`. Confirm at `/settings/atc-codes` (D43) before live use. **Each code now also carries the rate a certificate uses (D132) — there is no Rate field on the certificate form any more — so an unverified rate flows straight into the certificate register and the SAWT worksheet.**
+1. **ATC codes** — only WI010 and WI011 seeded. Checking them against the current BIR ATC list is her job, outside the app; the app no longer shows a verified/unverified state (D165). Confirm or correct them at `/settings/atc-codes` (D43) before live use. **Each code now also carries the rate a certificate uses (D132) — there is no Rate field on the certificate form any more — so a wrong rate flows straight into the certificate register and the SAWT worksheet.**
 2. **SAWT keying worksheet field order** — built, not yet checked against the actual Alphalist Data Entry Module.
 3. **The eSubmission address `esubmission@bir.gov.ph`** (`TaxRuleSet.eSubmissionEmail`, editable on the tax rule set screen) — confirm against BIR before live use (D87/D19).
 4. **Which clients are certificate clients and which declare only** — now also decides whether a filing has an eAFS group at all (D93).

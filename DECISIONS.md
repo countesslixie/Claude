@@ -1231,6 +1231,26 @@ Header "Form 2307 register — [name]" with Download all and Back to client. **T
 
 Header "Payors — [name]" with Add payor (primary) and Back to client on the right. The Add form is hidden until Add payor is clicked; it opens above the table with the same fields, **Save** adds the payor and closes the form, **Cancel** closes it unsaved. The checkbox label "Active — offered on the picker" is now "Active" (on the Add and Edit forms; the ATC code form's own label is another screen and is unchanged). Table centred; Edit works as before; the intro paragraph is gone. `createPayor` now returns `saved: true` so the form can close itself.
 
+**D162 — Client page: centred Taxable years and Filings tables** *(her decision, brief #6e)*
+
+Every column and heading of both tables is centred (the shared `data-table-centered` class, as on the Clients list, D149), including the "—" under Threshold breached, "Starting figures", "Edit" and "Open". The card headers, New tax year and Generate controls are unchanged, and #6d's narrow-window behaviour stands (the tables scroll inside their cards).
+
+**D163 — The ATC list** *(her decision, brief #6e)*
+
+The grey instructional text under the heading is gone; the button reads "New ATC"; the Payee type and Verified columns are removed, leaving Code · Description · Rate · Active · Edit, all centred.
+
+**D164 — The New/Edit ATC form** *(her decision, brief #6e)*
+
+Headings "New ATC" / "Edit ATC — [code]"; buttons "Create ATC" / "Save" plus a bordered Cancel that returns to the list without saving. The Payee type field is removed (corporations are not on the 8% option, so it is always Individual): `createAtcCode` writes `payeeType = "Individual"`, `updateAtcCode` never touches it, and the column stays. The checkbox reads "Active". Code, Rate (%), Description and Notes are unchanged. *Readers checked first:* nothing in `/lib/tax/`, the computation, the SAWT worksheet or any certificate reads `payeeType` or `verifiedAgainstIssuance`; no certificate's saved rate and no computed figure changed (snapshots and live computations dumped before and after for every sample filing: identical).
+
+**D165 — Verification is no longer tracked in the app** *(her decision, brief #6e)*
+
+The "Verified against a BIR issuance" checkbox and its amber "Unverified — …" reminder are gone, and so is every on-screen badge that came from `verifiedAgainstIssuance`: the ATC list's Verified column and the "(unverified)" suffix in the certificate/payor ATC picker (`components/atc-code-select.tsx`) — those were the only two; the computation sheet and dashboard never showed it. The column stays in the schema; `updateAtcCode` leaves it alone and new codes take the schema default. Checking a code against the current BIR ATC list is her job, outside the app. D19's "never invent a code or a rate; never seed one you haven't been given" is unchanged. *Left alone, not from this flag:* the certificate register's "— (unverified)" shown for an old certificate with no ATC code at all (`receive-2307-step-card.tsx`) — reported, not changed.
+
+**Step 1's entry screen (leftover from #6d):** the grey "Declared gross sales for TY…" subtitle is removed — it counted only in-app quarters and undercounted (D158); the read-only Income table holds the year's total.
+
 ---
+
+**Documentation reconciled through brief #6e** (brief #6e's D162–D165, then brief #6a, #6c's D151–D154 and #6d's D155–D161; earlier passes: #5u, #5m, #5o's light additions D83–D93, #5p) — see the "Last reconciled" line at the top of this file, CURRENT_STATE.md, PROJECT_MASTER.md and CLAUDE.md.
 
 **Documentation reconciled through brief #6d** (brief #6a, then #6c's D151–D154 and #6d's D155–D161; earlier passes: #5u, #5m, #5o's light additions D83–D93, #5p) — see the "Last reconciled" line at the top of this file, CURRENT_STATE.md, PROJECT_MASTER.md and CLAUDE.md.

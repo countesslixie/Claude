@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useActionState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,28 +10,30 @@ import { Button } from "@/components/ui/button";
 import type { AtcCodeFormState } from "@/lib/actions/atcCodes";
 
 /**
- * Brief #5a — add/edit form for one ATC code. verifiedAgainstIssuance is
- * shown plainly, not tucked away, per D19: an unverified code must never
- * look authoritative. isActive is how a code is "deactivated" — there is
- * no delete.
+ * Add/edit form for one ATC code. isActive is how a code is "deactivated" —
+ * there is no delete. No payee type or verified field (D164/D165).
  */
 export function AtcCodeForm({
   action,
   initialValues,
   submitLabel,
+  cancelHref,
 }: {
   action: (state: AtcCodeFormState, formData: FormData) => Promise<AtcCodeFormState>;
-  /** verifiedAgainstIssuance/isActive as "on" or "" (or omitted), same shape a submit echoes back. */
+  /** isActive as "on" or "" (or omitted), same shape a submit echoes back. */
   initialValues?: Record<string, string>;
   submitLabel: string;
+  /** Where Cancel goes — saves nothing. */
+  cancelHref: string;
 }) {
+  const router = useRouter();
   const [state, formAction, isPending] = useActionState<AtcCodeFormState, FormData>(action, {
     values: initialValues,
   });
 
   const v = (key: string) => state.values?.[key] ?? initialValues?.[key] ?? "";
   const errs = (key: string) => state.fieldErrors?.[key];
-  const checked = (key: "verifiedAgainstIssuance" | "isActive", fallback: boolean) => {
+  const checked = (key: "isActive", fallback: boolean) => {
     const raw = state.values?.[key] ?? initialValues?.[key];
     return raw === undefined ? fallback : raw === "on";
   };
@@ -73,26 +76,11 @@ export function AtcCodeForm({
             </p>
           ))}
         </div>
-        <div className="flex flex-col gap-1">
-          <Label htmlFor="payeeType">Payee type</Label>
-          <Input id="payeeType" name="payeeType" defaultValue={v("payeeType")} placeholder="e.g. Individual, Corporate" />
-        </div>
       </div>
 
       <label className="flex items-center gap-1.5 text-sm text-ink-secondary">
-        <Checkbox name="verifiedAgainstIssuance" defaultChecked={checked("verifiedAgainstIssuance", false)} />
-        Verified against a BIR issuance
-      </label>
-      {!checked("verifiedAgainstIssuance", false) && (
-        <p className="text-xs text-amber">
-          Unverified — this code and rate have not been confirmed against the current BIR ATC list. It will
-          still show as unverified wherever it&rsquo;s used.
-        </p>
-      )}
-
-      <label className="flex items-center gap-1.5 text-sm text-ink-secondary">
         <Checkbox name="isActive" defaultChecked={checked("isActive", true)} />
-        Active — offered on the certificate picker
+        Active
       </label>
 
       <div className="flex flex-col gap-1">
@@ -100,9 +88,12 @@ export function AtcCodeForm({
         <Textarea id="notes" name="notes" rows={2} defaultValue={v("notes")} />
       </div>
 
-      <div>
+      <div className="flex gap-2">
         <Button type="submit" disabled={isPending}>
           {isPending ? "Saving…" : submitLabel}
+        </Button>
+        <Button type="button" variant="secondary" onClick={() => router.push(cancelHref)}>
+          Cancel
         </Button>
       </div>
     </form>

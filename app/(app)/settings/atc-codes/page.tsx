@@ -5,11 +5,9 @@ import { StatusBadge } from "@/components/status-badge";
 import { bpsToPercentLabel } from "@/lib/money";
 
 /**
- * Brief #5a — ATC code maintenance (Settings, alongside holidays and tax
- * rule sets), backed by the existing AtcCode table (D19). She can add,
- * edit and deactivate here; the certificate form's ATC picker reads only
- * the active rows. verifiedAgainstIssuance is shown plainly — an
- * unverified code must never look authoritative.
+ * ATC maintenance (Settings), backed by the AtcCode table (D19). She can
+ * add, edit and deactivate here; the certificate form's ATC picker reads
+ * only the active rows. Payee type and verified state are not shown (D163/D165).
  */
 export default async function AtcCodesPage() {
   const codes = await prisma.atcCode.findMany({ orderBy: { code: "asc" } });
@@ -17,28 +15,19 @@ export default async function AtcCodesPage() {
   return (
     <div className="mx-auto max-w-4xl">
       <div className="mb-4 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-ink">ATC</h1>
-          <p className="mt-1 text-sm text-faint">
-            The rate is a property of the code — the certificate form fills it in once a code is chosen.
-            Never invent a code or a rate here; leave it unverified until confirmed against the
-            current BIR ATC list.
-          </p>
-        </div>
+        <h1 className="text-2xl font-semibold text-ink">ATC</h1>
         <Link href="/settings/atc-codes/new">
-          <Button>New ATC code</Button>
+          <Button>New ATC</Button>
         </Link>
       </div>
 
       <div className="overflow-x-auto rounded-lg border border-line bg-surface">
-        <table className="data-table">
+        <table className="data-table data-table-centered">
           <thead>
             <tr>
               <th>Code</th>
               <th>Description</th>
               <th>Rate</th>
-              <th>Payee type</th>
-              <th>Verified</th>
               <th>Active</th>
               <th></th>
             </tr>
@@ -49,14 +38,6 @@ export default async function AtcCodesPage() {
                 <td className="font-mono text-xs">{c.code}</td>
                 <td className="max-w-sm text-sm text-ink-secondary">{c.description}</td>
                 <td>{bpsToPercentLabel(c.rateBps)}</td>
-                <td>{c.payeeType || "—"}</td>
-                <td>
-                  {c.verifiedAgainstIssuance ? (
-                    <StatusBadge tone="done">Verified</StatusBadge>
-                  ) : (
-                    <StatusBadge tone="waiting">Unverified</StatusBadge>
-                  )}
-                </td>
                 <td>
                   {c.isActive ? (
                     <StatusBadge tone="done">Active</StatusBadge>
@@ -73,7 +54,7 @@ export default async function AtcCodesPage() {
             ))}
             {codes.length === 0 && (
               <tr>
-                <td colSpan={7} className="py-8 text-center text-sm text-faint">
+                <td colSpan={5} className="py-8 text-center text-sm text-faint">
                   No ATC codes yet.
                 </td>
               </tr>

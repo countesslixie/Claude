@@ -14,7 +14,7 @@ export type AtcCodeFormState = {
   values?: Record<string, string>;
 };
 
-const FIELDS = ["code", "description", "ratePercent", "payeeType", "notes"] as const;
+const FIELDS = ["code", "description", "ratePercent", "notes"] as const;
 
 function rawFromFormData(formData: FormData) {
   const values: Record<string, string> = {};
@@ -22,7 +22,6 @@ function rawFromFormData(formData: FormData) {
     const v = formData.get(key);
     values[key] = typeof v === "string" ? v : "";
   }
-  values.verifiedAgainstIssuance = formData.get("verifiedAgainstIssuance") === "on" ? "on" : "";
   values.isActive = formData.get("isActive") === "on" ? "on" : "";
   return values;
 }
@@ -33,7 +32,6 @@ function parse(formData: FormData) {
     raw,
     parsed: atcCodeSchema.safeParse({
       ...raw,
-      verifiedAgainstIssuance: raw.verifiedAgainstIssuance === "on",
       isActive: raw.isActive === "on",
     }),
   };
@@ -65,8 +63,9 @@ export async function createAtcCode(
       code: parsed.data.code,
       description: parsed.data.description,
       rateBps: percentToBps(parsed.data.ratePercent),
-      payeeType: parsed.data.payeeType ?? null,
-      verifiedAgainstIssuance: parsed.data.verifiedAgainstIssuance,
+      // D164 — corporations are not on the 8% option, so a new code is always Individual.
+      // verifiedAgainstIssuance takes the schema default (D165).
+      payeeType: "Individual",
       isActive: parsed.data.isActive,
       notes: parsed.data.notes ?? null,
     },
@@ -105,8 +104,7 @@ export async function updateAtcCode(
       code: parsed.data.code,
       description: parsed.data.description,
       rateBps: percentToBps(parsed.data.ratePercent),
-      payeeType: parsed.data.payeeType ?? null,
-      verifiedAgainstIssuance: parsed.data.verifiedAgainstIssuance,
+      // payeeType and verifiedAgainstIssuance are left as stored (D164/D165).
       isActive: parsed.data.isActive,
       notes: parsed.data.notes ?? null,
     },

@@ -102,8 +102,6 @@ export default async function IncomePage({
   ]);
   const boundSaveNewPayor = createPayorInline.bind(null, id);
 
-  const yearTotalGrossCents = rows.reduce((sum, r) => sum + r.grossSalesCents, 0);
-  const yearTotalNonOperatingCents = rows.reduce((sum, r) => sum + r.nonOperatingIncomeCents, 0);
 
   function readOnlyRow(quarter: SalesQuarter) {
     if (outsideQuarters.has(quarter)) {
@@ -152,12 +150,6 @@ export default async function IncomePage({
       <div id="client-page-header" className="mb-4 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-ink">Income — {client.registeredName}</h1>
-          <p className="text-sm text-faint">
-            Declared gross sales for TY{taxableYear}: {centsToPesos(yearTotalGrossCents, { withSymbol: true })}
-            {yearTotalNonOperatingCents > 0 &&
-              ` + ${centsToPesos(yearTotalNonOperatingCents, { withSymbol: true })} non-operating`}
-            .
-          </p>
         </div>
         <div className="flex items-center gap-2">
           <Link href={`/clients/${id}/filings/${openFiling.id}`}>

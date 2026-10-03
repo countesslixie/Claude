@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 *Instructions for Claude Code working on this repository.*
-*Last reconciled: 2026-10-03 — brief #6d (D155–D161: the Income, Form 2307 and Payors pages, Complete-filing Copy, step 2's skipped wording), on top of brief #6c (D151–D154) and brief #6a's documentation pass (checked against the tree at brief #5z's tip `e761a74`, covering briefs #5v–#5z, D115–D142) and brief #6b (D143–D150); #6c adds D151–D154: the Complete lock, step 2 starting open, the client page layout. Each rule is stated once, as it stands, with decision numbers (DECISIONS.md holds the history).*
+*Last reconciled: 2026-10-03 — brief #6e (D162–D165: centred client-page tables, the ATC list and form, no verified state), on top of brief #6d (D155–D161: the Income, Form 2307 and Payors pages, Complete-filing Copy, step 2's skipped wording), on top of brief #6c (D151–D154) and brief #6a's documentation pass (checked against the tree at brief #5z's tip `e761a74`, covering briefs #5v–#5z, D115–D142) and brief #6b (D143–D150); #6c adds D151–D154: the Complete lock, step 2 starting open, the client page layout. Each rule is stated once, as it stands, with decision numbers (DECISIONS.md holds the history).*
 
 ---
 
@@ -94,7 +94,7 @@ Next.js 15 App Router · TypeScript strict · Prisma + SQLite (`data/app.db`) ·
                                 starting-figures-form, generate-filings-form, payor-*, atc-code-*, tax-rule-set-form, client-form, client-tax-year-form, holiday-form, clickable-row, print-button, nav, status-badge, copy-textarea, ui/
 /prisma/                       schema.prisma, migrations/, seed.ts (reference data), seedScenarios.ts (the eight sample clients, D82),
                                 backfills.ts (idempotent seed-run corrections: D96 step titles, D97 filing status, D106 document dates)
-/tests/                        actions/ clients/ filingComputation/ documents/ reconciliation/ sawt/ seed/ tax/ workflow/  (588 tests, 63 files)
+/tests/                        actions/ clients/ filingComputation/ documents/ reconciliation/ sawt/ seed/ tax/ workflow/  (592 tests, 64 files)
 /storage/  /data/              gitignored document vault and SQLite database
 ```
 
@@ -198,7 +198,7 @@ Step titles in the tree (D96, built): step 13 **"Save SAWT acknowledgement email
 - **Every past-due filing is Complete or doesn't exist.**
 - **Drive each filing through the real server actions** (`saveQuarterlySales`, `addCertificate`, `markStepDone`, `savePayment`, `uploadDocument`, …) so auto-waiting, nothing-to-pay NA, item 56, the D78 guard and the frozen snapshot come out as the app produces them. What is set by hand (Client/ClientTaxYear/Payor rows, back-dated `waitingSince`) is named in `prisma/seedScenarios.ts`'s header. `seed.ts` stubs `next/cache` before a dynamic import — never import `seedScenarios` statically.
 - **Seeded documents are small placeholders marked SAMPLE**, saved through the normal storage path. Each client's Notes holds a one-line "Sample …" scenario.
-- Keep TaxRuleSet, Holiday and ATC seeding as is (WI010/WI011 stay unverified, D19); the suite depends on the seeded TaxRuleSet. Tax tests never read seed data (D5).
+- Keep TaxRuleSet, Holiday and ATC seeding as is (WI010/WI011 stay as seeded and unconfirmed by the app, D19/D165); the suite depends on the seeded TaxRuleSet. Tax tests never read seed data (D5).
 - **The seed never deletes** — reference data is upserted; samples are built only when none exist. To start clean: `npx prisma migrate reset --force` (drops the database, re-applies migrations, runs the seed). Prisma refuses that under an AI agent without her consent, so Claude runs the equivalent: delete `data/app.db`, `npx prisma migrate deploy`, `npx tsx prisma/seed.ts`.
 
 ## Business rules you must not quietly change
@@ -224,7 +224,7 @@ Step titles in the tree (D96, built): step 13 **"Save SAWT acknowledgement email
 
 ## Never invent BIR specifics
 
-ATC codes, penalty rates, compromise schedules, form field orders, the eSubmission address. If you are not certain, **leave it empty and flag it** rather than producing something plausible. Unverified items carry `verifiedAgainstIssuance: false`. **`/settings/atc-codes` is where she adds and verifies codes — do not seed a code or a rate you have not been given.** The eSubmission address (`TaxRuleSet.eSubmissionEmail`) is hers, to confirm against BIR.
+ATC codes, penalty rates, compromise schedules, form field orders, the eSubmission address. If you are not certain, **leave it empty and flag it** rather than producing something plausible. Checking a code against the current BIR ATC list is her job, outside the app; the app no longer shows a verified/unverified state (D165). The `AtcCode.verifiedAgainstIssuance` and `payeeType` columns stay in the schema but nothing reads or shows them; new codes save `payeeType = "Individual"` (D164). **Never invent a code or a rate; never seed one you haven't been given** (D19). **`/settings/atc-codes` is where she adds and edits codes (checking them against BIR's list is hers, outside the app, D165) — do not seed a code or a rate you have not been given.** The eSubmission address (`TaxRuleSet.eSubmissionEmail`) is hers, to confirm against BIR.
 
 ## UI rules
 

@@ -19,16 +19,14 @@ export default async function EditAtcCodePage({
     code: atcCode.code,
     description: atcCode.description,
     ratePercent: bpsToPercentLabel(atcCode.rateBps).replace("%", ""),
-    payeeType: atcCode.payeeType ?? "",
     notes: atcCode.notes ?? "",
-    verifiedAgainstIssuance: atcCode.verifiedAgainstIssuance ? "on" : "",
     isActive: atcCode.isActive ? "on" : "",
   };
 
   return (
     <div className="mx-auto max-w-2xl">
-      <h1 className="mb-4 text-2xl font-semibold text-ink">Edit ATC code — {atcCode.code}</h1>
-      <AtcCodeForm action={boundAction} initialValues={initialValues} submitLabel="Save changes" />
+      <h1 className="mb-4 text-2xl font-semibold text-ink">Edit ATC — {atcCode.code}</h1>
+      <AtcCodeForm cancelHref="/settings/atc-codes" action={boundAction} initialValues={initialValues} submitLabel="Save" />
     </div>
   );
 }

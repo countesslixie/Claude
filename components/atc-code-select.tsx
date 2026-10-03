@@ -8,7 +8,6 @@ export interface SelectableAtcCode {
   code: string;
   description: string;
   rateBps: number;
-  verifiedAgainstIssuance: boolean;
 }
 
 /**
@@ -56,7 +55,6 @@ export function AtcCodeSelect({
       {atcCodes.map((c) => (
         <option key={c.code} value={c.code}>
           {c.code} — {bpsToPercentLabel(c.rateBps)} — {c.description}
-          {!c.verifiedAgainstIssuance ? " (unverified)" : ""}
         </option>
       ))}
     </Select>
