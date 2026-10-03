@@ -153,7 +153,7 @@ export default async function IncomePage({
         </div>
         <div className="flex items-center gap-2">
           <Link href={`/clients/${id}/filings/${openFiling.id}`}>
-            <Button variant="secondary" size="sm">
+            <Button variant="secondary">
               Back to filing
             </Button>
           </Link>
@@ -288,13 +288,13 @@ async function IncomeTable({
         <div className="flex flex-wrap items-center gap-2">
           <form method="get" className="flex items-center gap-2">
             <label className="text-sm text-ink-secondary">Year</label>
-            <input type="number" name="year" defaultValue={taxableYear} className="h-8 w-24 rounded-md border border-line px-2 text-sm" />
-            <Button type="submit" variant="secondary" size="sm">
+            <input type="number" name="year" defaultValue={taxableYear} className="h-9 w-24 rounded-md border border-line px-2 text-sm" />
+            <Button type="submit" variant="secondary">
               Go
             </Button>
           </form>
           <Link href={`/clients/${clientId}`}>
-            <Button variant="secondary" size="sm">
+            <Button variant="secondary">
               Back to client
             </Button>
           </Link>

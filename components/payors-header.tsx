@@ -30,12 +30,12 @@ export function PayorsHeader({
         <h1 className="text-2xl font-semibold text-ink">{title}</h1>
         <div className="flex flex-wrap gap-2">
           {!open && (
-            <Button type="button" size="sm" onClick={() => setOpen(true)}>
+            <Button type="button" onClick={() => setOpen(true)}>
               Add payor
             </Button>
           )}
           <Link href={`/clients/${clientId}`}>
-            <Button variant="secondary" size="sm">
+            <Button variant="secondary">
               Back to client
             </Button>
           </Link>

@@ -63,11 +63,11 @@ export function HolidayForm({ onSaved, onCancel }: { onSaved?: () => void; onCan
         ))}
       </div>
       <div className="flex gap-2 sm:col-span-6">
-        <Button type="submit" size="sm" disabled={isPending}>
+        <Button type="submit" disabled={isPending}>
           {isPending ? "Saving…" : "Save"}
         </Button>
         {onCancel && (
-          <Button type="button" size="sm" variant="secondary" onClick={onCancel}>
+          <Button type="button" variant="secondary" onClick={onCancel}>
             Cancel
           </Button>
         )}

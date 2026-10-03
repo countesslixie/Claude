@@ -1,7 +1,7 @@
 # CURRENT_STATE.md
 
 *Living snapshot. Replace stale content rather than appending.*
-*Last reconciled: 2026-10-03 — brief #6f (D166–D169: Back to Settings, the Tax Rules list and form, the Holidays Add button), on top of brief #6e (D162–D165: centred client-page tables, the ATC list and form, no verified state), on top of brief #6d (D155–D161), on top of brief #6c (D151–D154) and brief #6b (D143–D150) and brief #6a's documentation pass (D115–D142, checked at brief #5z's tip `e761a74`). **604 tests in 65 files pass, the build passes, and typecheck is clean once Next's route types exist** — see Known limitations for the one-line `LayoutProps` catch. Per-brief history lives in DECISIONS.md, not here.*
+*Last reconciled: 2026-10-03 — brief #6g (D170–D173: one button size, the Q1 default, one-click backup, the backup reminder), on top of brief #6f (D166–D169) (Back to Settings, the Tax Rules list and form, the Holidays Add button), on top of brief #6e (D162–D165: centred client-page tables, the ATC list and form, no verified state), on top of brief #6d (D155–D161), on top of brief #6c (D151–D154) and brief #6b (D143–D150) and brief #6a's documentation pass (D115–D142, checked at brief #5z's tip `e761a74`). **621 tests in 68 files pass, the build passes, and typecheck is clean once Next's route types exist** — see Known limitations for the one-line `LayoutProps` catch. Per-brief history lives in DECISIONS.md, not here.*
 
 ---
 
@@ -110,8 +110,12 @@ A filing whose status is Complete shows no control that changes anything (no Und
 - **The status pill (D97).** "In progress" while any of her own work remains — even when a TRRC or SAWT wait is also running; "Waiting on BIR" only when Next would read "waiting on BIR". Stored on `Filing.status`; every step action recomputes it.
 - **The client bar (D104).** `components/client-sticky-bar.tsx` on the client page and its Income, Form 2307s and Payors pages: once the page header scrolls away, a bar beside the menu shows the client's name (a link), TIN and buttons for those three pages. The filing page keeps its own slim bar; they never appear together.
 - **The working calendar (D106).** The filing page's "documents due from client" is the client's deadline from her engagement letter — the 20th of the month after the period ends (Q1 Apr 20, Q2 Jul 20, Q3 Oct 20, Annual Jan 20) — set by `TaxRuleSet.clientDocsDueDay`, no weekend shift, stored in `Filing.certificatesExpectedBy`. It starts step 2's waiting clock and feeds the dashboard's step 2 dates and step 16's email. `internalFilingTarget` (her own filing target) is separate and unchanged.
-- **No internal references on screen (D105)** — no brief or decision numbers, "SPEC.md" or "Phase" labels; the Settings hub lists only Backup under "Not built yet".
+- **No internal references on screen (D105)** — no brief or decision numbers, "SPEC.md" or "Phase" labels; the Settings hub has no "Not built yet" list any more (backup is built, D172).
 - **The menu (D58/D140).** Dashboard · Work (Kanban, Clients) · Settings (Tax Rules, ATC, Holidays); page headings match ("Kanban", "Tax Rules", "ATC"); URLs and form field labels ("ATC code") are unchanged. **Back to Settings (D166):** Tax Rules, ATC and Holidays each have a bordered Back button at the top right that goes to the Settings hub (beside New on Tax Rules and ATC; beside Add holiday on Holidays). **Holidays (D169):** the add form is hidden until the primary Add holiday button is clicked (as Payors, D161) and opens above the table; Save adds and closes, Cancel closes unsaved; table centred.
+- **Button sizes (D170).** Every page-header button and every form's submit + Cancel pair is one size (the shared `Button` default); purple vs bordered differs only in colour. The compact `sm` size is for controls inside cards, tables and filter bars.
+- **Backup (D172).** Settings → **Back up now** downloads `BIR Filing Manager backup YYYY-MM-DD HHMM.zip` (Manila time) to her Downloads folder: `data/app.db` (a consistent snapshot taken while the app runs), all of `storage/`, `.env` and a `README.txt`. Settings shows "Last backup: …" or "Never backed up" (table `AppSetting`, key `lastBackupAt`, written when the zip has finished). **There is no restore button.** The zip holds clients' TINs, income and documents: keep it on her own drive or a USB stick, not a shared folder or email.
+  **To restore (Windows, no command line needed):** (1) stop the app — close the window it runs in; (2) unzip the backup (right-click → Extract All) into an empty folder; (3) in the app's folder, rename `data\app.db` to `app.db.before-restore` and `storage` to `storage-before-restore`, then copy the backup's `data\app.db`, `storage` folder and `.env` in (turn on View → Show → Hidden items to see `.env`; delete any `app.db-wal`/`app.db-shm`); (4) start the app and open a filing to check a document opens. The same steps in PowerShell are in the zip's README.txt. Restoring replaces everything with the state at the backup, and the restored database remembers the *previous* backup's time, not this one.
+- **Backup reminder (D173).** One amber line at the top of the Dashboard when the last backup is over 7 days old or has never happened, linking to Settings; nothing within 7 days; not dismissible.
 - **8% only (D136/D142).** Every client and tax year is 8% elected, flat rate: no election is recorded or checked, no step is locked for it, and the tax year form and Taxable years table have no election or Regime (the Regime column stays in the database, written `RATE_8_PERCENT`; `electionStatus` defaults to `ELECTED`). The year-end credit election (refund / TCC / carry over) is a different thing and stays.
 - **Upload dates (D119/D122).** No date field on any upload box or on the certificate form; `uploadDocument` and `addCertificate` record today (Manila). The date still appears in a stored file name (YYYYMMDD), and the seed back-dates through the server-side parameter.
 - **The slim bar (D80).** Fixed beside the menu once the page header scrolls out; client and period, Next, Go to step (which expands the group and scrolls, `components/go-to-step.tsx`).
@@ -213,7 +217,6 @@ Annual filings for A, B, D, E, F, G, H exist, Not started, due April 2027; the b
 - **Carry-over of a client's own Annual overpayment into next year's starting figures** (D55) — first matters at the 2026→2027 boundary.
 - **The document archive browse view** — client → year, with a whole-year zip. The only genuinely new build in the backlog, and it serves what she named as the most important thing the app does.
 - **A calendar view.**
-- **Backup** — listed on the Settings page as not built; see Next.
 - **A clean-start routine** that wipes sample and test data but keeps reference data — see Next.
 - **Phase 5, deferred by decision:** email/IMAP integration, multi-user, .DAT generation, importers. (The SAWT keying worksheet and its XLSX export are built — `lib/sawt/`.)
 
@@ -248,7 +251,7 @@ Annual filings for A, B, D, E, F, G, H exist, Not started, due April 2027; the b
 - No PDF generation anywhere. The client package zip carries no manifest at all (D103 superseded D22's text manifest).
 - **For a declared-income client nothing can be cross-checked** except the annual certificates-vs-declared-sales check (D37); a mid-year client's check covers only the in-app part of the year (D56).
 - `@radix-ui/*` packages are installed with no import anywhere; `components/ui/*` are plain elements with Tailwind classes.
-- **`data/app.db` has no backup** (nor `storage/` or `.env`) — housekeeping while the data is seeded, a real single point of failure the day it is not.
+- **Backup is built (D172) but only protects her if she uses it.** The Dashboard reminds her after 7 days (D173); where the zips are kept is her decision (private drive or USB stick, never a shared folder or email).
 - **`MIXED_INCOME`'s annual return (Form 1701) has no form-line sheet** (D49); it stays on the old unrounded path.
 - **`logFollowUp` and `WorkflowStep.followUpCount` stay in the code, but no screen uses them** — BIR waits refuse them (D72) and the dashboard dropped Log follow-up (D128).
 - **An Annual's step 1 "Waiting on client" day count runs from when the filing was generated**, not from the end of the period. Cosmetic; the dashboard hides the filing until its period ends (D130).
@@ -256,7 +259,7 @@ Annual filings for A, B, D, E, F, G, H exist, Not started, due April 2027; the b
 - Per-step prep targets: all prep steps share `internalFilingTarget`, so every prep row shows the same date.
 - `--faint` text (#8a879a) measures 3.49:1 against white — below the usual 4.5:1 for small text; kept knowingly (D58).
 - The left menu's "SETTINGS" heading changes text colour on hover but gets no background fill (cosmetic).
-- **README.md is stale** — it still describes a "minimal chart of accounts" and a Phase 1 build, both predating D25, and is left as is. (The Settings page's placeholder list was cleaned up in D105: it now lists only Backup.)
+- **README.md is stale** — it still describes a "minimal chart of accounts" and a Phase 1 build, both predating D25, and is left as is. (The Settings page's placeholder list is gone: backup is built, D172.)
 - **A fresh checkout's `npx tsc --noEmit` shows one error** (`app/layout.tsx`: `Cannot find name 'LayoutProps'`). Environment artefact, not a code error: `LayoutProps<"/">` is a type Next generates into `.next/types`, and that folder is gitignored. Since brief #5g it has been invisible on her laptop because `.next` exists there. Fix: run `npx next typegen` (or `npx next build` / `next dev` once), then `npx tsc --noEmit` is clean. The earlier "typecheck clean" lines were true on a machine with `.next`, not on a fresh clone.
 - **One test can fail in a full run and pass on rerun.** `tests/actions/clientDocsDue.test.ts`'s backfill case sweeps every unfiled filing in the shared test database while other test files create rows; seen once in the brief #5u pass, and again in the brief #6a pass (one full run with 2 failures, not captured; two reruns passed 534 of 534). Not investigated further.
 
@@ -264,12 +267,11 @@ Annual filings for A, B, D, E, F, G, H exist, Not started, due April 2027; the b
 
 ## Next, in order
 
-1. **Walk the Tax Rules, ATC and Holidays pages** — the only screens not yet walked with her.
-2. **Before November: back up** `data/app.db`, `storage/` and `.env`, and decide how. Warn her that old test uploads in `storage/` may include real client documents.
-3. **A clean-start brief:** wipe the sample and test data and keep the reference data (rule sets, holidays, ATC codes) — the destructive-migration licence expires when live data is entered.
-4. **Go-live setup for real clients:** add client → tax year → starting figures → generate filings (D78 enforces the order; there is no election step, D136). The Q3 1701Q is due **November 16, 2026** (the statutory Nov 15 is a Sunday). The Excel files stay the master until she switches.
-5. **Confirm the ATC codes and the eSubmission address.**
-6. **After go-live, in this order:** the document archive browse view; then the calendar; then the Annual overpayment carry-over (2026→2027).
+1. **Walk the Tax Rules, ATC and Holidays pages** — the only screens not yet walked with her. *(Backup is done — D172/D173 — so it has left this list; the clean start and go-live setup are the next two.)*
+2. **A clean-start brief:** wipe the sample and test data and keep the reference data (rule sets, holidays, ATC codes) — the destructive-migration licence expires when live data is entered.
+3. **Go-live setup for real clients:** add client → tax year → starting figures → generate filings (D78 enforces the order; there is no election step, D136). The Q3 1701Q is due **November 16, 2026** (the statutory Nov 15 is a Sunday). The Excel files stay the master until she switches.
+4. **Confirm the ATC codes and the eSubmission address.**
+5. **After go-live, in this order:** the document archive browse view; then the calendar; then the Annual overpayment carry-over (2026→2027).
 
 ---
 

@@ -1268,7 +1268,25 @@ The grey line under the heading is gone. Every column and heading is centred (th
 
 The grey line under the heading is gone. The add form is hidden until the primary **Add holiday** button (top right, beside Back) is clicked, as Payors (D161); it opens above the table with the same fields (Date, Name, Type, Scope, Local area). **Save** adds the holiday and closes the form, **Cancel** closes it unsaved. `createHoliday` now returns `saved: true` so the form can close itself. Table centred: Date · Name · Type · Scope · Delete; Delete works as before.
 
+**D170 — One button size across the app** *(her decision, brief #6g)*
+
+Every button in a page header's top-right group, and every form's submit button and its Cancel, is **the same size**, whether purple or bordered. The shared `Button` default size (`components/ui/button.tsx`, h-9, 14px) is that size; the compact `sm` size is kept only for controls *inside* cards, tables and filter bars (the client page's "New tax year", a filing step's own buttons, the sticky bars). Pages and components moved to the shared size: Tax Rules, ATC and Holidays (Back, Add holiday); the client page; Income (both header forms, including "Go" and the Year box); Form 2307 register; Payors header and its add form; the filing page; Starting figures; the Holidays add form. Tax Rules, ATC, Clients, SAWT worksheet, the client form, ATC form and rule set form already used the default. Not changed on purpose: the Starting figures form's Cancel, which is a text link, not a button. No page-by-page classes: a test renders each header pair and form pair and checks they share one size.
+
+**D171 — The New rule set form's defaults match the seeded rule set** *(her decision, brief #6g)*
+
+Q1 due prefilled `04-15`; it is now `05-15`. All the form's defaults live in one list (`RULE_SET_DEFAULTS`, `lib/ruleSetDefaults.ts`) and a test checks every one against the seeded 2026 rule set (Q2 `08-15`, Q3 `11-15`, Annual `04-15` of the following year, 8.00%, ₱3,000,000.00, ₱250,000.00, SAWT offset 0, eAFS offset 15, eSubmission address, documents-due day 20). Q1 was the only mismatch. No figure or date already stored changed.
+
+**D172 — One-click backup** *(her decision, brief #6g; planned in SPEC §12/§14)*
+
+Settings has a **Back up now** button. It downloads one zip through the browser, named `BIR Filing Manager backup 2026-10-03 1430.zip` (Manila time). Inside: `data/app.db` (a consistent SQLite snapshot taken with `VACUUM INTO` while the app runs, never a raw file copy), the whole `storage/` folder with its structure, `.env`, and `README.txt` (when it was made and how to restore). Built on the server and streamed (`lib/backup/createBackup.ts`, `app/api/backup/route.ts`; jszip, no new dependency); files go in as read streams so a large `storage/` is never held in memory; the temp snapshot is deleted afterwards; no network. The time of the last backup is stored in a new small table, `AppSetting` (key `lastBackupAt`; migration `app_setting_last_backup`), written when the zip has finished streaming, and Settings shows "Last backup: October 3, 2026, 2:30 PM" or "Never backed up". **No restore button:** restoring overwrites everything, so it stays a manual step (the steps are in the zip's README.txt and in CURRENT_STATE.md). The zip holds clients' TINs, income and documents — keep it private. Backup is off the Settings page's "Not built yet" list, and that list is gone.
+
+**D173 — The backup reminder** *(her decision, brief #6g; SPEC §14)*
+
+One quiet amber line at the top of the Dashboard when the last backup is more than 7 days old or has never happened: "Last backup was 9 days ago — back up now" / "Never backed up — back up now", "back up now" linking to Settings. Not dismissible; nothing shows within 7 days. The Dashboard is now marked always-dynamic (it was being prerendered as static in a production build, which would have frozen the line).
+
 ---
+
+**Documentation reconciled through brief #6g** (brief #6g's D170–D173, then #6f's D166–D169, #6e's D162–D165, #6a, #6c's D151–D154 and #6d's D155–D161) — see the "Last reconciled" line at the top of CURRENT_STATE.md, PROJECT_MASTER.md and CLAUDE.md.
 
 **Documentation reconciled through brief #6f** (brief #6f's D166–D169, then brief #6e's D162–D165, #6a, #6c's D151–D154 and #6d's D155–D161) — see the "Last reconciled" line at the top of CURRENT_STATE.md, PROJECT_MASTER.md and CLAUDE.md.
 

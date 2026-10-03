@@ -59,27 +59,27 @@ export default async function ClientDetailPage({
         </div>
         <div className="flex flex-wrap gap-2">
           <Link href="/clients">
-            <Button variant="secondary" size="sm">
+            <Button variant="secondary">
               Back to list
             </Button>
           </Link>
           <Link href={`/clients/${client.id}/income`}>
-            <Button variant="secondary" size="sm">
+            <Button variant="secondary">
               Income
             </Button>
           </Link>
           <Link href={`/clients/${client.id}/form-2307`}>
-            <Button variant="secondary" size="sm">
+            <Button variant="secondary">
               Form 2307s
             </Button>
           </Link>
           <Link href={`/clients/${client.id}/payors`}>
-            <Button variant="secondary" size="sm">
+            <Button variant="secondary">
               Payors
             </Button>
           </Link>
           <Link href={`/clients/${client.id}/edit`}>
-            <Button size="sm">Edit</Button>
+            <Button>Edit</Button>
           </Link>
         </div>
       </div>

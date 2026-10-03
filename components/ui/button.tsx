@@ -13,6 +13,9 @@ const buttonVariants = cva(
         destructive: "bg-red text-white hover:opacity-90",
       },
       size: {
+        // D170 — the one size for every page-header button and every form's
+        // submit/Cancel pair, primary or bordered; only the colour differs.
+        // `sm` is for compact controls inside cards, tables and filter bars.
         default: "h-9 px-3",
         sm: "h-7 px-2 text-xs",
       },

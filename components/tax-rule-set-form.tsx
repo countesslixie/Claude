@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import type { TaxRuleSetFormState } from "@/lib/actions/taxRuleSets";
-import { effectiveFromAfterYearChange } from "@/lib/ruleSetDefaults";
+import { effectiveFromAfterYearChange, RULE_SET_DEFAULTS as D } from "@/lib/ruleSetDefaults";
 
 type FieldProps = {
   name: string;
@@ -113,7 +113,7 @@ export function TaxRuleSetForm({
         <Field
           name="incomeTaxRatePercent"
           label="Income tax rate (%)"
-          defaultValue={v("incomeTaxRatePercent") || "8.00"}
+          defaultValue={v("incomeTaxRatePercent") || D.incomeTaxRatePercent}
           errors={errs("incomeTaxRatePercent")}
           required
         />
@@ -121,14 +121,14 @@ export function TaxRuleSetForm({
         <Field
           name="vatThreshold"
           label="VAT threshold (₱)"
-          defaultValue={v("vatThreshold") || "3,000,000.00"}
+          defaultValue={v("vatThreshold") || D.vatThreshold}
           errors={errs("vatThreshold")}
           required
         />
         <Field
           name="allowableDeduction"
           label="Allowable deduction (₱, purely self-employed)"
-          defaultValue={v("allowableDeduction") || "250,000.00"}
+          defaultValue={v("allowableDeduction") || D.allowableDeduction}
           errors={errs("allowableDeduction")}
           required
         />
@@ -138,13 +138,13 @@ export function TaxRuleSetForm({
         <legend className="col-span-full text-sm font-semibold text-ink">
           Statutory due dates (confirm against the current BIR issuance)
         </legend>
-        <Field name="q1DueMonthDay" label="Q1 (1701Q) due" defaultValue={v("q1DueMonthDay") || "04-15"} errors={errs("q1DueMonthDay")} required placeholder="05-15" />
-        <Field name="q2DueMonthDay" label="Q2 (1701Q) due" defaultValue={v("q2DueMonthDay") || "08-15"} errors={errs("q2DueMonthDay")} required placeholder="08-15" />
-        <Field name="q3DueMonthDay" label="Q3 (1701Q) due" defaultValue={v("q3DueMonthDay") || "11-15"} errors={errs("q3DueMonthDay")} required placeholder="11-15" />
+        <Field name="q1DueMonthDay" label="Q1 (1701Q) due" defaultValue={v("q1DueMonthDay") || D.q1DueMonthDay} errors={errs("q1DueMonthDay")} required placeholder="05-15" />
+        <Field name="q2DueMonthDay" label="Q2 (1701Q) due" defaultValue={v("q2DueMonthDay") || D.q2DueMonthDay} errors={errs("q2DueMonthDay")} required placeholder="08-15" />
+        <Field name="q3DueMonthDay" label="Q3 (1701Q) due" defaultValue={v("q3DueMonthDay") || D.q3DueMonthDay} errors={errs("q3DueMonthDay")} required placeholder="11-15" />
         <Field
           name="annualDueMonthDay"
           label="Annual due (following year)"
-          defaultValue={v("annualDueMonthDay") || "04-15"}
+          defaultValue={v("annualDueMonthDay") || D.annualDueMonthDay}
           errors={errs("annualDueMonthDay")}
           required
           placeholder="04-15"
@@ -159,7 +159,7 @@ export function TaxRuleSetForm({
           name="sawtDeadlineOffsetDays"
           label="SAWT deadline offset (days from return due date)"
           type="number"
-          defaultValue={v("sawtDeadlineOffsetDays") || "0"}
+          defaultValue={v("sawtDeadlineOffsetDays") || D.sawtDeadlineOffsetDays}
           errors={errs("sawtDeadlineOffsetDays")}
           required
         />
@@ -167,7 +167,7 @@ export function TaxRuleSetForm({
           name="eafsDeadlineOffsetDays"
           label="eAFS deadline offset (days from date of filing)"
           type="number"
-          defaultValue={v("eafsDeadlineOffsetDays") || "15"}
+          defaultValue={v("eafsDeadlineOffsetDays") || D.eafsDeadlineOffsetDays}
           errors={errs("eafsDeadlineOffsetDays")}
           required
         />
@@ -175,7 +175,7 @@ export function TaxRuleSetForm({
           name="eSubmissionEmail"
           label="BIR eSubmission email address (used as the To address when you email the DAT file)"
           type="email"
-          defaultValue={v("eSubmissionEmail") || "esubmission@bir.gov.ph"}
+          defaultValue={v("eSubmissionEmail") || D.eSubmissionEmail}
           errors={errs("eSubmissionEmail")}
           required
         />
@@ -183,7 +183,7 @@ export function TaxRuleSetForm({
           name="clientDocsDueDay"
           label="Client documents due — day of the month after each period ends"
           type="number"
-          defaultValue={v("clientDocsDueDay") || "20"}
+          defaultValue={v("clientDocsDueDay") || D.clientDocsDueDay}
           errors={errs("clientDocsDueDay")}
           required
           placeholder="20"

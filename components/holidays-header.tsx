@@ -18,7 +18,7 @@ export function HolidaysHeader() {
         <h1 className="text-2xl font-semibold text-ink">Holidays</h1>
         <div className="flex flex-wrap gap-2">
           {!open && (
-            <Button type="button" size="sm" onClick={() => setOpen(true)}>
+            <Button type="button" onClick={() => setOpen(true)}>
               Add holiday
             </Button>
           )}

@@ -1,4 +1,6 @@
+import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { getLastBackupAt, backupReminderText } from "@/lib/backup/lastBackup";
 import { currentTaxableYearManila } from "@/lib/dates";
 import { nextActionForFiling, BIR_WAIT_STEP_CODES } from "@/lib/workflow/groups";
 import { deriveStepAging } from "@/lib/workflow/aging";
@@ -20,9 +22,13 @@ import type { Period } from "@/lib/tax/types";
  * collapsible sections (D126/D137, lib/workflow/dashboardRows.ts): needs my action,
  * waiting on client, waiting on BIR, 3M threshold alert.
  */
+// D173 — the backup reminder depends on the current time, so this page is never prerendered.
+export const dynamic = "force-dynamic";
+
 export default async function DashboardPage() {
   const now = new Date();
   const currentYear = currentTaxableYearManila();
+  const backupReminder = backupReminderText(await getLastBackupAt(), now);
 
   const activeFilings = await prisma.filing.findMany({
     where: { deletedAt: null, filedOutsideApp: false, status: { not: "COMPLETE" } },
@@ -183,6 +189,14 @@ export default async function DashboardPage() {
   return (
     <div className="mx-auto flex w-full max-w-[1100px] flex-col gap-3">
       <h1 className="text-2xl font-semibold text-ink">Dashboard</h1>
+      {backupReminder && (
+        <p className="text-sm text-amber" data-testid="backup-reminder">
+          {backupReminder} —{" "}
+          <Link href="/settings" className="underline">
+            back up now
+          </Link>
+        </p>
+      )}
       {DASHBOARD_SECTIONS.map((title) => (
         <DashboardSection key={title} title={title} count={sections[title].count}>
           {sections[title].body}

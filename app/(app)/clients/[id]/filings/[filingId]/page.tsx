@@ -508,7 +508,7 @@ export default async function FilingDetailPage({
           </p>
         </div>
         <Link href={`/clients/${id}`}>
-          <Button variant="secondary" size="sm">
+          <Button variant="secondary">
             Back to client
           </Button>
         </Link>

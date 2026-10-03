@@ -48,7 +48,7 @@ export default async function StartingFiguresPage({
           Starting figures — {taxYear.client.registeredName}, TY{taxYear.taxableYear}
         </h1>
         <Link href={`/clients/${id}`}>
-          <Button variant="secondary" size="sm">
+          <Button variant="secondary">
             Back to client
           </Button>
         </Link>

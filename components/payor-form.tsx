@@ -97,11 +97,11 @@ export function PayorForm({
       </label>
 
       <div className="flex items-center gap-2">
-        <Button type="submit" size="sm" disabled={isPending}>
+        <Button type="submit" disabled={isPending}>
           {isPending ? "Saving…" : submitLabel}
         </Button>
         {onCancel && (
-          <Button type="button" size="sm" variant="secondary" onClick={onCancel}>
+          <Button type="button" variant="secondary" onClick={onCancel}>
             Cancel
           </Button>
         )}

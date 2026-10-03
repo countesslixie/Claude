@@ -1,5 +1,9 @@
 import Link from "next/link";
 import { Card, CardBody } from "@/components/ui/card";
+import { BackupButton } from "@/components/backup-button";
+import { getLastBackupAt, formatLastBackup } from "@/lib/backup/lastBackup";
+
+export const dynamic = "force-dynamic";
 
 const BUILT = [
   {
@@ -20,9 +24,9 @@ const BUILT = [
   },
 ];
 
-const LATER = [{ title: "Backup" }];
+export default async function SettingsPage() {
+  const lastBackup = await getLastBackupAt();
 
-export default function SettingsPage() {
   return (
     <div className="mx-auto max-w-3xl">
       <h1 className="mb-4 text-2xl font-semibold text-ink">Settings</h1>
@@ -40,16 +44,19 @@ export default function SettingsPage() {
         ))}
       </div>
 
-      <h2 className="mt-8 mb-2 text-xs font-semibold uppercase tracking-wide text-faint">
-        Not built yet
-      </h2>
-      <ul className="divide-y divide-line rounded-lg border border-line bg-surface">
-        {LATER.map((item) => (
-          <li key={item.title} className="flex items-center justify-between px-4 py-2 text-sm">
-            <span className="text-faint">{item.title}</span>
-          </li>
-        ))}
-      </ul>
+      <h2 className="mt-8 mb-2 text-xs font-semibold uppercase tracking-wide text-faint">Backup</h2>
+      <Card>
+        <CardBody>
+          <p className="text-sm text-ink">
+            Last backup: <span className="font-medium">{formatLastBackup(lastBackup)}</span>
+          </p>
+          <p className="mt-1 mb-3 text-sm text-faint">
+            One zip with the database, every uploaded document and the app&apos;s settings file. It goes to your
+            Downloads folder. It holds clients&apos; TINs and income, so keep it somewhere private.
+          </p>
+          <BackupButton lastBackupAt={lastBackup ? lastBackup.toISOString() : null} />
+        </CardBody>
+      </Card>
     </div>
   );
 }

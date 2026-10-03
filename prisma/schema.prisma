@@ -864,3 +864,12 @@ model ActivityLog {
   @@index([entityType, entityId])
   @@index([at])
 }
+
+// Brief #6g (D172) — a tiny key/value table for app-level facts that belong to
+// no client. Today it holds one row: "lastBackupAt" (an ISO timestamp, written
+// when a backup download finishes streaming). Never holds secrets.
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}

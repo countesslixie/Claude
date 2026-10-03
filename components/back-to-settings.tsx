@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 export function BackToSettings() {
   return (
     <Link href="/settings">
-      <Button variant="secondary" size="sm">
+      <Button variant="secondary">
         Back
       </Button>
     </Link>

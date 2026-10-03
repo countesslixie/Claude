@@ -51,13 +51,13 @@ export default async function Form2307RegisterPage({
         <div className="flex flex-wrap gap-2">
           {hasScans && (
             <a href={`/api/clients/${id}/form-2307-scans?year=${taxableYear}`}>
-              <Button variant="secondary" size="sm">
+              <Button variant="secondary">
                 Download all
               </Button>
             </a>
           )}
           <Link href={`/clients/${id}`}>
-            <Button variant="secondary" size="sm">
+            <Button variant="secondary">
               Back to client
             </Button>
           </Link>

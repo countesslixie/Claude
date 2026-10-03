@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 *Instructions for Claude Code working on this repository.*
-*Last reconciled: 2026-10-03 — brief #6f (D166–D169: Back to Settings, the Tax Rules list and form, the Holidays Add button), on top of brief #6e (D162–D165: centred client-page tables, the ATC list and form, no verified state), on top of brief #6d (D155–D161: the Income, Form 2307 and Payors pages, Complete-filing Copy, step 2's skipped wording), on top of brief #6c (D151–D154) and brief #6a's documentation pass (checked against the tree at brief #5z's tip `e761a74`, covering briefs #5v–#5z, D115–D142) and brief #6b (D143–D150); #6c adds D151–D154: the Complete lock, step 2 starting open, the client page layout. Each rule is stated once, as it stands, with decision numbers (DECISIONS.md holds the history).*
+*Last reconciled: 2026-10-03 — brief #6g (D170–D173: one button size, the Q1 default, one-click backup, the backup reminder), on top of brief #6f (D166–D169) (Back to Settings, the Tax Rules list and form, the Holidays Add button), on top of brief #6e (D162–D165: centred client-page tables, the ATC list and form, no verified state), on top of brief #6d (D155–D161: the Income, Form 2307 and Payors pages, Complete-filing Copy, step 2's skipped wording), on top of brief #6c (D151–D154) and brief #6a's documentation pass (checked against the tree at brief #5z's tip `e761a74`, covering briefs #5v–#5z, D115–D142) and brief #6b (D143–D150); #6c adds D151–D154: the Complete lock, step 2 starting open, the client page layout. Each rule is stated once, as it stands, with decision numbers (DECISIONS.md holds the history).*
 
 ---
 
@@ -42,7 +42,7 @@ Next.js 15 App Router · TypeScript strict · Prisma + SQLite (`data/app.db`) ·
                                 clients/ [id]/ {edit, income, form-2307, payors, sawt-worksheet,
                                 filings/[filingId] (the filing page), tax-years/[taxYearId]/{edit,
                                 starting-figures}}, settings/ {atc-codes, holidays, tax-rule-sets}
-/app/api/                      clients/[id]/sawt-worksheet (xlsx), clients/[id]/form-2307-scans (Download all zip, D160), documents/[id]/download,
+/app/api/                      backup (POST streams the backup zip, GET the last-backup time — D172), clients/[id]/sawt-worksheet (xlsx), clients/[id]/form-2307-scans (Download all zip, D160), documents/[id]/download,
                                 filings/[id]/package (flat client zip, standard file names, no manifest — D103/D108/D111)
 /app/fonts/                    Plus Jakarta Sans, loaded via next/font/local — never next/font/google (D58)
 /middleware.ts                 single-password session gate
@@ -81,6 +81,8 @@ Next.js 15 App Router · TypeScript strict · Prisma + SQLite (`data/app.db`) ·
   filings.ts                     generateFilingsAction, savePayment (D75), updateFilingOtherCredits, setAllCertificatesReceived, alerts
   quarterlySales.ts, form2307.ts, documents.ts (25 MB check, unlock gates), startingFigures.ts,
   payors.ts, atcCodes.ts, clients.ts, clientTaxYears.ts, holidays.ts, taxRuleSets.ts, sawt.ts, auth.ts
+/lib/backup/                   createBackup.ts (VACUUM INTO snapshot + storage/ + .env + README.txt, streamed; D172), lastBackup.ts (AppSetting row, file name,
+                                the 7-day reminder text — D173)
 /lib/documents/                storage.ts (naming, SHA-256), computationSheet.ts (+ computationSheetHtml.ts),
                                 filingPackage.ts (planPackageDocuments — the five document kinds, the zip's standard names, and
                                 the email's attachment list, all from one source: D108/D110/D111)
@@ -242,6 +244,7 @@ Centered container ~1100px. Tables with aligned columns. Row text 14px, secondar
 - **A sticky client bar (`components/client-sticky-bar.tsx`, D104)** on the client page and its Income, Form 2307s and Payors pages: appears once the page header scrolls away, beside the menu, with the client's name (a link), TIN and buttons for those three pages. The filing page has its own slim bar (D80); the two never appear together. The Form 2307 register opens on "All periods" (D105).
 - **A left-side menu (`components/nav.tsx`, D58/D140):** Dashboard · Work (Kanban, Clients) · Settings (Tax Rules, ATC, Holidays), the heading linking to the hub. **Page headings match the menu ("Kanban", "Tax Rules", "ATC"); URLs and form field labels ("ATC code") are unchanged.** Icons from `lucide-react` only. **Back to Settings (D166):** Tax Rules, ATC and Holidays each have a bordered Back button at the top right that goes to the Settings hub (beside New on Tax Rules and ATC; beside Add holiday on Holidays). **Holidays (D169):** the add form is hidden until the primary Add holiday button is clicked (as Payors, D161) and opens above the table; Save adds and closes, Cancel closes unsaved; table centred.
 - **The New/Edit rule set form (D168):** Effective from fills in as January 1 of the taxable year typed (`lib/ruleSetDefaults.ts`) and stays editable — once she changes it, it stops following the year; on Edit the stored date is shown and `updateTaxRuleSet` writes a date only when its Manila calendar day changed. The late-filing surcharge/interest section is gone from the form; the columns stay, Create leaves them empty, Edit never writes them, and no screen reads them (only the self-disabled `lib/tax/lateFilingExposure.ts` does). No grey helper text — format examples are placeholders in the boxes; Cancel is bordered and returns to the list unsaved.
+- **One button size (D170):** every page-header button and every form's submit + Cancel pair uses the shared `Button` default size; only the colour differs. Don't add `size="sm"` to a header or form button; `sm` is for controls inside cards, tables and filter bars.
 - **Colours are CSS variable tokens (`app/globals.css`), never a hard-coded hex on a screen** — the generated computation-sheet HTML (an archive document) is the one exception.
 - **Plus Jakarta Sans, loaded locally.** Tabular figures on money columns.
 - **An overpayment on the sheet's final row shows in parentheses, "(₱X) — overpayment" (D59).** "Nothing to pay — overpayment ₱X" is muted grey, never amber (D81).
@@ -249,7 +252,7 @@ Centered container ~1100px. Tables with aligned columns. Row text 14px, secondar
 
 ## Security
 
-Will hold real TINs and income data under the Data Privacy Act from November 2026. **There is none in the application today** — the eight sample clients are fictitious (D82). One real client's Q1 figures are reproduced in `tests/tax/realFilingQ1_2026.test.ts` (D42/D49) — amounts and taxpayer type only, no name, TIN, payor or address. Single `.env` password is adequate for localhost and nothing more. Never commit `data/`, `storage/`, or any `*.local.ts` fixture.
+Will hold real TINs and income data under the Data Privacy Act from November 2026. **There is none in the application today** — the eight sample clients are fictitious (D82). One real client's Q1 figures are reproduced in `tests/tax/realFilingQ1_2026.test.ts` (D42/D49) — amounts and taxpayer type only, no name, TIN, payor or address. Single `.env` password is adequate for localhost and nothing more. **Backup (D172):** Settings → Back up now makes one zip (database snapshot via `VACUUM INTO`, all of `storage/`, `.env`, README.txt); the last time is in `AppSetting` (`lastBackupAt`); the Dashboard shows an amber reminder after 7 days or if never (D173). **There is no restore button — restoring stays manual** (stop the app, unzip, copy `data\app.db`, `storage` and `.env` back, start it; the zip's README.txt spells it out). The zip holds real TINs, income and documents — it is kept private, never emailed or shared. Never commit `data/`, `storage/`, or any `*.local.ts` fixture.
 
 ## How to approach changes
 
@@ -278,9 +281,8 @@ Will hold real TINs and income data under the Data Privacy Act from November 202
 ## Current priorities
 
 See `CURRENT_STATE.md`. All six groups are walked and closed, and briefs #5v–#5z (the look pass) are checked by her. In short:
-1. **Walk the Tax Rules, ATC and Holidays pages** — the only screens not yet walked with her.
-2. **Back up** `data/app.db`, `storage/` and `.env`, and decide how, before real data arrives. Old test uploads in `storage/` may include real client documents.
-3. **A clean-start brief:** wipe the sample and test data, keep the reference data (rule sets, holidays, ATC codes).
-4. **Go-live setup:** add client → tax year → starting figures → generate (D78 enforces the order; there is no election step, D136). 1701Q due **November 16, 2026**. Excel stays the master until she switches.
-5. **Confirm the ATC codes** at `/settings/atc-codes` (each now carries the certificate's rate, D132) **and the eSubmission address** (`TaxRuleSet.eSubmissionEmail`).
-6. After go-live, in this order: the **document archive browse view**, then the **calendar**, then the **Annual overpayment carry-over** (2026→2027).
+1. **Walk the Tax Rules, ATC and Holidays pages** — the only screens not yet walked with her. (Backup is built, D172/D173.)
+2. **A clean-start brief:** wipe the sample and test data, keep the reference data (rule sets, holidays, ATC codes).
+3. **Go-live setup:** add client → tax year → starting figures → generate (D78 enforces the order; there is no election step, D136). 1701Q due **November 16, 2026**. Excel stays the master until she switches.
+4. **Confirm the ATC codes** at `/settings/atc-codes` (each now carries the certificate's rate, D132) **and the eSubmission address** (`TaxRuleSet.eSubmissionEmail`).
+5. After go-live, in this order: the **document archive browse view**, then the **calendar**, then the **Annual overpayment carry-over** (2026→2027).
