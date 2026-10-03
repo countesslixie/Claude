@@ -11,6 +11,8 @@ export type HolidayFormState = {
   error?: string;
   fieldErrors?: Record<string, string[]>;
   values?: Record<string, string>;
+  /** D169 — set on a successful save so the Add form can close itself. */
+  saved?: boolean;
 };
 
 export async function createHoliday(
@@ -57,7 +59,7 @@ export async function createHoliday(
   }
 
   revalidatePath("/settings/holidays");
-  return {};
+  return { saved: true };
 }
 
 export async function deleteHoliday(id: string): Promise<void> {

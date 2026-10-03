@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { HolidayForm } from "@/components/holiday-form";
+import { HolidaysHeader } from "@/components/holidays-header";
 import { deleteHoliday } from "@/lib/actions/holidays";
 import { formatManilaDate } from "@/lib/dates";
 
@@ -13,18 +13,10 @@ export default async function HolidaysPage() {
 
   return (
     <div className="mx-auto max-w-4xl">
-      <h1 className="text-2xl font-semibold text-ink">Holidays</h1>
-      <p className="mt-1 text-sm text-faint">
-        Business-day due-date shifting reads this table only — holidays are never computed
-        algorithmically.
-      </p>
+      <HolidaysHeader />
 
-      <div className="mt-4 rounded-lg border border-line bg-surface p-4">
-        <HolidayForm />
-      </div>
-
-      <div className="mt-4 overflow-x-auto rounded-lg border border-line bg-surface">
-        <table className="data-table">
+      <div className="overflow-x-auto rounded-lg border border-line bg-surface">
+        <table className="data-table data-table-centered">
           <thead>
             <tr>
               <th>Date</th>

@@ -7,7 +7,7 @@ import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { createHoliday, type HolidayFormState } from "@/lib/actions/holidays";
 
-export function HolidayForm() {
+export function HolidayForm({ onSaved, onCancel }: { onSaved?: () => void; onCancel?: () => void }) {
   const [state, formAction, isPending] = useActionState<HolidayFormState, FormData>(
     createHoliday,
     {},
@@ -19,6 +19,8 @@ export function HolidayForm() {
     if (!state.error && !state.fieldErrors && formRef.current) {
       formRef.current.reset();
     }
+    if (state.saved) onSaved?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state]);
 
   const errs = (key: string) => state.fieldErrors?.[key];
@@ -60,10 +62,15 @@ export function HolidayForm() {
           <p key={e} className="text-xs text-red">{e}</p>
         ))}
       </div>
-      <div className="sm:col-span-6">
+      <div className="flex gap-2 sm:col-span-6">
         <Button type="submit" size="sm" disabled={isPending}>
-          {isPending ? "Adding…" : "Add holiday"}
+          {isPending ? "Saving…" : "Save"}
         </Button>
+        {onCancel && (
+          <Button type="button" size="sm" variant="secondary" onClick={onCancel}>
+            Cancel
+          </Button>
+        )}
       </div>
     </form>
   );

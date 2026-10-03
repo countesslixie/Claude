@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/status-badge";
 import { bpsToPercentLabel } from "@/lib/money";
+import { BackToSettings } from "@/components/back-to-settings";
 
 /**
  * ATC maintenance (Settings), backed by the AtcCode table (D19). She can
@@ -16,9 +17,12 @@ export default async function AtcCodesPage() {
     <div className="mx-auto max-w-4xl">
       <div className="mb-4 flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-ink">ATC</h1>
-        <Link href="/settings/atc-codes/new">
-          <Button>New ATC</Button>
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link href="/settings/atc-codes/new">
+            <Button>New ATC</Button>
+          </Link>
+          <BackToSettings />
+        </div>
       </div>
 
       <div className="overflow-x-auto rounded-lg border border-line bg-surface">

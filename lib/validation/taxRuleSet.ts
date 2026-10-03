@@ -13,10 +13,6 @@ const pesos = z
 // D105/D110-era plain wording (brief #5t): rates are typed as percentages ("8" or "8.00") and
 // converted to basis points at the action boundary (lib/money.ts's percentToBps).
 const percentText = z.string().trim().regex(/^\d+(\.\d{1,2})?$/, "Enter a percent, e.g. 8 or 8.00");
-const optionalPercent = z
-  .union([percentText, z.literal("")])
-  .optional()
-  .transform((v) => (v === "" || v === undefined ? undefined : v));
 
 export const taxRuleSetSchema = z.object({
   taxableYear: z.coerce.number().int().min(2000).max(2100),
@@ -42,9 +38,6 @@ export const taxRuleSetSchema = z.object({
   eSubmissionEmail: z.string().trim().email("Enter an email address"),
   // D106 (brief #5s) — the day of the month after each period ends by which the client sends documents (her engagement letter).
   clientDocsDueDay: z.coerce.number().int().min(1).max(28),
-
-  surchargeRatePercent: optionalPercent,
-  interestRatePercentPerAnnum: optionalPercent,
 
   notes: z
     .string()

@@ -1,7 +1,7 @@
 # PROJECT_MASTER.md
 
 *Permanent project memory: the intended application and the rules that govern it, stated as they stand today. History lives in DECISIONS.md; build status in CURRENT_STATE.md. Decision numbers in brackets trace each rule.*
-*Last reconciled: 2026-10-03 — brief #6e (D162–D165), on top of brief #6d (D155–D161), on top of brief #6c (D151–D154: the Complete lock, step 2 starting open, the client page), brief #6b (D143–D150) and brief #6a's documentation pass (checked against the tree at brief #5z's tip `e761a74`, covering D115–D142).*
+*Last reconciled: 2026-10-03 — brief #6f (D166–D169), on top of brief #6e (D162–D165), on top of brief #6d (D155–D161), on top of brief #6c (D151–D154: the Complete lock, step 2 starting open, the client page), brief #6b (D143–D150) and brief #6a's documentation pass (checked against the tree at brief #5z's tip `e761a74`, covering D115–D142).*
 
 ---
 
@@ -197,7 +197,7 @@ Next.js 15 App Router · TypeScript strict · Prisma + SQLite (`data/app.db`) ·
 ## UI principles
 
 - Centered container ~1100px. Tables with aligned columns, not edge-pinned cards. Row text 14px, secondary 13px. Empty panels collapse to one muted line. Rows navigate to detail.
-- **A left-side menu (D58/D140)** replaces the old top bar — Dashboard, ungrouped; Work (Kanban, Clients); Settings (Tax Rules, ATC, Holidays), whose group heading itself links to the Settings hub page. Page headings match the menu; URLs and form field labels ("ATC code") are unchanged.
+- **A left-side menu (D58/D140)** replaces the old top bar — Dashboard, ungrouped; Work (Kanban, Clients); Settings (Tax Rules, ATC, Holidays), whose group heading itself links to the Settings hub page. Page headings match the menu; URLs and form field labels ("ATC code") are unchanged. **Back to Settings (D166):** Tax Rules, ATC and Holidays each have a bordered Back button at the top right that goes to the Settings hub (beside New on Tax Rules and ATC; beside Add holiday on Holidays). **Holidays (D169):** the add form is hidden until the primary Add holiday button is clicked (as Payors, D161) and opens above the table; Save adds and closes, Cancel closes unsaved; table centred.
 - **Every status pill goes through a plain-label helper, never a raw enum (D63)** — including the Form 2307 register's own statuses (D99).
 - **The client's three sub-pages (D158–D161, no grey instructional text on any of them — headings, labels, figures and status pills only):**
   - **Income (D158)** is a view-only table reached from the client page (no `?filingId`): PERIOD · GROSS SALES · NON-OPERATING INCOME · TOTAL · STATUS, every column centred, nothing clickable. Rows: **"Previous quarters"** (one combined row, only when the year's starting figures name an outside return; gross = item 51 minus non-operating, `previousQuartersFromStartingFigures` in `lib/declaredIncome.ts`, the same derivation `filingComputation.ts` uses; status "Filed outside the app"), one "Q3 2026" row per in-app quarter (status Not yet entered / Draft / Saved / Filed), and a Total row. A missing figure is "—", never a silent ₱0.00; "No sales this quarter" is a real ₱0.00. **The year total and the Form 2307 page's certificates-vs-declared-sales check read the same function (`getDeclaredIncome`).** Step 1's "Go to income entry" still opens the single-quarter entry screen (same route, `?filingId=`), unchanged except that its "Other quarters" table shows the outside quarters as one "Previous quarters" row (D159).
@@ -247,3 +247,5 @@ Next.js 15 App Router · TypeScript strict · Prisma + SQLite (`data/app.db`) ·
 20. **Six groups, and step numbers never renumbered to make groups contiguous (D70)**
 21. **eAFS applies only when the filing has certificates (D93)**
 22. **8% only: no election and no regime to record or check (D136/D142)** — every client and tax year is 8% elected, flat rate
+
+- **Rule set form (D168):** Effective from prefills as January 1 of the typed taxable year (editable; never auto-changed on Edit); the late-filing surcharge/interest section is gone from the form (columns kept, never written by Edit); no grey helper text; Cancel returns to the list.

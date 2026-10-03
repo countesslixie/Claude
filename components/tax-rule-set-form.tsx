@@ -1,11 +1,13 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import type { TaxRuleSetFormState } from "@/lib/actions/taxRuleSets";
+import { effectiveFromAfterYearChange } from "@/lib/ruleSetDefaults";
 
 type FieldProps = {
   name: string;
@@ -15,18 +17,22 @@ type FieldProps = {
   required?: boolean;
   type?: string;
   placeholder?: string;
-  hint?: string;
+  value?: string;
+  onChange?: (value: string) => void;
 };
 
-function Field({ name, label, defaultValue, errors, required, type = "text", placeholder, hint }: FieldProps) {
+function Field({ name, label, defaultValue, errors, required, type = "text", placeholder, value, onChange }: FieldProps) {
   return (
     <div className="flex flex-col gap-1">
       <Label htmlFor={name}>
         {label}
         {required && <span className="text-red"> *</span>}
       </Label>
-      <Input id={name} name={name} type={type} defaultValue={defaultValue} required={required} placeholder={placeholder} />
-      {hint && <p className="text-xs text-faint">{hint}</p>}
+      {onChange ? (
+        <Input id={name} name={name} type={type} value={value ?? ""} onChange={(e) => onChange(e.target.value)} required={required} placeholder={placeholder} />
+      ) : (
+        <Input id={name} name={name} type={type} defaultValue={defaultValue} required={required} placeholder={placeholder} />
+      )}
       {errors?.map((e) => (
         <p key={e} className="text-xs text-red">
           {e}
@@ -40,14 +46,24 @@ export function TaxRuleSetForm({
   action,
   initialValues,
   submitLabel,
+  cancelHref,
 }: {
   action: (state: TaxRuleSetFormState, formData: FormData) => Promise<TaxRuleSetFormState>;
   initialValues?: Record<string, string>;
   submitLabel: string;
+  /** Where Cancel goes — saves nothing (D168). */
+  cancelHref: string;
 }) {
+  const router = useRouter();
   const [state, formAction, isPending] = useActionState<TaxRuleSetFormState, FormData>(action, {
     values: initialValues,
   });
+
+  // D168 — New: Effective from follows the year typed until she edits it herself.
+  // Edit: the stored date is shown and never auto-changed.
+  const [taxableYear, setTaxableYear] = useState(state.values?.taxableYear ?? initialValues?.taxableYear ?? "");
+  const [effectiveFrom, setEffectiveFrom] = useState(state.values?.effectiveFrom ?? initialValues?.effectiveFrom ?? "");
+  const [followsYear, setFollowsYear] = useState(!initialValues?.effectiveFrom);
 
   const v = (key: string) => state.values?.[key] ?? initialValues?.[key] ?? "";
   const errs = (key: string) => state.fieldErrors?.[key];
@@ -62,9 +78,31 @@ export function TaxRuleSetForm({
         <legend className="col-span-full text-sm font-semibold text-ink">
           Effectivity
         </legend>
-        <Field name="taxableYear" label="Taxable year" type="number" defaultValue={v("taxableYear")} errors={errs("taxableYear")} required />
+        <Field
+          name="taxableYear"
+          label="Taxable year"
+          type="number"
+          value={taxableYear}
+          onChange={(next) => {
+            setTaxableYear(next);
+            setEffectiveFrom((cur) => effectiveFromAfterYearChange({ yearText: next, current: cur, followsYear }));
+          }}
+          errors={errs("taxableYear")}
+          required
+        />
         <div />
-        <Field name="effectiveFrom" label="Effective from" type="date" defaultValue={v("effectiveFrom")} errors={errs("effectiveFrom")} required />
+        <Field
+          name="effectiveFrom"
+          label="Effective from"
+          type="date"
+          value={effectiveFrom}
+          onChange={(next) => {
+            setFollowsYear(false);
+            setEffectiveFrom(next);
+          }}
+          errors={errs("effectiveFrom")}
+          required
+        />
         <Field name="effectiveTo" label="Effective to (optional)" type="date" defaultValue={v("effectiveTo")} errors={errs("effectiveTo")} />
       </fieldset>
 
@@ -100,16 +138,16 @@ export function TaxRuleSetForm({
         <legend className="col-span-full text-sm font-semibold text-ink">
           Statutory due dates (confirm against the current BIR issuance)
         </legend>
-        <Field name="q1DueMonthDay" label="Q1 (1701Q) due" defaultValue={v("q1DueMonthDay") || "04-15"} errors={errs("q1DueMonthDay")} required hint="MM-DD" />
-        <Field name="q2DueMonthDay" label="Q2 (1701Q) due" defaultValue={v("q2DueMonthDay") || "08-15"} errors={errs("q2DueMonthDay")} required hint="MM-DD" />
-        <Field name="q3DueMonthDay" label="Q3 (1701Q) due" defaultValue={v("q3DueMonthDay") || "11-15"} errors={errs("q3DueMonthDay")} required hint="MM-DD" />
+        <Field name="q1DueMonthDay" label="Q1 (1701Q) due" defaultValue={v("q1DueMonthDay") || "04-15"} errors={errs("q1DueMonthDay")} required placeholder="05-15" />
+        <Field name="q2DueMonthDay" label="Q2 (1701Q) due" defaultValue={v("q2DueMonthDay") || "08-15"} errors={errs("q2DueMonthDay")} required placeholder="08-15" />
+        <Field name="q3DueMonthDay" label="Q3 (1701Q) due" defaultValue={v("q3DueMonthDay") || "11-15"} errors={errs("q3DueMonthDay")} required placeholder="11-15" />
         <Field
           name="annualDueMonthDay"
-          label="Annual due"
+          label="Annual due (following year)"
           defaultValue={v("annualDueMonthDay") || "04-15"}
           errors={errs("annualDueMonthDay")}
           required
-          hint="MM-DD, of the FOLLOWING year"
+          placeholder="04-15"
         />
       </fieldset>
 
@@ -140,7 +178,6 @@ export function TaxRuleSetForm({
           defaultValue={v("eSubmissionEmail") || "esubmission@bir.gov.ph"}
           errors={errs("eSubmissionEmail")}
           required
-          hint="Confirm against BIR before live use"
         />
         <Field
           name="clientDocsDueDay"
@@ -149,25 +186,7 @@ export function TaxRuleSetForm({
           defaultValue={v("clientDocsDueDay") || "20"}
           errors={errs("clientDocsDueDay")}
           required
-          hint="From the engagement letter (20 = Apr 20, Jul 20, Oct 20, Jan 20). Named in the client email and the filing page's working calendar"
-        />
-      </fieldset>
-
-      <fieldset className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <legend className="col-span-full text-sm font-semibold text-ink">
-          Late filing exposure — informational only
-        </legend>
-        <Field
-          name="surchargeRatePercent"
-          label="Surcharge rate (%, optional)"
-          defaultValue={v("surchargeRatePercent")}
-          errors={errs("surchargeRatePercent")}
-        />
-        <Field
-          name="interestRatePercentPerAnnum"
-          label="Interest rate per year (%, optional)"
-          defaultValue={v("interestRatePercentPerAnnum")}
-          errors={errs("interestRatePercentPerAnnum")}
+          placeholder="20"
         />
       </fieldset>
 
@@ -176,9 +195,12 @@ export function TaxRuleSetForm({
         <Textarea id="notes" name="notes" defaultValue={v("notes")} rows={3} />
       </div>
 
-      <div>
+      <div className="flex gap-2">
         <Button type="submit" disabled={isPending}>
           {isPending ? "Saving…" : submitLabel}
+        </Button>
+        <Button type="button" variant="secondary" onClick={() => router.push(cancelHref)}>
+          Cancel
         </Button>
       </div>
     </form>

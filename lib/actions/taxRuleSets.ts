@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { taxRuleSetSchema } from "@/lib/validation/taxRuleSet";
 import { getActorId } from "@/lib/actor";
 import { logActivity } from "@/lib/activityLog";
-import { manilaDateInputToJsDate } from "@/lib/dates";
+import { manilaDateInputToJsDate, toManilaDateInputValue } from "@/lib/dates";
 import { pesosToCents, percentToBps } from "@/lib/money";
 
 export type TaxRuleSetFormState = {
@@ -30,8 +30,6 @@ const FIELDS = [
   "eafsDeadlineOffsetDays",
   "eSubmissionEmail",
   "clientDocsDueDay",
-  "surchargeRatePercent",
-  "interestRatePercentPerAnnum",
   "notes",
 ] as const;
 
@@ -81,8 +79,6 @@ export async function createTaxRuleSet(
       eafsDeadlineOffsetDays: parsed.data.eafsDeadlineOffsetDays,
       eSubmissionEmail: parsed.data.eSubmissionEmail,
       clientDocsDueDay: parsed.data.clientDocsDueDay,
-      surchargeRateBps: parsed.data.surchargeRatePercent != null ? percentToBps(parsed.data.surchargeRatePercent) : null,
-      interestRateBpsPerAnnum: parsed.data.interestRatePercentPerAnnum != null ? percentToBps(parsed.data.interestRatePercentPerAnnum) : null,
       notes: parsed.data.notes ?? null,
       actorId,
     },
@@ -100,6 +96,8 @@ export async function createTaxRuleSet(
   redirect("/settings/tax-rule-sets");
 }
 
+// D168 — the late-filing surcharge and interest columns are no longer on the form. Create leaves
+// them empty and Update never writes them, so a stored value is left exactly as it is.
 export async function updateTaxRuleSet(
   id: string,
   _prevState: TaxRuleSetFormState,
@@ -131,8 +129,14 @@ export async function updateTaxRuleSet(
     where: { id },
     data: {
       taxableYear: parsed.data.taxableYear,
-      effectiveFrom: manilaDateInputToJsDate(parsed.data.effectiveFrom),
-      effectiveTo: parsed.data.effectiveTo ? manilaDateInputToJsDate(parsed.data.effectiveTo) : null,
+      // D168 — Edit never changes a stored date: written only when the calendar day was changed
+      // (the seed stores midnight UTC, the form midnight Manila — same day, different instant).
+      ...(parsed.data.effectiveFrom !== toManilaDateInputValue(before.effectiveFrom)
+        ? { effectiveFrom: manilaDateInputToJsDate(parsed.data.effectiveFrom) }
+        : {}),
+      ...((parsed.data.effectiveTo ?? "") !== toManilaDateInputValue(before.effectiveTo)
+        ? { effectiveTo: parsed.data.effectiveTo ? manilaDateInputToJsDate(parsed.data.effectiveTo) : null }
+        : {}),
       incomeTaxRateBps: percentToBps(parsed.data.incomeTaxRatePercent),
       vatThresholdCents: pesosToCents(parsed.data.vatThreshold),
       allowableDeductionCents: pesosToCents(parsed.data.allowableDeduction),
@@ -144,8 +148,6 @@ export async function updateTaxRuleSet(
       eafsDeadlineOffsetDays: parsed.data.eafsDeadlineOffsetDays,
       eSubmissionEmail: parsed.data.eSubmissionEmail,
       clientDocsDueDay: parsed.data.clientDocsDueDay,
-      surchargeRateBps: parsed.data.surchargeRatePercent != null ? percentToBps(parsed.data.surchargeRatePercent) : null,
-      interestRateBpsPerAnnum: parsed.data.interestRatePercentPerAnnum != null ? percentToBps(parsed.data.interestRatePercentPerAnnum) : null,
       notes: parsed.data.notes ?? null,
       actorId,
     },

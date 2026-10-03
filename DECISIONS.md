@@ -1249,7 +1249,28 @@ The "Verified against a BIR issuance" checkbox and its amber "Unverified — …
 
 **Step 1's entry screen (leftover from #6d):** the grey "Declared gross sales for TY…" subtitle is removed — it counted only in-app quarters and undercounted (D158); the read-only Income table holds the year's total.
 
+**D166 — Back to Settings on all three settings pages** *(her decision, brief #6f)*
+
+Tax Rules, ATC and Holidays each have a bordered **Back** button at the top right (`components/back-to-settings.tsx`) that goes to the Settings hub. On Tax Rules and ATC it sits beside New; on Holidays beside Add holiday (D169).
+
+**D167 — The Tax Rules list** *(her decision, brief #6f)*
+
+The grey line under the heading is gone. Every column and heading is centred (the shared `data-table-centered` class): Taxable year · Effective · Rate · VAT threshold · Deduction · Q1 / Q2 / Q3 / Annual due · Edit.
+
+**D168 — The New/Edit rule set form** *(her decision, brief #6f)*
+
+- **Effective from** fills in as January 1 of the taxable year typed (`defaultEffectiveFrom`, `lib/ruleSetDefaults.ts`) and stays editable; once she changes it herself it stops following the year. On Edit the stored date is shown and never auto-changed. *Found while walking it:* saving a rule set unchanged used to rewrite `effectiveFrom` from midnight UTC (how the seed stores it) to midnight Manila — the same calendar day, an 8-hour different stored instant. `updateTaxRuleSet` now writes `effectiveFrom`/`effectiveTo` only when the Manila calendar day was actually changed. Nothing reads these two columns except the Tax Rules list and this form.
+- **The "Late filing exposure — informational only" section is removed** (surcharge rate, interest rate). The columns `surchargeRateBps`/`interestRateBpsPerAnnum` stay; `createTaxRuleSet` leaves them empty and `updateTaxRuleSet` never writes them, so a stored value survives an edit (before, an Edit with the fields blank would have set them to null). *Readers checked first:* the only code that reads them is `lib/tax/lateFilingExposure.ts` (pure, self-disabling when either is null, called by no screen — only its own test), the seed (writes null) and the form/action/Edit page being changed. No screen shows these figures; none to list and leave. No computed figure, due date, adjusted due date or frozen snapshot depends on them.
+- **All grey helper text is removed.** Format hints became placeholders in the boxes: Q1 `05-15`, Q2 `08-15`, Q3 `11-15`, Annual `04-15`, Client documents due `20`. *Labels reworded:* "Annual due" is now "Annual due (following year)" (the hint "of the FOLLOWING year" would otherwise be lost). The "Confirm against BIR before live use" note under the eSubmission email and the long note under Client documents due are simply gone; the labels already carry their meaning. The bold group legends (including "Statutory due dates (confirm against the current BIR issuance)") are headings, not helper text, and are unchanged.
+- **Cancel:** a bordered button next to Create rule set / Save that returns to the Tax Rules list without saving.
+
+**D169 — The Holidays page** *(her decision, brief #6f)*
+
+The grey line under the heading is gone. The add form is hidden until the primary **Add holiday** button (top right, beside Back) is clicked, as Payors (D161); it opens above the table with the same fields (Date, Name, Type, Scope, Local area). **Save** adds the holiday and closes the form, **Cancel** closes it unsaved. `createHoliday` now returns `saved: true` so the form can close itself. Table centred: Date · Name · Type · Scope · Delete; Delete works as before.
+
 ---
+
+**Documentation reconciled through brief #6f** (brief #6f's D166–D169, then brief #6e's D162–D165, #6a, #6c's D151–D154 and #6d's D155–D161) — see the "Last reconciled" line at the top of CURRENT_STATE.md, PROJECT_MASTER.md and CLAUDE.md.
 
 **Documentation reconciled through brief #6e** (brief #6e's D162–D165, then brief #6a, #6c's D151–D154 and #6d's D155–D161; earlier passes: #5u, #5m, #5o's light additions D83–D93, #5p) — see the "Last reconciled" line at the top of this file, CURRENT_STATE.md, PROJECT_MASTER.md and CLAUDE.md.
 

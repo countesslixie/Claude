@@ -31,9 +31,6 @@ export default async function EditTaxRuleSetPage({
     eafsDeadlineOffsetDays: String(ruleSet.eafsDeadlineOffsetDays),
     eSubmissionEmail: ruleSet.eSubmissionEmail,
     clientDocsDueDay: String(ruleSet.clientDocsDueDay),
-    surchargeRatePercent: ruleSet.surchargeRateBps != null ? bpsToPercentLabel(ruleSet.surchargeRateBps).replace("%", "") : "",
-    interestRatePercentPerAnnum:
-      ruleSet.interestRateBpsPerAnnum != null ? bpsToPercentLabel(ruleSet.interestRateBpsPerAnnum).replace("%", "") : "",
     notes: ruleSet.notes ?? "",
   };
 
@@ -42,7 +39,7 @@ export default async function EditTaxRuleSetPage({
       <h1 className="mb-4 text-2xl font-semibold text-ink">
         Edit tax rule set — {ruleSet.taxableYear}
       </h1>
-      <TaxRuleSetForm action={boundAction} initialValues={initialValues} submitLabel="Save changes" />
+      <TaxRuleSetForm action={boundAction} initialValues={initialValues} submitLabel="Save changes" cancelHref="/settings/tax-rule-sets" />
     </div>
   );
 }
