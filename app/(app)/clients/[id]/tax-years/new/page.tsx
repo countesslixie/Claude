@@ -3,6 +3,9 @@ import { prisma } from "@/lib/prisma";
 import { ClientTaxYearForm } from "@/components/client-tax-year-form";
 import { createClientTaxYear } from "@/lib/actions/clientTaxYears";
 
+// D175 — always rendered fresh from the database, never prerendered at build time.
+export const dynamic = "force-dynamic";
+
 export default async function NewClientTaxYearPage({
   params,
 }: {

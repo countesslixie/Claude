@@ -11,7 +11,15 @@ import { DateTime } from "luxon";
  */
 
 const MANILA_ZONE = "Asia/Manila";
-const STORAGE_ROOT = path.join(process.cwd(), "storage");
+
+/**
+ * The vault folder: ./storage, unless BIR_STORAGE_ROOT says otherwise. Only the
+ * test run sets it (D177) so tests never write into her real vault; the app
+ * and her .env never do.
+ */
+export function getStorageRoot(): string {
+  return process.env.BIR_STORAGE_ROOT ? path.resolve(process.env.BIR_STORAGE_ROOT) : path.join(process.cwd(), "storage");
+}
 
 export function computeSha256(buffer: Buffer): string {
   return createHash("sha256").update(buffer).digest("hex");
@@ -46,6 +54,7 @@ export function buildStorageRelativePath(params: StoragePathParams): string {
 }
 
 function absolutePath(relativePath: string): string {
+  const STORAGE_ROOT = getStorageRoot();
   const resolved = path.join(STORAGE_ROOT, relativePath);
   // Defensive: a storedPath is always built by buildStorageRelativePath
   // above, but never trust a relative path enough to let it escape the

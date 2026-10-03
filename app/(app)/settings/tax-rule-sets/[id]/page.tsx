@@ -5,6 +5,9 @@ import { updateTaxRuleSet } from "@/lib/actions/taxRuleSets";
 import { toManilaDateInputValue } from "@/lib/dates";
 import { centsToPesos, bpsToPercentLabel } from "@/lib/money";
 
+// D175 — always rendered fresh from the database, never prerendered at build time.
+export const dynamic = "force-dynamic";
+
 export default async function EditTaxRuleSetPage({
   params,
 }: {

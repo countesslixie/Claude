@@ -17,6 +17,7 @@ import { checkSendClientPackageReadiness } from "@/lib/workflow/docSlots";
 import { computeFilingCompleteness } from "@/lib/workflow/completeness";
 import { parseDocSlots } from "@/lib/workflow/types";
 import { markEarlierQuartersFiled, resolvePrepare } from "../helpers/filedEarlier";
+import { testStorageRoot } from "@/tests/helpers/testEnv";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
@@ -36,7 +37,7 @@ describe("workflow step actions", () => {
     await prisma.filing.deleteMany({ where: { clientId: { in: createdClientIds } } });
     await prisma.client.deleteMany({ where: { id: { in: createdClientIds } } });
     for (const code of clientCodes) {
-      await rm(path.join(process.cwd(), "storage", code), { recursive: true, force: true });
+      await rm(path.join(testStorageRoot(), code), { recursive: true, force: true });
     }
   });
 

@@ -12,6 +12,9 @@ import { formatManilaDate, currentTaxableYearManila } from "@/lib/dates";
 import { formLabel } from "@/lib/workflow/eSubmissionEmail";
 import { filingStatusLabel } from "@/lib/workflow/status";
 
+// D175 — always rendered fresh from the database, never prerendered at build time.
+export const dynamic = "force-dynamic";
+
 // Brief #5i §5 — matches app/(app)/filings/page.tsx's own FILING_STATUS_TONE
 // exactly, so a filing's pill reads the same colour wherever it shows.
 const FILING_STATUS_TONE: Record<string, StatusTone> = {

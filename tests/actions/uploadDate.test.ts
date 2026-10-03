@@ -7,6 +7,7 @@ import { markStepDone } from "@/lib/actions/workflowSteps";
 import { generateFilingsForClientYear } from "@/lib/workflow/filingGeneration";
 import { manilaCalendarDay, nowManila } from "@/lib/dates";
 import { markEarlierQuartersFiled, resolvePrepare } from "../helpers/filedEarlier";
+import { testStorageRoot } from "@/tests/helpers/testEnv";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
@@ -22,7 +23,7 @@ describe("uploadDocument without a date", () => {
     await prisma.workflowStep.deleteMany({ where: { filing: { clientId } } });
     await prisma.filing.deleteMany({ where: { clientId } });
     await prisma.client.deleteMany({ where: { id: clientId } });
-    await rm(path.join(process.cwd(), "storage", clientCode), { recursive: true, force: true });
+    await rm(path.join(testStorageRoot(), clientCode), { recursive: true, force: true });
   });
 
   it("stores today's Manila date when no documentDate is supplied", async () => {

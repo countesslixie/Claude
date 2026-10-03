@@ -9,6 +9,7 @@ import { markStepDone, skipStep } from "@/lib/actions/workflowSteps";
 import { uploadDocument } from "@/lib/actions/documents";
 import { generateFilingsForClientYear } from "@/lib/workflow/filingGeneration";
 import { markEarlierQuartersFiled } from "../helpers/filedEarlier";
+import { testStorageRoot } from "@/tests/helpers/testEnv";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
@@ -38,7 +39,7 @@ describe("reopening steps 3/4 after a change to the computation's figures", () =
     await prisma.filing.deleteMany({ where: { clientId: { in: createdClientIds } } });
     await prisma.client.deleteMany({ where: { id: { in: createdClientIds } } });
     for (const code of clientCodes) {
-      await rm(path.join(process.cwd(), "storage", code), { recursive: true, force: true });
+      await rm(path.join(testStorageRoot(), code), { recursive: true, force: true });
     }
   });
 

@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 *Instructions for Claude Code working on this repository.*
-*Last reconciled: 2026-10-03 — brief #6g (D170–D173: one button size, the Q1 default, one-click backup, the backup reminder), on top of brief #6f (D166–D169) (Back to Settings, the Tax Rules list and form, the Holidays Add button), on top of brief #6e (D162–D165: centred client-page tables, the ATC list and form, no verified state), on top of brief #6d (D155–D161: the Income, Form 2307 and Payors pages, Complete-filing Copy, step 2's skipped wording), on top of brief #6c (D151–D154) and brief #6a's documentation pass (checked against the tree at brief #5z's tip `e761a74`, covering briefs #5v–#5z, D115–D142) and brief #6b (D143–D150); #6c adds D151–D154: the Complete lock, step 2 starting open, the client page layout. Each rule is stated once, as it stands, with decision numbers (DECISIONS.md holds the history).*
+*Last reconciled: 2026-10-03 — brief #6h (D174–D178: the bordered button's edge, every database page always-dynamic, the backup time recorded reliably, tests on their own database and storage, the clean start), on top of brief #6g (D170–D173: one button size, the Q1 default, one-click backup, the backup reminder), on top of brief #6f (D166–D169) (Back to Settings, the Tax Rules list and form, the Holidays Add button), on top of brief #6e (D162–D165: centred client-page tables, the ATC list and form, no verified state), on top of brief #6d (D155–D161: the Income, Form 2307 and Payors pages, Complete-filing Copy, step 2's skipped wording), on top of brief #6c (D151–D154) and brief #6a's documentation pass (checked against the tree at brief #5z's tip `e761a74`, covering briefs #5v–#5z, D115–D142) and brief #6b (D143–D150); #6c adds D151–D154: the Complete lock, step 2 starting open, the client page layout. Each rule is stated once, as it stands, with decision numbers (DECISIONS.md holds the history).*
 
 ---
 
@@ -83,7 +83,8 @@ Next.js 15 App Router · TypeScript strict · Prisma + SQLite (`data/app.db`) ·
   payors.ts, atcCodes.ts, clients.ts, clientTaxYears.ts, holidays.ts, taxRuleSets.ts, sawt.ts, auth.ts
 /lib/backup/                   createBackup.ts (VACUUM INTO snapshot + storage/ + .env + README.txt, streamed; D172), lastBackup.ts (AppSetting row, file name,
                                 the 7-day reminder text — D173)
-/lib/documents/                storage.ts (naming, SHA-256), computationSheet.ts (+ computationSheetHtml.ts),
+/lib/cleanStart/               cleanStart.ts (the clean start: refusals, plan, DELETE prompt, one transaction, then files; D178), run by /scripts/clean-start.ts (`npm run clean-start`)
+/lib/documents/                storage.ts (getStorageRoot — ./storage, or BIR_STORAGE_ROOT in tests only, D177) (naming, SHA-256), computationSheet.ts (+ computationSheetHtml.ts),
                                 filingPackage.ts (planPackageDocuments — the five document kinds, the zip's standard names, and
                                 the email's attachment list, all from one source: D108/D110/D111)
 /lib/sawt/                     keying worksheet assembly and export
@@ -96,7 +97,8 @@ Next.js 15 App Router · TypeScript strict · Prisma + SQLite (`data/app.db`) ·
                                 starting-figures-form, generate-filings-form, payor-*, atc-code-*, tax-rule-set-form, client-form, client-tax-year-form, holiday-form, clickable-row, print-button, nav, status-badge, copy-textarea, ui/
 /prisma/                       schema.prisma, migrations/, seed.ts (reference data), seedScenarios.ts (the eight sample clients, D82),
                                 backfills.ts (idempotent seed-run corrections: D96 step titles, D97 filing status, D106 document dates)
-/tests/                        actions/ clients/ filingComputation/ documents/ reconciliation/ sawt/ seed/ tax/ workflow/  (604 tests, 65 files)
+/tests/                        actions/ backup/ cleanStart/ clients/ filingComputation/ documents/ reconciliation/ sawt/ seed/ support/ tax/ workflow/  (678 tests, 73 files);
+                                globalSetup.ts + setupEnv.ts give every run a throwaway seeded database and storage (D177)
 /storage/  /data/              gitignored document vault and SQLite database
 ```
 
@@ -184,6 +186,7 @@ Step titles in the tree (D96, built): step 13 **"Save SAWT acknowledgement email
 - **No new dependencies without asking.**
 - **No outbound network calls at runtime.** No CDN fonts, analytics, telemetry or error SDKs. **Fonts and assets live in the repo (D58)** — never `next/font/google`.
 - Validate with Zod at every boundary.
+- **Every page that reads the database exports `dynamic = "force-dynamic"` (D175)**; a test fails if a `page.tsx` lacks it.
 - Server Actions that call `revalidatePath` can't run outside Next; scripts (the seed) stub `next/cache` before a dynamic import.
 
 ## Database rules
@@ -194,6 +197,12 @@ Step titles in the tree (D96, built): step 13 **"Save SAWT acknowledgement email
 - Migrations that add constraints should be verified to actually reject bad values.
 - **While the database holds only seed data, destructive migrations are fine** — drop, migrate, reseed. **This licence expires when live data is entered in November 2026.**
 
+## The live app: three things never to do (D177/D178)
+
+- **Never run `npx prisma migrate reset` (or delete `data/app.db`) on the live app.** It drops the whole database — every real client — and re-adds the eight sample clients (the `samplesRemoved` flag lives in the database it just dropped). It is for a scratch copy only. Say so plainly if she ever asks for a "reseed".
+- **Never point the tests at the live database or the real `storage/`.** `npm test` builds its own throwaway database and document folder (`tests/globalSetup.ts`), gives each test file a private copy (`tests/setupEnv.ts`), and **refuses to start** if either would be `data/app.db` or `storage/` (`tests/support/liveGuard.ts`). Don't weaken or bypass that; don't add a test that reads or writes `process.cwd()/storage` or `data/` — use `testStorageRoot()` from `tests/helpers/testEnv.ts`.
+- **Don't wipe real data by hand.** The one supported wipe is `npm run clean-start` (D178), once, after a backup, before go-live.
+
 ## Seed data (D82)
 
 - **Every seeded client is fictitious**; never reuse a name typed in by hand during a walkthrough (they may be real people; the seed is committed).
@@ -201,7 +210,7 @@ Step titles in the tree (D96, built): step 13 **"Save SAWT acknowledgement email
 - **Drive each filing through the real server actions** (`saveQuarterlySales`, `addCertificate`, `markStepDone`, `savePayment`, `uploadDocument`, …) so auto-waiting, nothing-to-pay NA, item 56, the D78 guard and the frozen snapshot come out as the app produces them. What is set by hand (Client/ClientTaxYear/Payor rows, back-dated `waitingSince`) is named in `prisma/seedScenarios.ts`'s header. `seed.ts` stubs `next/cache` before a dynamic import — never import `seedScenarios` statically.
 - **Seeded documents are small placeholders marked SAMPLE**, saved through the normal storage path. Each client's Notes holds a one-line "Sample …" scenario.
 - Keep TaxRuleSet, Holiday and ATC seeding as is (WI010/WI011 stay as seeded and unconfirmed by the app, D19/D165); the suite depends on the seeded TaxRuleSet. Tax tests never read seed data (D5).
-- **The seed never deletes** — reference data is upserted; samples are built only when none exist. To start clean: `npx prisma migrate reset --force` (drops the database, re-applies migrations, runs the seed). Prisma refuses that under an AI agent without her consent, so Claude runs the equivalent: delete `data/app.db`, `npx prisma migrate deploy`, `npx tsx prisma/seed.ts`.
+- **The seed never deletes** — reference data is upserted; samples are built only when none exist, **never after the clean start (`AppSetting.samplesRemoved`) and never into a database that already holds a client who is not one of the eight samples (D178).** To start clean: `npx prisma migrate reset --force` (drops the database, re-applies migrations, runs the seed). Prisma refuses that under an AI agent without her consent, so Claude runs the equivalent: delete `data/app.db`, `npx prisma migrate deploy`, `npx tsx prisma/seed.ts`.
 
 ## Business rules you must not quietly change
 
@@ -245,6 +254,7 @@ Centered container ~1100px. Tables with aligned columns. Row text 14px, secondar
 - **A left-side menu (`components/nav.tsx`, D58/D140):** Dashboard · Work (Kanban, Clients) · Settings (Tax Rules, ATC, Holidays), the heading linking to the hub. **Page headings match the menu ("Kanban", "Tax Rules", "ATC"); URLs and form field labels ("ATC code") are unchanged.** Icons from `lucide-react` only. **Back to Settings (D166):** Tax Rules, ATC and Holidays each have a bordered Back button at the top right that goes to the Settings hub (beside New on Tax Rules and ATC; beside Add holiday on Holidays). **Holidays (D169):** the add form is hidden until the primary Add holiday button is clicked (as Payors, D161) and opens above the table; Save adds and closes, Cancel closes unsaved; table centred.
 - **The New/Edit rule set form (D168):** Effective from fills in as January 1 of the taxable year typed (`lib/ruleSetDefaults.ts`) and stays editable — once she changes it, it stops following the year; on Edit the stored date is shown and `updateTaxRuleSet` writes a date only when its Manila calendar day changed. The late-filing surcharge/interest section is gone from the form; the columns stay, Create leaves them empty, Edit never writes them, and no screen reads them (only the self-disabled `lib/tax/lateFilingExposure.ts` does). No grey helper text — format examples are placeholders in the boxes; Cancel is bordered and returns to the list unsaved.
 - **One button size (D170):** every page-header button and every form's submit + Cancel pair uses the shared `Button` default size; only the colour differs. Don't add `size="sm"` to a header or form button; `sm` is for controls inside cards, tables and filter bars.
+- **A bordered button's edge is the `--button-edge` token (D174)**, not the pale `--line`: it is the same size as the purple one, and the darker edge is what makes it read that way.
 - **Colours are CSS variable tokens (`app/globals.css`), never a hard-coded hex on a screen** — the generated computation-sheet HTML (an archive document) is the one exception.
 - **Plus Jakarta Sans, loaded locally.** Tabular figures on money columns.
 - **An overpayment on the sheet's final row shows in parentheses, "(₱X) — overpayment" (D59).** "Nothing to pay — overpayment ₱X" is muted grey, never amber (D81).
@@ -252,7 +262,7 @@ Centered container ~1100px. Tables with aligned columns. Row text 14px, secondar
 
 ## Security
 
-Will hold real TINs and income data under the Data Privacy Act from November 2026. **There is none in the application today** — the eight sample clients are fictitious (D82). One real client's Q1 figures are reproduced in `tests/tax/realFilingQ1_2026.test.ts` (D42/D49) — amounts and taxpayer type only, no name, TIN, payor or address. Single `.env` password is adequate for localhost and nothing more. **Backup (D172):** Settings → Back up now makes one zip (database snapshot via `VACUUM INTO`, all of `storage/`, `.env`, README.txt); the last time is in `AppSetting` (`lastBackupAt`); the Dashboard shows an amber reminder after 7 days or if never (D173). **There is no restore button — restoring stays manual** (stop the app, unzip, copy `data\app.db`, `storage` and `.env` back, start it; the zip's README.txt spells it out). The zip holds real TINs, income and documents — it is kept private, never emailed or shared. Never commit `data/`, `storage/`, or any `*.local.ts` fixture.
+Will hold real TINs and income data under the Data Privacy Act from November 2026. **There is none in the application today** — the eight sample clients are fictitious (D82). One real client's Q1 figures are reproduced in `tests/tax/realFilingQ1_2026.test.ts` (D42/D49) — amounts and taxpayer type only, no name, TIN, payor or address. Single `.env` password is adequate for localhost and nothing more. **Backup (D172):** Settings → Back up now makes one zip (database snapshot via `VACUUM INTO`, all of `storage/`, `.env`, README.txt); the last time is in `AppSetting` (`lastBackupAt`); the Dashboard shows an amber reminder after 7 days or if never (D173). The time is written the moment the zip has fully streamed — never for a zip that failed or was abandoned, and never held back by a temp-file cleanup error (D176). **There is no restore button — restoring stays manual** (stop the app, unzip, copy `data\app.db`, `storage` and `.env` back, start it; the zip's README.txt spells it out). The zip holds real TINs, income and documents — it is kept private, never emailed or shared. Never commit `data/`, `storage/`, or any `*.local.ts` fixture.
 
 ## How to approach changes
 
@@ -266,7 +276,7 @@ Will hold real TINs and income data under the Data Privacy Act from November 202
 
 - Tests first for anything in `/lib/tax/`; tax tests use inline fixtures and **never read seed data or the database**.
 - Every bug fix gets a regression test verified to fail under the old code.
-- Run the full suite, typecheck and build before reporting done. On a fresh database seed first (`npx tsx prisma/seed.ts`) — the suite depends on seeded `TaxRuleSet` rows. `tests/seed/seedScenarios.test.ts` seeds a throwaway database in child processes.
+- Run the full suite, typecheck and build before reporting done. **The suite seeds its own throwaway database (D177) — you no longer seed first, and it never touches `data/app.db` or `storage/`.** (Tests that run child processes — `npx prisma …`, `tsx prisma/seed.ts` — must pass their own `DATABASE_URL` and `BIR_STORAGE_ROOT`.) `tests/seed/seedScenarios.test.ts` seeds a throwaway database in child processes.
 - **`tests/tax/realFilingQ1_2026.test.ts` is the real-figures regression guard** — one real client's filed Q1 2026 return (gross ₱332,933.90 → item 49 ₱332,934.00, item 53 ₱82,934.00, tax due ₱6,635.00, item 58 ₱16,646.70, total credits ₱16,647.00, overpayment (₱10,012.00)), whole-peso figures per D49. The old centavo figures (₱6,634.71 / ₱10,011.99) are wrong now — don't resurrect them.
 - For UI work, do a live walkthrough against the dev server. **Do not report a page as verified if you did not load it.** A passing suite says nothing about whether a screen is usable.
 
@@ -274,15 +284,14 @@ Will hold real TINs and income data under the Data Privacy Act from November 202
 
 - `Start Bookkeeping App.bat` and `_test-files/` (disposable dummy documents) live at her repo root, untracked.
 - `npm install` writes an `allowScripts` block into `package.json` (machine-local; she stashes before switching branches) and regenerates the Prisma Client (D57).
-- **The plain seed (`npx tsx prisma/seed.ts`) never deletes** — it upserts reference data, builds the samples only when none exist, and runs three idempotent corrections on existing rows: the D96 step-title rename, the D97 filing-status recompute, and **the D106 date correction on unfiled filings** (filed returns keep the date they were worked to).
+- **The plain seed (`npx tsx prisma/seed.ts`) never deletes** — it upserts reference data, builds the samples only when none exist (and never after the clean start, D178), and runs three idempotent corrections on existing rows: the D96 step-title rename, the D97 filing-status recompute, and **the D106 date correction on unfiled filings** (filed returns keep the date they were worked to).
 - **A clean typecheck needs Next's generated route types.** `app/layout.tsx` uses `LayoutProps<"/">`, which Next generates into `.next/types`; on a fresh checkout `npx tsc --noEmit` reports one `LayoutProps` error until `npx next typegen` (or any `next dev`/`next build`) has run once. It is an environment artefact, not a code error.
-- **The update routine after pulling:** close the app · `git stash` · `git pull` · `npm install` · `npx prisma migrate deploy` (only when a brief added migrations) · `npx prisma migrate reset --force` (only when a clean reseed is wanted — it DROPS the database including every client added by hand, then re-applies the migrations and runs the seed).
+- **The update routine after pulling:** close the app · `git stash` · `git pull` · `npm install` · `npx prisma migrate deploy` (only when a brief added migrations) · `npx prisma migrate reset --force` (**never on the live app once real clients exist, D178**; only on a scratch copy when a clean reseed is wanted — it DROPS the database including every client added by hand, then re-applies the migrations and runs the seed).
 
 ## Current priorities
 
 See `CURRENT_STATE.md`. All six groups are walked and closed, and briefs #5v–#5z (the look pass) are checked by her. In short:
-1. **Walk the Tax Rules, ATC and Holidays pages** — the only screens not yet walked with her. (Backup is built, D172/D173.)
-2. **A clean-start brief:** wipe the sample and test data, keep the reference data (rule sets, holidays, ATC codes).
-3. **Go-live setup:** add client → tax year → starting figures → generate (D78 enforces the order; there is no election step, D136). 1701Q due **November 16, 2026**. Excel stays the master until she switches.
-4. **Confirm the ATC codes** at `/settings/atc-codes` (each now carries the certificate's rate, D132) **and the eSubmission address** (`TaxRuleSet.eSubmissionEmail`).
-5. After go-live, in this order: the **document archive browse view**, then the **calendar**, then the **Annual overpayment carry-over** (2026→2027).
+1. **Back up** (Settings → Back up now; keep the zip somewhere private), close the app, then **run the clean start** (`npm run clean-start`, type `DELETE`, D178).
+2. **Set up each real client:** add client → tax year → starting figures → generate (D78 enforces the order; there is no election step, D136). 1701Q due **November 16, 2026**. Excel stays the master until she switches.
+3. **She checks the ATC codes** at `/settings/atc-codes` (each now carries the certificate's rate, D132) **and the eSubmission address** (`TaxRuleSet.eSubmissionEmail`) against BIR.
+4. After go-live, in this order: the **document archive browse view**, then the **calendar**, then the **Annual overpayment carry-over** (2026→2027).

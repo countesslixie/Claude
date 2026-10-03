@@ -119,6 +119,18 @@ function form(fields: Record<string, string | string[] | File | boolean>): FormD
 }
 
 export async function seedScenarios(prisma: PrismaClient, actorId: string): Promise<void> {
+  // D178 — after the clean start the samples never come back, and they are never mixed into a
+  // database that already holds anybody else's clients. (Reference data is still topped up by seed.ts.)
+  const removed = await prisma.appSetting.findUnique({ where: { key: "samplesRemoved" } });
+  if (removed?.value === "true") {
+    console.log("Sample clients were removed by the clean start — not adding them back.");
+    return;
+  }
+  const others = await prisma.client.count({ where: { code: { notIn: [...SAMPLE_CLIENT_CODES] } } });
+  if (others > 0) {
+    console.log("This database already has real clients — not adding sample clients.");
+    return;
+  }
   const existing = await prisma.client.count({ where: { code: { in: [...SAMPLE_CLIENT_CODES] } } });
   if (existing === SAMPLE_CLIENT_CODES.length) {
     console.log("Sample scenario clients already present — leaving them as they are.");
@@ -127,7 +139,7 @@ export async function seedScenarios(prisma: PrismaClient, actorId: string): Prom
   if (existing > 0) {
     throw new Error(
       `Found ${existing} of ${SAMPLE_CLIENT_CODES.length} sample clients — a previous seed stopped part-way. ` +
-        `Run "npx prisma migrate reset --force" to start clean.`,
+        `On a scratch/test database run "npx prisma migrate reset --force" to start clean. NEVER run that on the live app: it deletes everything.`,
     );
   }
 

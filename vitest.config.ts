@@ -7,6 +7,9 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["tests/**/*.test.ts"],
+    // D177 — a throwaway seeded database + storage per run, a private copy per test file.
+    globalSetup: ["tests/globalSetup.ts"],
+    setupFiles: ["tests/setupEnv.ts"],
   },
   resolve: {
     alias: {

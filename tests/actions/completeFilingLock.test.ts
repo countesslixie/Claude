@@ -25,6 +25,7 @@ import {
 } from "@/lib/actions/filings";
 import { FILING_LOCKED_MESSAGE, FilingLockedError } from "@/lib/workflow/filingLock";
 import { markEarlierQuartersFiled } from "../helpers/filedEarlier";
+import { testStorageRoot } from "@/tests/helpers/testEnv";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
@@ -45,7 +46,7 @@ describe("a Complete filing is locked (D153)", () => {
     await prisma.workflowStep.deleteMany({ where: { filing: { clientId: { in: createdClientIds } } } });
     await prisma.filing.deleteMany({ where: { clientId: { in: createdClientIds } } });
     await prisma.client.deleteMany({ where: { id: { in: createdClientIds } } });
-    for (const code of clientCodes) await rm(path.join(process.cwd(), "storage", code), { recursive: true, force: true });
+    for (const code of clientCodes) await rm(path.join(testStorageRoot(), code), { recursive: true, force: true });
   });
 
   /** A client with a generated Q2 2026 filing; `complete` forces every step resolved and the filing Complete. */

@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getAnnualCertificatesVsSalesReconciliation } from "@/lib/reconciliation";
 import { addCertificate, type CertificateFormState } from "@/lib/actions/form2307";
 import { generateFilingsForClientYear } from "@/lib/workflow/filingGeneration";
+import { testStorageRoot } from "@/tests/helpers/testEnv";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
@@ -28,7 +29,7 @@ describe("getAnnualCertificatesVsSalesReconciliation", () => {
     await prisma.quarterlySales.deleteMany({ where: { clientId: { in: createdClientIds } } });
     await prisma.client.deleteMany({ where: { id: { in: createdClientIds } } });
     for (const code of clientCodes) {
-      await rm(path.join(process.cwd(), "storage", code), { recursive: true, force: true });
+      await rm(path.join(testStorageRoot(), code), { recursive: true, force: true });
     }
   });
 

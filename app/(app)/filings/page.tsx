@@ -5,6 +5,9 @@ import { deriveStepAging, birWaitTags } from "@/lib/workflow/aging";
 import { boardShowsFiling } from "@/lib/workflow/clientWait";
 import type { Period } from "@/lib/tax/types";
 
+// D175 — always rendered fresh from the database, never prerendered at build time.
+export const dynamic = "force-dynamic";
+
 /**
  * Kanban (was "Filing cycle board"): kanban, columns = the six groups (D70), cards =
  * client-period. D138 — no filter bar and no Complete column (finished filings

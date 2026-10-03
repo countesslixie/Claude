@@ -6,6 +6,7 @@ import { generateFilingsForClientYear, recomputeRequiresSawt } from "@/lib/workf
 import { uploadDocument, deleteDocument } from "@/lib/actions/documents";
 import { markStepDone, markStepInProgress, markStepWaitingExternal, skipStep, logFollowUp } from "@/lib/actions/workflowSteps";
 import { parseDocSlots } from "@/lib/workflow/types";
+import { testStorageRoot } from "@/tests/helpers/testEnv";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
@@ -29,7 +30,7 @@ describe("the eAFS group", () => {
     await prisma.workflowStep.deleteMany({ where: { filing: { clientId: { in: clientIds } } } });
     await prisma.filing.deleteMany({ where: { clientId: { in: clientIds } } });
     await prisma.client.deleteMany({ where: { id: { in: clientIds } } });
-    for (const c of codes) await rm(path.join(process.cwd(), "storage", c), { recursive: true, force: true });
+    for (const c of codes) await rm(path.join(testStorageRoot(), c), { recursive: true, force: true });
   });
 
   async function setup(withCertificate = true) {

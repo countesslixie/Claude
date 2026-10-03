@@ -7,6 +7,9 @@ import { PayorsHeader } from "@/components/payors-header";
 import { createPayor } from "@/lib/actions/payors";
 import { bpsToPercentLabel } from "@/lib/money";
 
+// D175 — always rendered fresh from the database, never prerendered at build time.
+export const dynamic = "force-dynamic";
+
 /**
  * Brief #5a — "Payors": one saved list per client (name, TIN, address,
  * usual ATC code, active flag). Adding is inline here (and from step

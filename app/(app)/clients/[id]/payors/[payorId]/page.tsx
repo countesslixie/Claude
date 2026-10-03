@@ -3,6 +3,9 @@ import { prisma } from "@/lib/prisma";
 import { PayorForm } from "@/components/payor-form";
 import { updatePayor } from "@/lib/actions/payors";
 
+// D175 — always rendered fresh from the database, never prerendered at build time.
+export const dynamic = "force-dynamic";
+
 export default async function EditPayorPage({
   params,
 }: {

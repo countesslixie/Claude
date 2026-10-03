@@ -3,6 +3,9 @@ import { prisma } from "@/lib/prisma";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 
+// D175 — always rendered fresh from the database, never prerendered at build time.
+export const dynamic = "force-dynamic";
+
 export default async function ClientsPage({
   searchParams,
 }: {

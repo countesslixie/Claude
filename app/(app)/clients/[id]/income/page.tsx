@@ -14,6 +14,9 @@ import { getDeclaredIncome, incomeQuarterStatus, INCOME_QUARTER_STATUS_LABEL } f
 import { StatusBadge, type StatusTone } from "@/components/status-badge";
 import type { SalesQuarter } from "@/lib/tax/types";
 
+// D175 — always rendered fresh from the database, never prerendered at build time.
+export const dynamic = "force-dynamic";
+
 const QUARTERS: SalesQuarter[] = ["Q1", "Q2", "Q3", "Q4"];
 
 /**

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { execSync } from "node:child_process";
-import { rmSync } from "node:fs";
+import { rmSync, mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { PrismaClient } from "@prisma/client";
 import { nextActionForFiling } from "@/lib/workflow/groups";
@@ -15,21 +16,22 @@ import { renameSawtSteps, backfillFilingStatuses } from "@/prisma/backfills";
  * never reads the database the rest of the suite uses (D5 — tax tests
  * still never read seed data; this is a seed test, not a tax test).
  */
-const DB_FILE = path.join(process.cwd(), "data", "seed-scenarios-test.db");
-const DB_URL = "file:../data/seed-scenarios-test.db";
-const env = { ...process.env, DATABASE_URL: DB_URL };
+// D177 — its own database AND document folder in the system temp directory: never data/ or storage/.
+const SCRATCH = mkdtempSync(path.join(tmpdir(), "bir-seed-test-"));
+const DB_FILE = path.join(SCRATCH, "seed.db");
+const DB_URL = `file:${DB_FILE.replace(/\\/g, "/")}`;
+const env = { ...process.env, DATABASE_URL: DB_URL, BIR_STORAGE_ROOT: path.join(SCRATCH, "storage") };
 
 let firstRunOutput = "";
 let secondRunOutput = "";
 let db: PrismaClient;
 
 function cleanup() {
-  for (const suffix of ["", "-journal", "-wal", "-shm"]) rmSync(DB_FILE + suffix, { force: true });
+  rmSync(SCRATCH, { recursive: true, force: true });
 }
 
 describe("seed scenarios (D82)", () => {
   beforeAll(() => {
-    cleanup();
     execSync("npx prisma migrate deploy", { env, stdio: "pipe" });
     firstRunOutput = execSync("npx tsx prisma/seed.ts", { env, stdio: "pipe" }).toString();
     secondRunOutput = execSync("npx tsx prisma/seed.ts", { env, stdio: "pipe" }).toString();

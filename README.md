@@ -36,18 +36,54 @@ To generate your own session secret:
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
+## Starting the app (Windows)
+
+Double-click **`Start Bookkeeping App.bat`** in the app folder. It opens a window titled
+"Bookkeeping App - keep open" that runs `npm run dev` (in `cmd`), waits a few seconds, then opens
+http://localhost:3000 in the browser. Keep that window open while you work; close it to stop the app.
+
 ## Data & documents
 
-- The SQLite database lives at `data/app.db` — back it up by copying the file.
-- Uploaded documents will live under `storage/` (Phase 3+) — never as DB blobs.
-- Neither directory is committed to git.
+- The SQLite database lives at `data/app.db`. Uploaded documents live under `storage/` — never as
+  database blobs. Neither folder is committed to git.
+- **Backing up:** on the **Settings** page click **Back up now**. One zip downloads to your Downloads
+  folder, named like `BIR Filing Manager backup 2026-10-03 1430.zip`. It holds a safe copy of the
+  database, every uploaded document, the `.env` file and a `README.txt`. Settings shows when the last
+  backup was made, and the Dashboard reminds you after 7 days. **The zip holds clients' TINs, income
+  and documents — keep it on your own drive or a USB stick, never in a shared folder or an email.**
+- **Restoring** (there is no restore button; it replaces everything with the state at the backup):
+  1. Close the "Bookkeeping App - keep open" window.
+  2. Unzip the backup (right-click, Extract All) into an empty folder.
+  3. In the app folder, rename `data\app.db` to `app.db.before-restore` and the `storage` folder to
+     `storage-before-restore`, then copy the backup's `data\app.db`, its `storage` folder and its `.env`
+     file in. (`.env` is hidden by default: File Explorer, View, Show, Hidden items. Delete any
+     `app.db-wal` or `app.db-shm` next to `app.db`.)
+  4. Start the app and open a filing to check a document opens.
+
+## Going live: the clean start
+
+The app ships with eight fictitious sample clients. To remove them (and any test uploads) before
+entering real clients: take a backup (Settings, Back up now), close the app window, open `cmd` in the app
+folder and run `npm run clean-start`. It refuses unless a backup was taken in the last 24 hours, shows
+what it will delete, and only continues if you type `DELETE`. It deletes every client and everything
+belonging to a client, and every file in `storage/`; it keeps the tax rule sets, holidays, ATC codes and
+the last-backup time. The seed never brings the sample clients back afterwards.
+
+## Never do these on the live app
+
+- **Never run `npx prisma migrate reset`** (or delete `data/app.db`). It deletes the whole database —
+  every real client — and re-adds the sample clients. It is only for a scratch copy.
+- **Never point the tests at the live database.** `npm test` builds its own throwaway database and
+  document folder and refuses to start if either would be `data/app.db` or `storage/`. Do not try to
+  get around that.
 
 ## Scripts
 
 - `npm run dev` — start the dev server
 - `npm run build` / `npm run start` — production build/start
 - `npm run lint` — ESLint
-- `npm test` — Vitest (tax engine tests land in Phase 2)
+- `npm test` — Vitest, on its own throwaway database and storage (never `data/app.db`)
+- `npm run clean-start` — remove the sample and test data once, before going live (see above)
 - `npx prisma studio` — browse the local database
 - `npx prisma migrate dev --name <name>` — create/apply a migration (also re-seeds)
 - `npm run db:seed` — re-run the seed script directly

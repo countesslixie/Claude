@@ -17,6 +17,8 @@
   --faint: #8a879a;
   --line: #e8e5ef;
   --separator: #c9c6d3;
+  /* D174 — the edge of a bordered button: dark enough that it reads as the same size as the purple one. */
+  --button-edge: #8f8ca1;
 
   /* purple: where you are, what you can click, and "in progress" */
   --purple-50: #f8f6fc;
@@ -67,6 +69,7 @@
   --color-faint: var(--faint);
   --color-line: var(--line);
   --color-separator: var(--separator);
+  --color-button-edge: var(--button-edge);
 
   --color-purple-50: var(--purple-50);
   --color-purple-100: var(--purple-100);

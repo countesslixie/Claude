@@ -8,7 +8,8 @@ const buttonVariants = cva(
     variants: {
       variant: {
         primary: "bg-purple-600 text-white hover:bg-purple-700",
-        secondary: "bg-surface text-ink border border-line hover:bg-purple-wash",
+        // D174 — bordered buttons use the darker --button-edge so they read as big as the purple ones.
+        secondary: "bg-surface text-ink border border-button-edge hover:bg-purple-wash",
         ghost: "text-ink-secondary hover:bg-purple-wash",
         destructive: "bg-red text-white hover:opacity-90",
       },

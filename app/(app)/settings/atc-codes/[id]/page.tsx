@@ -4,6 +4,9 @@ import { AtcCodeForm } from "@/components/atc-code-form";
 import { updateAtcCode } from "@/lib/actions/atcCodes";
 import { bpsToPercentLabel } from "@/lib/money";
 
+// D175 — always rendered fresh from the database, never prerendered at build time.
+export const dynamic = "force-dynamic";
+
 export default async function EditAtcCodePage({
   params,
 }: {

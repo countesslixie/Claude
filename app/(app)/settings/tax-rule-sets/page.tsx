@@ -5,6 +5,9 @@ import { centsToPesos, bpsToPercentLabel } from "@/lib/money";
 import { formatManilaDate } from "@/lib/dates";
 import { BackToSettings } from "@/components/back-to-settings";
 
+// D175 — always rendered fresh from the database, never prerendered at build time.
+export const dynamic = "force-dynamic";
+
 export default async function TaxRuleSetsPage() {
   const ruleSets = await prisma.taxRuleSet.findMany({ orderBy: { taxableYear: "desc" } });
 

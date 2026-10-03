@@ -3,6 +3,9 @@ import { HolidaysHeader } from "@/components/holidays-header";
 import { deleteHoliday } from "@/lib/actions/holidays";
 import { formatManilaDate } from "@/lib/dates";
 
+// D175 — always rendered fresh from the database, never prerendered at build time.
+export const dynamic = "force-dynamic";
+
 const TYPE_LABELS: Record<string, string> = {
   REGULAR: "Regular",
   SPECIAL_NON_WORKING: "Special non-working",

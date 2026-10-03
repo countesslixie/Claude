@@ -9,6 +9,7 @@ import { generateFilingsForClientYear } from "@/lib/workflow/filingGeneration";
 import { isPaymentLocked, assembleAndComputeFiling } from "@/lib/filingComputation";
 import { toManilaDateInputValue } from "@/lib/dates";
 import { markEarlierQuartersFiled, resolvePrepare } from "../helpers/filedEarlier";
+import { testStorageRoot } from "@/tests/helpers/testEnv";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
@@ -36,7 +37,7 @@ describe("savePayment (D75)", () => {
     await prisma.clientTaxYear.deleteMany({ where: { clientId: { in: createdClientIds } } });
     await prisma.client.deleteMany({ where: { id: { in: createdClientIds } } });
     for (const code of clientCodes) {
-      await rm(path.join(process.cwd(), "storage", code), { recursive: true, force: true });
+      await rm(path.join(testStorageRoot(), code), { recursive: true, force: true });
     }
   });
 

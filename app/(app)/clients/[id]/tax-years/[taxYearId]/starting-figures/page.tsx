@@ -7,6 +7,9 @@ import { saveStartingFigures } from "@/lib/actions/startingFigures";
 import { getStartingFigures, isStartingFiguresLocked } from "@/lib/startingFigures";
 import { centsToPesos } from "@/lib/money";
 
+// D175 — always rendered fresh from the database, never prerendered at build time.
+export const dynamic = "force-dynamic";
+
 /**
  * Brief #5f §8 — the starting figures page for a client-year, opened from
  * the client page's Taxable years row. A few figures entered once, from

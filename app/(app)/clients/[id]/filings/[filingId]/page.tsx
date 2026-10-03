@@ -67,6 +67,9 @@ import { formatDays } from "@/lib/formatDays";
 import { isFilingComplete } from "@/lib/workflow/filingLock";
 import type { FilingComputationResult } from "@/lib/tax/types";
 
+// D175 — always rendered fresh from the database, never prerendered at build time.
+export const dynamic = "force-dynamic";
+
 const STATUS_TONE: Record<string, "pending" | "progress" | "waiting" | "overdue" | "done"> = {
   NOT_STARTED: "pending",
   IN_PROGRESS: "progress",

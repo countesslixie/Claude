@@ -5,6 +5,9 @@ import { StatusBadge } from "@/components/status-badge";
 import { bpsToPercentLabel } from "@/lib/money";
 import { BackToSettings } from "@/components/back-to-settings";
 
+// D175 — always rendered fresh from the database, never prerendered at build time.
+export const dynamic = "force-dynamic";
+
 /**
  * ATC maintenance (Settings), backed by the AtcCode table (D19). She can
  * add, edit and deactivate here; the certificate form's ATC picker reads

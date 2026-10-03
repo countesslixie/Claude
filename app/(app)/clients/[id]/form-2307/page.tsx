@@ -10,6 +10,9 @@ import { currentTaxableYearManila } from "@/lib/dates";
 import { getAnnualCertificatesVsSalesReconciliation } from "@/lib/reconciliation";
 import { loadRegisterRows } from "@/lib/form2307Register";
 
+// D175 — always rendered fresh from the database, never prerendered at build time.
+export const dynamic = "force-dynamic";
+
 const STATUS_TONE: Record<string, "pending" | "progress" | "waiting" | "overdue" | "done"> = {
   RECEIVED: "pending",
   RECORDED: "progress",

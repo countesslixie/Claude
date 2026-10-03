@@ -71,3 +71,27 @@ describe("Matching button sizes (D170)", () => {
     }
   });
 });
+
+describe("Primary and bordered buttons have the same box (D174)", () => {
+  const classesOf = (variant: "primary" | "secondary") =>
+    (/class="([^"]*)"/.exec(renderToStaticMarkup(createElement(Button, { variant }, "x")))?.[1] ?? "").split(/\s+/);
+
+  it("same height, padding, font size, weight, line height and corners", () => {
+    const pick = (c: string[]) =>
+      c.filter((x) => /^(h-|px-|py-|text-(xs|sm|base)|font-|leading-|rounded)/.test(x)).sort().join(" ");
+    expect(pick(classesOf("secondary"))).toBe(pick(classesOf("primary")));
+  });
+
+  it("the bordered button's edge is the visible neutral token, not the pale line colour", () => {
+    const c = classesOf("secondary");
+    expect(c).toContain("border");
+    expect(c).toContain("border-button-edge");
+    expect(c).not.toContain("border-line");
+  });
+
+  it("the token exists in globals.css and is darker than the page lines", async () => {
+    const css = (await import("node:fs")).readFileSync("app/globals.css", "utf8");
+    expect(css).toMatch(/--button-edge:\s*#[0-9a-f]{6}/i);
+    expect(css).toMatch(/--color-button-edge:\s*var\(--button-edge\)/);
+  });
+});

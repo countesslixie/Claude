@@ -9,6 +9,7 @@ import { generateFilingsForClientYear } from "@/lib/workflow/filingGeneration";
 import { buildClientPackageEmailForFiling } from "@/lib/workflow/clientPackageEmailData";
 import { GET } from "@/app/api/filings/[id]/package/route";
 import { markEarlierQuartersFiled, resolvePrepare } from "../helpers/filedEarlier";
+import { testStorageRoot } from "@/tests/helpers/testEnv";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
@@ -25,7 +26,7 @@ describe("GET /api/filings/[id]/package", () => {
     await prisma.filing.deleteMany({ where: { clientId: { in: createdClientIds } } });
     await prisma.client.deleteMany({ where: { id: { in: createdClientIds } } });
     if (clientCode) {
-      await rm(path.join(process.cwd(), "storage", clientCode), { recursive: true, force: true });
+      await rm(path.join(testStorageRoot(), clientCode), { recursive: true, force: true });
     }
   });
 

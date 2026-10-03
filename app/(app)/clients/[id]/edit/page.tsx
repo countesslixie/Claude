@@ -4,6 +4,9 @@ import { ClientForm } from "@/components/client-form";
 import { updateClient } from "@/lib/actions/clients";
 import { toManilaDateInputValue } from "@/lib/dates";
 
+// D175 — always rendered fresh from the database, never prerendered at build time.
+export const dynamic = "force-dynamic";
+
 export default async function EditClientPage({
   params,
 }: {

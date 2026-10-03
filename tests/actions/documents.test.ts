@@ -6,6 +6,7 @@ import { uploadDocument } from "@/lib/actions/documents";
 import { markStepDone } from "@/lib/actions/workflowSteps";
 import { generateFilingsForClientYear } from "@/lib/workflow/filingGeneration";
 import { markEarlierQuartersFiled, resolvePrepare } from "../helpers/filedEarlier";
+import { testStorageRoot } from "@/tests/helpers/testEnv";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
@@ -26,7 +27,7 @@ describe("uploadDocument", () => {
     await prisma.filing.deleteMany({ where: { clientId: { in: createdClientIds } } });
     await prisma.client.deleteMany({ where: { id: { in: createdClientIds } } });
     if (clientCode) {
-      await rm(path.join(process.cwd(), "storage", clientCode), { recursive: true, force: true });
+      await rm(path.join(testStorageRoot(), clientCode), { recursive: true, force: true });
     }
   });
 
@@ -107,7 +108,7 @@ describe("uploadDocument", () => {
     expect(doc.originalFilename).toBe("proof.pdf");
 
     const storedFile = await import("node:fs/promises").then((fs) =>
-      fs.readFile(path.join(process.cwd(), "storage", doc.storedPath)),
+      fs.readFile(path.join(testStorageRoot(), doc.storedPath)),
     );
     expect(storedFile.toString()).toBe(fileContent);
 

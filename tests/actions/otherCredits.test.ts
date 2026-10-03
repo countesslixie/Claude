@@ -9,6 +9,7 @@ import { assembleAndComputeFiling, effectiveOtherCreditsFor } from "@/lib/filing
 import { generateFilingsForClientYear } from "@/lib/workflow/filingGeneration";
 
 import { resolvePrepare } from "../helpers/filedEarlier";
+import { testStorageRoot } from "@/tests/helpers/testEnv";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
@@ -37,7 +38,7 @@ describe("updateFilingOtherCredits", () => {
     await prisma.clientTaxYear.deleteMany({ where: { clientId: { in: createdClientIds } } });
     await prisma.client.deleteMany({ where: { id: { in: createdClientIds } } });
     for (const code of clientCodes) {
-      await rm(path.join(process.cwd(), "storage", code), { recursive: true, force: true });
+      await rm(path.join(testStorageRoot(), code), { recursive: true, force: true });
     }
   });
 

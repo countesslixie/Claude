@@ -28,12 +28,20 @@ export interface BackupOptions {
   envPath: string;
   now?: Date;
   tmpDir?: string;
+  /**
+   * Called once, only after the whole zip has been generated and handed on (the zip's
+   * last bytes are its table of contents, so "ended" means complete). Never called
+   * for a zip that failed or was abandoned partway — and a failure to delete the
+   * temp snapshot afterwards (Windows can refuse while the file is still closing)
+   * never stops it: D176.
+   */
+  onComplete?: () => Promise<void>;
 }
 
 export interface BackupArchive {
   fileName: string;
   stream: Readable;
-  /** Resolves once the zip has been fully read and the temp snapshot deleted; rejects on failure. */
+  /** Resolves once the zip has been fully read, `onComplete` has run and cleanup was attempted; rejects if the zip failed or was abandoned. */
   finished: Promise<void>;
 }
 
@@ -104,32 +112,59 @@ export async function createBackupArchive(opts: BackupOptions): Promise<BackupAr
   const now = opts.now ?? new Date();
   const tmpDir = opts.tmpDir ?? os.tmpdir();
   const snapshotPath = path.join(tmpDir, `bir-backup-${randomBytes(8).toString("hex")}.db`);
-  const removeSnapshot = () => fs.promises.rm(snapshotPath, { force: true });
+  // Windows can briefly refuse to delete a file whose handle is still closing: retry, and never let it matter.
+  const removeSnapshot = () =>
+    fs.promises.rm(snapshotPath, { force: true, maxRetries: 10, retryDelay: 100 }).catch((e) => {
+      console.warn(`Backup: could not delete the temporary snapshot ${snapshotPath}:`, e);
+    });
 
   try {
     // A consistent copy taken through SQLite itself, not a raw file copy.
     await opts.client.$executeRawUnsafe(`VACUUM INTO '${snapshotPath.replace(/'/g, "''")}'`);
 
+    // JSZip neither fails nor finishes when one of its input files cannot be read; it just stops.
+    // So a read error is caught here and aborts the whole zip (nothing half-made is ever "complete").
+    const readErrors: Error[] = [];
+    let abort: (err: Error) => void = (err) => readErrors.push(err);
+    const open = (file: string) => {
+      const rs = fs.createReadStream(file);
+      rs.once("error", (err) => abort(err));
+      return rs;
+    };
+
     const zip = new JSZip();
-    zip.file("data/app.db", fs.createReadStream(snapshotPath));
+    zip.file("data/app.db", open(snapshotPath));
     for await (const rel of walkFiles(opts.storageRoot)) {
-      zip.file(`storage/${rel}`, fs.createReadStream(path.join(opts.storageRoot, rel)));
+      zip.file(`storage/${rel}`, open(path.join(opts.storageRoot, rel)));
     }
-    zip.file(".env", fs.createReadStream(opts.envPath));
+    zip.file(".env", open(opts.envPath));
     zip.file("README.txt", restoreReadme(now));
 
     // JSZip hands back an old-style (streams2) readable; wrap it so it is a real
     // node:stream Readable (async-iterable, and Readable.toWeb works on it).
-    const stream = new Readable().wrap(
-      zip.generateNodeStream({ streamFiles: true, compression: "DEFLATE" }) as unknown as NodeJS.ReadableStream,
-    );
+    const raw = zip.generateNodeStream({ streamFiles: true, compression: "DEFLATE" }) as unknown as NodeJS.ReadableStream;
+    const stream = new Readable().wrap(raw);
+    abort = (err) => stream.destroy(err);
+    for (const err of readErrors) abort(err);
     const finished = new Promise<void>((resolve, reject) => {
-      stream.once("end", () => removeSnapshot().then(resolve, reject));
-      stream.once("error", (err) => removeSnapshot().finally(() => reject(err)));
-      stream.once("close", () => void removeSnapshot());
+      let ended = false;
+      stream.once("end", () => {
+        ended = true;
+        // Record first (the zip is complete), then clean up; a cleanup problem cannot undo a good backup.
+        Promise.resolve(opts.onComplete?.())
+          .then(removeSnapshot, async (err) => {
+            await removeSnapshot();
+            throw err;
+          })
+          .then(resolve, reject);
+      });
+      stream.once("error", (err) => void removeSnapshot().then(() => reject(err)));
+      // Closed without ending = the reader gave up partway: not a backup.
+      stream.once("close", () => {
+        if (!ended) void removeSnapshot().then(() => reject(new Error("The backup download did not complete.")));
+      });
     });
-    // The route listens through `finished`; never leave a rejection unhandled.
-    finished.catch(() => {});
+    finished.catch(() => {}); // the route listens through `finished`; never leave a rejection unhandled
     return { fileName: backupFileName(now), stream, finished };
   } catch (err) {
     await removeSnapshot();

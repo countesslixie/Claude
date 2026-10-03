@@ -14,6 +14,7 @@ import { buildLiveAdviceMessageForFiling } from "@/lib/workflow/adviceMessage";
 import { changedItems } from "@/lib/tax/amendment";
 import type { FilingComputationResult } from "@/lib/tax/types";
 import { markEarlierQuartersFiled } from "../helpers/filedEarlier";
+import { testStorageRoot } from "@/tests/helpers/testEnv";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
@@ -40,7 +41,7 @@ describe("frozen filed returns (D83)", () => {
     await prisma.filing.deleteMany({ where: { clientId: { in: clientIds } } });
     await prisma.clientTaxYear.deleteMany({ where: { clientId: { in: clientIds } } });
     await prisma.client.deleteMany({ where: { id: { in: clientIds } } });
-    for (const c of codes) await rm(path.join(process.cwd(), "storage", c), { recursive: true, force: true });
+    for (const c of codes) await rm(path.join(testStorageRoot(), c), { recursive: true, force: true });
   });
 
   async function makeClient() {

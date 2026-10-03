@@ -1,6 +1,7 @@
 import path from "node:path";
 import { Readable } from "node:stream";
 import { NextResponse } from "next/server";
+import { getStorageRoot } from "@/lib/documents/storage";
 import { prisma } from "@/lib/prisma";
 import { createBackupArchive } from "@/lib/backup/createBackup";
 import { recordBackup, getLastBackupAt } from "@/lib/backup/lastBackup";
@@ -14,11 +15,12 @@ export async function POST() {
   try {
     const { stream, fileName, finished } = await createBackupArchive({
       client: prisma,
-      storageRoot: path.join(process.cwd(), "storage"),
+      storageRoot: getStorageRoot(),
       envPath: path.join(process.cwd(), ".env"),
       now,
+      onComplete: () => recordBackup(now),
     });
-    finished.then(() => recordBackup(now)).catch((err) => console.error("Backup failed:", err));
+    finished.catch((err) => console.error("Backup not recorded:", err instanceof Error ? err.message : err));
     return new Response(Readable.toWeb(stream) as ReadableStream, {
       headers: {
         "Content-Type": "application/zip",

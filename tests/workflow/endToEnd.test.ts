@@ -7,6 +7,7 @@ import { uploadDocument } from "@/lib/actions/documents";
 import { markStepDone } from "@/lib/actions/workflowSteps";
 import { parseDocSlots } from "@/lib/workflow/types";
 import { markEarlierQuartersFiled } from "../helpers/filedEarlier";
+import { testStorageRoot } from "@/tests/helpers/testEnv";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
@@ -32,7 +33,7 @@ describe("end-to-end: driving a filing from step 1 to step 16", () => {
     await prisma.filing.deleteMany({ where: { clientId: { in: createdClientIds } } });
     await prisma.client.deleteMany({ where: { id: { in: createdClientIds } } });
     if (clientCode) {
-      await rm(path.join(process.cwd(), "storage", clientCode), { recursive: true, force: true });
+      await rm(path.join(testStorageRoot(), clientCode), { recursive: true, force: true });
     }
   });
 

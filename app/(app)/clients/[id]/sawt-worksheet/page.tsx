@@ -10,6 +10,9 @@ import { currentTaxableYearManila } from "@/lib/dates";
 import { ALL_PERIODS } from "@/lib/tax/periods";
 import type { Period } from "@/lib/tax/types";
 
+// D175 — always rendered fresh from the database, never prerendered at build time.
+export const dynamic = "force-dynamic";
+
 /**
  * SAWT keying worksheet (SPEC.md 10) — the certificates currently
  * eligible-but-unbatched through this period, in the Alphalist Data
