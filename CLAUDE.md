@@ -202,7 +202,7 @@ Step titles in the tree (D96, built): step 13 **"Save SAWT acknowledgement email
 
 - **Never run `npx prisma migrate reset` (or delete `data/app.db`) on the live app.** It drops the whole database — every real client — and re-adds the eight sample clients (the `samplesRemoved` flag lives in the database it just dropped). It is for a scratch copy only. Say so plainly if she ever asks for a "reseed".
 - **Never point the tests at the live database or the real `storage/`.** `npm test` builds its own throwaway database and document folder (`tests/globalSetup.ts`), gives each test file a private copy (`tests/setupEnv.ts`), and **refuses to start** if either would be `data/app.db` or `storage/` (`tests/support/liveGuard.ts`). Don't weaken or bypass that; don't add a test that reads or writes `process.cwd()/storage` or `data/` — use `testStorageRoot()` from `tests/helpers/testEnv.ts`.
-- **Don't wipe real data by hand.** The one supported wipe is `npm run clean-start` (D178), once, after a backup, before go-live.
+- **Don't wipe real data by hand, and never run the clean start again.** `npm run clean-start` (D178) was a one-time step before go-live and it has been done (2026-10-03). Running it on the live app now would delete every real client and every document; it is for a scratch copy only.
 
 ## Seed data (D82)
 
