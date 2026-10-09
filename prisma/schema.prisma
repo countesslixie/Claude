@@ -259,6 +259,10 @@ model ClientBirLogin {
   alphalistUsername String?
   alphalistPassword String?
   alphalistNotes    String?
+  // Brief #6k (D181) — ORUS login. eafsNotes/alphalistNotes above are kept but no longer
+  // shown, read or written by the app.
+  orusUsername      String?
+  orusPassword      String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -25,7 +25,7 @@ async function makeClient(name: string, isActive = true) {
   ids.push(c.id);
   return c;
 }
-const empty = { eafsUsername: "", eafsPassword: "", eafsNotes: "", alphalistUsername: "", alphalistPassword: "", alphalistNotes: "" };
+const empty = { eafsUsername: "", eafsPassword: "", alphalistUsername: "", alphalistPassword: "", orusUsername: "", orusPassword: "" };
 
 afterAll(async () => {
   await prisma.clientBirLogin.deleteMany({ where: { clientId: { in: ids } } });
@@ -33,30 +33,54 @@ afterAll(async () => {
 });
 
 describe("saving, editing and clearing", () => {
-  it("saves all six fields, edits one, clears one", async () => {
+  it("saves all six fields (eAFS, Alphalist, ORUS), edits one, clears one", async () => {
     const c = await makeClient("Zed Login Test");
     const r = await saveBirLogins(c.id, {
-      eafsUsername: "fake.eafs", eafsPassword: "pw-one", eafsNotes: "note a",
-      alphalistUsername: "fake.alpha", alphalistPassword: "pw-two", alphalistNotes: "note b",
+      eafsUsername: "fake.eafs", eafsPassword: "pw-one",
+      alphalistUsername: "fake.alpha", alphalistPassword: "pw-two",
+      orusUsername: "fake.orus", orusPassword: "pw-three",
     });
     expect(r).toEqual({ ok: true });
     let row = await prisma.clientBirLogin.findUniqueOrThrow({ where: { clientId: c.id } });
-    expect(row).toMatchObject({ eafsUsername: "fake.eafs", alphalistPassword: "pw-two", alphalistNotes: "note b" });
+    expect(row).toMatchObject({ eafsUsername: "fake.eafs", eafsPassword: "pw-one", alphalistUsername: "fake.alpha", alphalistPassword: "pw-two", orusUsername: "fake.orus", orusPassword: "pw-three" });
 
-    await saveBirLogins(c.id, { ...row, eafsPassword: "changed", alphalistNotes: "" } as never);
+    await saveBirLogins(c.id, { eafsUsername: "fake.eafs", eafsPassword: "changed", alphalistUsername: "fake.alpha", alphalistPassword: "pw-two", orusUsername: "fake.orus", orusPassword: "" });
     row = await prisma.clientBirLogin.findUniqueOrThrow({ where: { clientId: c.id } });
     expect(row.eafsPassword).toBe("changed");
-    expect(row.alphalistNotes).toBeNull();
-    expect(row.eafsUsername).toBe("fake.eafs");
+    expect(row.orusPassword).toBeNull();
+    expect(row.orusUsername).toBe("fake.orus");
     expect(await prisma.clientBirLogin.count({ where: { clientId: c.id } })).toBe(1); // one row, updated
+  });
+
+  it("clears every field one at a time", async () => {
+    const c = await makeClient("Clear Each Test");
+    const all = { eafsUsername: "a", eafsPassword: "b", alphalistUsername: "c", alphalistPassword: "d", orusUsername: "e", orusPassword: "f" };
+    await saveBirLogins(c.id, all);
+    for (const k of Object.keys(all) as (keyof typeof all)[]) {
+      await saveBirLogins(c.id, { ...all, [k]: "" });
+      const row = await prisma.clientBirLogin.findUniqueOrThrow({ where: { clientId: c.id } });
+      expect(row[k]).toBeNull();
+      await saveBirLogins(c.id, all);
+    }
+  });
+
+  it("saving leaves the old notes columns exactly as they were", async () => {
+    const c = await makeClient("Old Notes Test");
+    await prisma.clientBirLogin.create({ data: { clientId: c.id, eafsNotes: "kept note one", alphalistNotes: "kept note two", eafsUsername: "x" } });
+    await saveBirLogins(c.id, { ...empty, eafsUsername: "new.user", orusPassword: "p" });
+    const row = await prisma.clientBirLogin.findUniqueOrThrow({ where: { clientId: c.id } });
+    expect(row.eafsNotes).toBe("kept note one");
+    expect(row.alphalistNotes).toBe("kept note two");
+    expect(row.eafsUsername).toBe("new.user");
   });
 
   it("keeps special characters in a password exactly, trimming only the ends", async () => {
     const c = await makeClient("Special Char Test");
     const pw = `p@ss "w0rd" 'x' \\ <b>&amp; %20 #? é 漢  mid  space`;
-    await saveBirLogins(c.id, { ...empty, eafsPassword: `   ${pw}\t \n` });
+    await saveBirLogins(c.id, { ...empty, eafsPassword: `   ${pw}\t \n`, orusPassword: pw });
     const row = await prisma.clientBirLogin.findUniqueOrThrow({ where: { clientId: c.id } });
     expect(row.eafsPassword).toBe(pw);
+    expect(row.orusPassword).toBe(pw);
   });
 
   it("validates: too long is refused with a message that does not echo the value", async () => {
@@ -76,13 +100,13 @@ describe("saving, editing and clearing", () => {
 describe("the activity log never holds a login value", () => {
   it("records only a plain note", async () => {
     const c = await makeClient("Log Check Test");
-    const vals = { eafsUsername: "uniq-user-7731", eafsPassword: "uniq-pass-7731", eafsNotes: "uniq-note-7731", alphalistUsername: "uniq-user-8842", alphalistPassword: "uniq-pass-8842", alphalistNotes: "uniq-note-8842" };
+    const vals = { eafsUsername: "uniq-user-7731", eafsPassword: "uniq-pass-7731", alphalistUsername: "uniq-user-8842", alphalistPassword: "uniq-pass-8842", orusUsername: "uniq-user-6620", orusPassword: "uniq-pass-6620" };
     await saveBirLogins(c.id, vals);
     await saveBirLogins(c.id, { ...vals, eafsPassword: "uniq-pass-9955" });
     const rows = await prisma.activityLog.findMany({ where: { entityType: "ClientBirLogin", entityId: c.id } });
     expect(rows).toHaveLength(2);
     const dump = JSON.stringify(rows);
-    expect(dump).not.toMatch(/uniq-(user|pass|note)-/);
+    expect(dump).not.toMatch(/uniq-(user|pass)-/);
     for (const r of rows) {
       expect(r.beforeJson).toBeNull();
       expect(r.afterJson).toBeNull();
@@ -97,6 +121,12 @@ describe("the page", () => {
     expect(page).toMatch(/export const dynamic = "force-dynamic"/);
     expect(page).toMatch(/where: \{ isActive: true \}/);
     expect(page).toMatch(/localeCompare/);
+  });
+  it("the table has no Notes and no Copy, and shows ORUS", () => {
+    const table = fs.readFileSync(path.join(process.cwd(), "components/bir-logins-table.tsx"), "utf8");
+    expect(table).not.toMatch(/notes|clipboard|>\s*Copy|Copy</i);
+    expect(table).toContain('title: "ORUS"');
+    expect(page).not.toMatch(/notes/i);
   });
   it("the query it runs returns active clients only", async () => {
     const a = await makeClient("Active Zed Page");

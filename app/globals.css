@@ -132,6 +132,22 @@ table.data-table.data-table-centered td {
   text-align: center;
 }
 
+/* D181 — the BIR Logins table: eight columns that must fit a narrow window, so fixed
+   widths and tighter side padding (the rest of the look is the shared data-table). */
+table.data-table.data-table-tight {
+  table-layout: fixed;
+}
+table.data-table.data-table-tight th,
+table.data-table.data-table-tight td {
+  padding-left: 0.25rem;
+  padding-right: 0.25rem;
+  overflow-wrap: break-word;
+}
+table.data-table.data-table-tight th {
+  font-size: 0.625rem;
+  letter-spacing: 0;
+}
+
 table.data-table tbody tr:hover {
   background: var(--purple-wash);
 }

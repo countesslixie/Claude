@@ -168,7 +168,7 @@ describe("a full run", () => {
     fs.writeFileSync(path.join(STORAGE, "Engagement Letter - Test.pdf"), "a loose file");
     // D180 — a client's BIR logins and the audit note about them go with the client.
     const someClient = await prisma.client.findFirstOrThrow();
-    await prisma.clientBirLogin.create({ data: { clientId: someClient.id, eafsUsername: "fake-user", eafsPassword: "fake-pass" } });
+    await prisma.clientBirLogin.create({ data: { clientId: someClient.id, eafsUsername: "fake-user", eafsPassword: "fake-pass", orusUsername: "fake-orus", orusPassword: "fake-orus-pw" } });
     await prisma.activityLog.create({ data: { entityType: "ClientBirLogin", entityId: someClient.id, action: "UPDATE", note: "BIR logins updated for X", actorId: user.id } });
     before = await snapshot();
     expect(before.tables.ClientBirLogin).toBe(1);

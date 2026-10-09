@@ -17,15 +17,15 @@ export default async function BirLoginsPage() {
       name: c.registeredName,
       eafsUsername: c.birLogin?.eafsUsername ?? "",
       eafsPassword: c.birLogin?.eafsPassword ?? "",
-      eafsNotes: c.birLogin?.eafsNotes ?? "",
       alphalistUsername: c.birLogin?.alphalistUsername ?? "",
       alphalistPassword: c.birLogin?.alphalistPassword ?? "",
-      alphalistNotes: c.birLogin?.alphalistNotes ?? "",
+      orusUsername: c.birLogin?.orusUsername ?? "",
+      orusPassword: c.birLogin?.orusPassword ?? "",
     }));
 
   return (
-    <div className="mx-auto max-w-6xl">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+    <div className="mx-auto max-w-4xl">
+      <div className="mb-4 flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-ink">BIR Logins</h1>
         <BackToSettings />
       </div>
