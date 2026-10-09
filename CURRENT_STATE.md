@@ -1,13 +1,13 @@
 # CURRENT_STATE.md
 
 *Living snapshot. Replace stale content rather than appending.*
-*Last reconciled: 2026-10-09 — brief #6l (D182: BIR Logins at the Dashboard's width, nothing wraps), on top of brief #6k (D181: BIR Logins as a table, ORUS added, Notes and Copy removed), on top of brief #6j (D180: the BIR Logins page under Settings), on top of brief #6i (D179: the Starting figures page heading on two lines, no grey explanation paragraph), on top of brief #6h (D174–D178: the bordered button's edge, every database page always-dynamic, the backup time recorded reliably, tests on their own database and storage, the clean start), on top of brief #6g (D170–D173: one button size, the Q1 default, one-click backup, the backup reminder), on top of brief #6f (D166–D169) (Back to Settings, the Tax Rules list and form, the Holidays Add button), on top of brief #6e (D162–D165: centred client-page tables, the ATC list and form, no verified state), on top of brief #6d (D155–D161), on top of brief #6c (D151–D154) and brief #6b (D143–D150) and brief #6a's documentation pass (D115–D142, checked at brief #5z's tip `e761a74`). **678 tests in 73 files pass, the build passes, and typecheck is clean once Next's route types exist** — see Known limitations for the one-line `LayoutProps` catch. Per-brief history lives in DECISIONS.md, not here.*
+*Last reconciled: 2026-10-09 — brief #6m (documentation pass only: the live-data facts, stale lines fixed; no new decision), on top of brief #6l (D182: BIR Logins at the Dashboard's width, nothing wraps), on top of brief #6k (D181: BIR Logins as a table, ORUS added, Notes and Copy removed), on top of brief #6j (D180: the BIR Logins page under Settings), on top of brief #6i (D179: the Starting figures page heading on two lines, no grey explanation paragraph), on top of brief #6h (D174–D178: the bordered button's edge, every database page always-dynamic, the backup time recorded reliably, tests on their own database and storage, the clean start), on top of brief #6g (D170–D173: one button size, the Q1 default, one-click backup, the backup reminder), on top of brief #6f (D166–D169) (Back to Settings, the Tax Rules list and form, the Holidays Add button), on top of brief #6e (D162–D165: centred client-page tables, the ATC list and form, no verified state), on top of brief #6d (D155–D161), on top of brief #6c (D151–D154) and brief #6b (D143–D150) and brief #6a's documentation pass (D115–D142, checked at brief #5z's tip `e761a74`). **678 tests in 73 files pass, the build passes, and typecheck is clean once Next's route types exist** — see Known limitations for the one-line `LayoutProps` catch. Per-brief history lives in DECISIONS.md, not here.*
 
 ---
 
 ## Where the code is
 
-**Working branch: `claude/serene-hypatia-rs67pw`.** Tip at the start of brief #6d: `548b5f1` (brief #6c), on top of brief #6b (`93f56c2`) and brief #6a's documentation-only commit (`b378c1e`) and brief #5z (`e761a74`). Briefs #5a through #5z and #6a all landed on this one branch — no new branch since it was cut for brief #5a.
+**Working branch: `claude/serene-hypatia-rs67pw`.** Tip at the start of brief #6m: `4d5d738` (brief #6l: BIR Logins at the Dashboard's width, D182). Since brief #6d's tip (`548b5f1`, brief #6c) the branch has taken briefs #6e–#6l (D162–D182), all on this one branch — no new branch since it was cut for brief #5a. **Test suite at this tip: 694 tests in 75 files, all passing; typecheck clean; `next build` compiles.** The next brief is **#6n**; the next decision is **D183**.
 
 Standing rules:
 - `git fetch origin <branch>` first, every pass; a local checkout has been behind the remote more than once (briefs #5g, #5n).
@@ -43,7 +43,7 @@ The sixteen steps sit in six groups (D70) — a fixed lookup in `lib/workflow/gr
 | # | Step (title as built) | Group | Controls on the card | Unlocks when | Completes how | Auto-waits on BIR | NA when |
 |---|---|---|---|---|---|---|---|
 | 1 | Record quarterly sales | Prepare | None (link to the income page) | Always | Derived: a final Save of the quarter's sales (D33) | No (waits on Client, 10 days) | Never |
-| 2 | Receive Form 2307 from client | Prepare | Add certificate (one form, D131: payor name · payor address · TIN + ATC code · income + tax withheld · period from + to · scan — no Rate field, D132, and no scan date, D122); "all received" checkbox; Skip (with reason) only while there are no rows | Always | Derived: "all received" ticked and every certificate has its scan (D35) | No (waits on Client, 5 days) | Never (it can be Skipped, D60) |
+| 2 | Receive Form 2307 from client | Prepare | Add certificate (one form, D131: payor name · payor address · TIN + ATC code · income + tax withheld · period from + to · scan — no Rate field, D132, and no scan date, D122); "all received" checkbox (once at least one certificate row exists, D39); Skip — no typed reason; a skipped step 2 always reads "No Form 2307 received from this client." (D157) — shown only while there are no certificate rows | Always | Derived: "all received" ticked and every certificate has its scan (D35) | No (waits on Client, 5 days) | Never (it can be Skipped, D60) |
 | 3 | Prepare computation + 1701Q/1701A | Prepare | Mark done only (D54). The sheet shows form lines and figures only — no explanation column, no "Show explanations" (D133) — headed "Computation sheet (Filed)" once filed (D121); item 61's heading is plain, with no pre-fill note (D133) | Steps 1 Done and 2 Done/Skipped | Mark done (also files the computation sheet HTML) | No | Never |
 | 4 | Advise client of tax payable | Prepare | Mark done only; no Start, no Skip (D98) | Step 3 Done (D51) | Mark done (saves the message as sent; the card then reads "Advised on [date] · …", D118). The message opens "Hi [first name],", prints the year-to-date summary shared with step 16 (D114), and the payable version just asks when she plans to pay — no advance offer (D107) | No | Never |
 | 5 | File return via eBIRForms | File | Mark done only (D65) | Two locks, both refused server-side and shown as the greyed button's tooltip: all of Prepare resolved (D100 — "Finish Prepare first.", shown first when both apply) and every earlier return of the year filed (D95 — "File Q1 2026 first."). There is no election check (D136) | Mark done — freezes the computation and sets `filedAt` (D83) | — (it starts step 10's wait) | Never |
@@ -192,13 +192,15 @@ A filing whose status is Complete shows no control that changes anything (no Und
 
 **Twenty-eighth — 2026-10-02, the board, the dashboard and 8% by default (brief #5y).** Her list: Pay's Not applicable pill in grey; no election anywhere, because this app only does 8% — which also removed a lock that had stopped every step of a Q1 filing, not just step 5; the dashboard trimmed to four sections with "3M Threshold Alert"; the board with no filter bar and no Complete column, fixed-height cards, grey tags, and cards appearing only once the period has ended. Produced D135–D139.
 
-**Twenty-ninth — 2026-10-02, menu, Kanban scroll and Regime (brief #5z).** Her list: the menu reading Dashboard · Kanban · Clients · Tax Rules · ATC · Holidays with matching headings; the Kanban's scroll bar at the bottom of the window; no Regime column or field. Produced D140–D142. **She then checked briefs #5v–#5z live and confirmed all of them ("All good with the checks").** The Tax Rules, ATC and Holidays pages themselves have not yet been walked.
+**Twenty-ninth — 2026-10-02, menu, Kanban scroll and Regime (brief #5z).** Her list: the menu reading Dashboard · Kanban · Clients · Tax Rules · ATC · Holidays with matching headings; the Kanban's scroll bar at the bottom of the window; no Regime column or field. Produced D140–D142. **She then checked briefs #5v–#5z live and confirmed all of them ("All good with the checks").** 
+
+**Thirtieth — October 2026, her walks of briefs #6b–#6l.** She checked the client form and client page (D143–D154), the client's Income, Form 2307 and Payors sub-pages (D155–D161), the Settings screens — Tax Rules, ATC and Holidays — with their Back buttons and Add buttons (D162–D169), one-click backup and its reminder (D170–D173), the tests-on-their-own-database fix, the clean start and the always-dynamic pages (D174–D178), the Starting figures page (D179), and the BIR Logins page through its three versions (D180–D182). Her decisions from these walks are recorded under those D-numbers.
 
 ---
 
 ## Sample data
 
-The seed (D82) builds eight fictitious clients, all TY2026, each with its scenario in the client's Notes. Built through the app's own actions, so seeded filed returns carry **real snapshots** (D83). Ages (`waitingSince`) are relative to seed time and drift.
+**These eight clients exist only in scratch databases and in the test run's throwaway database — never in her live app** (the clean start, D178, removed them on 2026-10-03 and the seed no longer adds them there). The seed (D82) builds eight fictitious clients, all TY2026, each with its scenario in the client's Notes. Built through the app's own actions, so seeded filed returns carry **real snapshots** (D83). Ages (`waitingSince`) are relative to seed time and drift.
 
 | Client (code) | Scenario | Where it sits | What she should see |
 |---|---|---|---|
@@ -222,7 +224,6 @@ Annual filings for A, B, D, E, F, G, H exist, Not started, due April 2027; the b
 - **Carry-over of a client's own Annual overpayment into next year's starting figures** (D55) — first matters at the 2026→2027 boundary.
 - **The document archive browse view** — client → year, with a whole-year zip. The only genuinely new build in the backlog, and it serves what she named as the most important thing the app does.
 - **A calendar view.**
-- **A clean-start routine** that wipes sample and test data but keeps reference data — see Next.
 - **Phase 5, deferred by decision:** email/IMAP integration, multi-user, .DAT generation, importers. (The SAWT keying worksheet and its XLSX export are built — `lib/sawt/`.)
 
 ---
@@ -246,7 +247,6 @@ Annual filings for A, B, D, E, F, G, H exist, Not started, due April 2027; the b
 ## Known limitations
 
 - **The SAWT keying worksheet is no longer linked from anywhere in the app (D160)**; the page (`/clients/[id]/sawt-worksheet`) and its xlsx export still work by URL.
-- **The step 1 entry screen's grey "Declared gross sales for TY…" subtitle still shows only the quarters entered in the app** (it leaves out earlier quarters from the starting figures); left alone because D159 changes nothing else on that screen.
 - **`generateSawtBatch` is not covered by the Complete lock (D153):** it writes the batch marker on certificates, including ones claimed on a Complete filing, and the worksheet needs that. Her call whether to lock it.
 - **`Client.defaultWithholdingRateBps` has no reader left** (D152); the column stays and the seed still fills it.
 
@@ -264,18 +264,18 @@ Annual filings for A, B, D, E, F, G, H exist, Not started, due April 2027; the b
 - Per-step prep targets: all prep steps share `internalFilingTarget`, so every prep row shows the same date.
 - `--faint` text (#8a879a) measures 3.49:1 against white — below the usual 4.5:1 for small text; kept knowingly (D58).
 - The left menu's "SETTINGS" heading changes text colour on hover but gets no background fill (cosmetic).
-- **README.md is stale** — it still describes a "minimal chart of accounts" and a Phase 1 build, both predating D25, and is left as is. (The Settings page's placeholder list is gone: backup is built, D172.)
+- **README.md is still stale** — it still describes a "minimal chart of accounts" and a Phase 1 build, both predating D25 (checked again at brief #6m: unchanged), and is left as is.
 - **A fresh checkout's `npx tsc --noEmit` shows one error** (`app/layout.tsx`: `Cannot find name 'LayoutProps'`). Environment artefact, not a code error: `LayoutProps<"/">` is a type Next generates into `.next/types`, and that folder is gitignored. Since brief #5g it has been invisible on her laptop because `.next` exists there. Fix: run `npx next typegen` (or `npx next build` / `next dev` once), then `npx tsc --noEmit` is clean. The earlier "typecheck clean" lines were true on a machine with `.next`, not on a fresh clone.
-- **One test can fail in a full run and pass on rerun.** `tests/actions/clientDocsDue.test.ts`'s backfill case sweeps every unfiled filing in the shared test database while other test files create rows; seen once in the brief #5u pass, and again in the brief #6a pass (one full run with 2 failures, not captured; two reruns passed 534 of 534). Not investigated further.
 
 ---
 
 ## Next, in order
 
-1. **Back up, then the clean start.** Settings → Back up now (keep the zip somewhere private), close the app window, run `npm run clean-start` and type `DELETE` (D178).
-2. **Set up each real client:** add client → tax year → starting figures → generate filings (D78 enforces the order; there is no election step, D136). The Q3 1701Q is due **November 16, 2026** (the statutory Nov 15 is a Sunday). The Excel files stay the master until she switches.
+1. ~~Back up, then the clean start~~ — **done 2026-10-03** (D178). Back up regularly: Settings → Back up now (the zip is kept private).
+2. **Set up each real client — in progress since 2026-10-09:** add client → tax year → starting figures → generate filings (D78 enforces the order; there is no election step, D136). The Q3 1701Q is due **November 16, 2026** (the statutory Nov 15 is a Sunday). The Excel files stay the master until she switches.
 3. **She checks the ATC codes and the eSubmission address against BIR.**
 4. **After go-live, in this order:** the document archive browse view; then the calendar; then the Annual overpayment carry-over (2026→2027).
+5. **The next brief is #6n; the next decision is D183.**
 
 ---
 

@@ -2,7 +2,7 @@
 
 *Append new decisions. Mark superseded ones rather than deleting them.*
 *Dates during the build are approximate — most work happened across August 2026.*
-*Last reconciled: 2026-10-03 — brief #6d (D155–D161), brief #6c (D151–D154), on top of the 2026-10-02 brief #6a documentation pass (checked D115–D142 against the tree at brief #5z's tip `e761a74`; supersession markers added on D27, D43, D58, D60, D67, D70, D72, D74, D79, D81, D84, D87, D91, D93, D101, D115, D119, D121, D126 and D136), on top of brief #5z (D140–D142), brief #5y (D135–D139), brief #5x (D131–D134), brief #5w (D121–D130), brief #5v (D115–D120); earlier passes: brief #5t (D110–D114), brief #5s (D106–D109), brief #5r (D100–D105), brief #5q (D95–D99, built; D97–D99 new), brief #5p (D94–D96, markers on D6, D17, D27, D70, D73, D76, D82, D92), brief #5o (D83-D93), brief #5n (D78-D82), brief #5m (D70-D77, six groups, BIR Confirmations and the Pay group built), brief #5l (D68-D69), brief #5k (D64-D67), brief #5j (D60-D63), brief #5i, brief #5h (D49-D59, briefs #5d-#5g), brief #5c, brief #5b (D48), brief #5a (D43-D47) and the documentation pass (brief #4f) through briefs #4c-#4e.*
+*Last reconciled: 2026-10-09 — brief #6m (a documentation pass only; no new decision), covering decisions through D182 (brief #6l), on top of briefs #6k (D181), #6j (D180), #6i (D179), #6h (D174–D178), #6g (D170–D173), #6f (D166–D169), #6e (D162–D165), #6d (D155–D161), #6c (D151–D154), #6b (D143–D150) and the 2026-10-02 brief #6a documentation pass (checked D115–D142 against the tree at brief #5z's tip `e761a74`); earlier passes are recorded in the history below.*
 
 ---
 
@@ -1322,22 +1322,4 @@ Display only; no migration. The page uses the Dashboard's own container (`mx-aut
 
 ---
 
-**Documentation reconciled through brief #6l** (brief #6l's D182, then #6k's D181 and earlier) — see the "Last reconciled" line at the top of CURRENT_STATE.md, PROJECT_MASTER.md and CLAUDE.md.
-
-**Documentation reconciled through brief #6k** (brief #6k's D181, then #6j's D180 and earlier) — see the "Last reconciled" line at the top of CURRENT_STATE.md, PROJECT_MASTER.md and CLAUDE.md.
-
-**Documentation reconciled through brief #6j** (brief #6j's D180, then #6i's D179 and earlier) — see the "Last reconciled" line at the top of CURRENT_STATE.md, PROJECT_MASTER.md and CLAUDE.md.
-
-**Documentation reconciled through brief #6i** (brief #6i's D179, then #6h's D174–D178 and earlier) — see the "Last reconciled" line at the top of CURRENT_STATE.md, PROJECT_MASTER.md and CLAUDE.md.
-
----
-
-**Documentation reconciled through brief #6h** (brief #6h's D174–D178, then #6g's D170–D173, #6f's D166–D169, #6e's D162–D165, #6a, #6c's D151–D154 and #6d's D155–D161) — see the "Last reconciled" line at the top of CURRENT_STATE.md, PROJECT_MASTER.md and CLAUDE.md.
-
-**Documentation reconciled through brief #6g** (brief #6g's D170–D173, then #6f's D166–D169, #6e's D162–D165, #6a, #6c's D151–D154 and #6d's D155–D161) — see the "Last reconciled" line at the top of CURRENT_STATE.md, PROJECT_MASTER.md and CLAUDE.md.
-
-**Documentation reconciled through brief #6f** (brief #6f's D166–D169, then brief #6e's D162–D165, #6a, #6c's D151–D154 and #6d's D155–D161) — see the "Last reconciled" line at the top of CURRENT_STATE.md, PROJECT_MASTER.md and CLAUDE.md.
-
-**Documentation reconciled through brief #6e** (brief #6e's D162–D165, then brief #6a, #6c's D151–D154 and #6d's D155–D161; earlier passes: #5u, #5m, #5o's light additions D83–D93, #5p) — see the "Last reconciled" line at the top of this file, CURRENT_STATE.md, PROJECT_MASTER.md and CLAUDE.md.
-
-**Documentation reconciled through brief #6d** (brief #6a, then #6c's D151–D154 and #6d's D155–D161; earlier passes: #5u, #5m, #5o's light additions D83–D93, #5p) — see the "Last reconciled" line at the top of this file, CURRENT_STATE.md, PROJECT_MASTER.md and CLAUDE.md.
+**Documentation reconciled through brief #6m** (a documentation pass only, covering decisions through D182; no new decision) — see the "Last reconciled" line at the top of this file, CURRENT_STATE.md, PROJECT_MASTER.md and CLAUDE.md.
