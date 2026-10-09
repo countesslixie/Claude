@@ -3,14 +3,14 @@ import { readFileSync } from "node:fs";
 import { TOP, WORK, SETTINGS } from "@/components/nav";
 
 describe("D140 — left menu names and order", () => {
-  it("reads Dashboard · Kanban · Clients · Tax Rules · ATC · Holidays", () => {
+  it("reads Dashboard · Kanban · Clients · Tax Rules · ATC · Holidays · BIR Logins", () => {
     const labels = [TOP, ...WORK, ...SETTINGS].map((l) => l.label);
-    expect(labels).toEqual(["Dashboard", "Kanban", "Clients", "Tax Rules", "ATC", "Holidays"]);
+    expect(labels).toEqual(["Dashboard", "Kanban", "Clients", "Tax Rules", "ATC", "Holidays", "BIR Logins"]);
   });
 
   it("keeps the old URLs", () => {
     expect([TOP, ...WORK, ...SETTINGS].map((l) => l.href)).toEqual([
-      "/", "/filings", "/clients", "/settings/tax-rule-sets", "/settings/atc-codes", "/settings/holidays",
+      "/", "/filings", "/clients", "/settings/tax-rule-sets", "/settings/atc-codes", "/settings/holidays", "/settings/bir-logins",
     ]);
   });
 
@@ -19,6 +19,7 @@ describe("D140 — left menu names and order", () => {
     expect(h1("app/(app)/filings/page.tsx")).toBe("Kanban");
     expect(h1("app/(app)/settings/tax-rule-sets/page.tsx")).toBe("Tax Rules");
     expect(h1("app/(app)/settings/atc-codes/page.tsx")).toBe("ATC");
+    expect(h1("app/(app)/settings/bir-logins/page.tsx")).toBe("BIR Logins");
   });
 });
 

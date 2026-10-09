@@ -30,6 +30,7 @@ export const TABLES_EMPTIED = [
   "StartingFigures",
   "ClientTaxYear",
   "Payor",
+  "ClientBirLogin",
   "Client",
 ] as const;
 
@@ -47,6 +48,7 @@ export const CLIENT_OWNED_LOG_ENTITIES = [
   "WorkflowStep",
   "Document",
   "SawtBatch",
+  "ClientBirLogin",
 ] as const;
 
 /** Tables the clean start never touches (the migrations table is Prisma's own). */

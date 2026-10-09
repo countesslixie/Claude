@@ -9,6 +9,7 @@ import {
   Percent,
   Calendar,
   Tag,
+  KeyRound,
   LogOut,
 } from "lucide-react";
 import { logout } from "@/lib/actions/auth";
@@ -44,6 +45,7 @@ export const SETTINGS: NavLink[] = [
   { href: "/settings/tax-rule-sets", label: "Tax Rules", icon: Percent },
   { href: "/settings/atc-codes", label: "ATC", icon: Tag },
   { href: "/settings/holidays", label: "Holidays", icon: Calendar },
+  { href: "/settings/bir-logins", label: "BIR Logins", icon: KeyRound },
 ];
 
 function NavItem({ link, pathname }: { link: NavLink; pathname: string }) {

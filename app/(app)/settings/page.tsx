@@ -22,6 +22,11 @@ const BUILT = [
     title: "Holidays",
     description: "Regular and special non-working days used for due-date business-day shifting.",
   },
+  {
+    href: "/settings/bir-logins",
+    title: "BIR Logins",
+    description: "Each client's eAFS and Alphalist username, password and notes.",
+  },
 ];
 
 export default async function SettingsPage() {

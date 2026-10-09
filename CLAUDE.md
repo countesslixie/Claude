@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 *Instructions for Claude Code working on this repository.*
-*Last reconciled: 2026-10-09 — brief #6i (D179: the Starting figures page heading on two lines, no grey explanation paragraph), on top of brief #6h (D174–D178: the bordered button's edge, every database page always-dynamic, the backup time recorded reliably, tests on their own database and storage, the clean start), on top of brief #6g (D170–D173: one button size, the Q1 default, one-click backup, the backup reminder), on top of brief #6f (D166–D169) (Back to Settings, the Tax Rules list and form, the Holidays Add button), on top of brief #6e (D162–D165: centred client-page tables, the ATC list and form, no verified state), on top of brief #6d (D155–D161: the Income, Form 2307 and Payors pages, Complete-filing Copy, step 2's skipped wording), on top of brief #6c (D151–D154) and brief #6a's documentation pass (checked against the tree at brief #5z's tip `e761a74`, covering briefs #5v–#5z, D115–D142) and brief #6b (D143–D150); #6c adds D151–D154: the Complete lock, step 2 starting open, the client page layout. Each rule is stated once, as it stands, with decision numbers (DECISIONS.md holds the history).*
+*Last reconciled: 2026-10-09 — brief #6j (D180: the BIR Logins page under Settings), on top of brief #6i (D179: the Starting figures page heading on two lines, no grey explanation paragraph), on top of brief #6h (D174–D178: the bordered button's edge, every database page always-dynamic, the backup time recorded reliably, tests on their own database and storage, the clean start), on top of brief #6g (D170–D173: one button size, the Q1 default, one-click backup, the backup reminder), on top of brief #6f (D166–D169) (Back to Settings, the Tax Rules list and form, the Holidays Add button), on top of brief #6e (D162–D165: centred client-page tables, the ATC list and form, no verified state), on top of brief #6d (D155–D161: the Income, Form 2307 and Payors pages, Complete-filing Copy, step 2's skipped wording), on top of brief #6c (D151–D154) and brief #6a's documentation pass (checked against the tree at brief #5z's tip `e761a74`, covering briefs #5v–#5z, D115–D142) and brief #6b (D143–D150); #6c adds D151–D154: the Complete lock, step 2 starting open, the client page layout. Each rule is stated once, as it stands, with decision numbers (DECISIONS.md holds the history).*
 
 ---
 
@@ -41,7 +41,7 @@ Next.js 15 App Router · TypeScript strict · Prisma + SQLite (`data/app.db`) ·
 /app/(app)/                    pages: dashboard (page.tsx), filings/ (the Kanban board, D138–D141),
                                 clients/ [id]/ {edit, income, form-2307, payors, sawt-worksheet,
                                 filings/[filingId] (the filing page), tax-years/[taxYearId]/{edit,
-                                starting-figures}}, settings/ {atc-codes, holidays, tax-rule-sets}
+                                starting-figures}}, settings/ {atc-codes, holidays, tax-rule-sets, bir-logins (D180)}
 /app/api/                      backup (POST streams the backup zip, GET the last-backup time — D172), clients/[id]/sawt-worksheet (xlsx), clients/[id]/form-2307-scans (Download all zip, D160), documents/[id]/download,
                                 filings/[id]/package (flat client zip, standard file names, no manifest — D103/D108/D111)
 /app/fonts/                    Plus Jakarta Sans, loaded via next/font/local — never next/font/google (D58)
@@ -75,6 +75,7 @@ Next.js 15 App Router · TypeScript strict · Prisma + SQLite (`data/app.db`) ·
   summaryLines.ts                buildSummaryLines — the ONE year-to-date summary both steps 4 and 16 print (D114)
   filingOrder.ts + filingOrderData.ts   the filing-order guard for step 5 (D95)
 /lib/actions/                  Server Actions — the I/O boundary
+  birLogins.ts                   saveBirLogins (D180) — the six login fields; logs a note only, never a value
   workflowSteps.ts               markStepDone (freeze at step 5 D83, auto-waits via startGatedBirWaits, D76 NA, draft save
                                  at step 12), skip/start/waiting refusals, reopenPreparedFiling, unskipStep,
                                  recomputeReceive2307Status, recomputeFileGroupDocStepStatus
@@ -83,12 +84,12 @@ Next.js 15 App Router · TypeScript strict · Prisma + SQLite (`data/app.db`) ·
   payors.ts, atcCodes.ts, clients.ts, clientTaxYears.ts, holidays.ts, taxRuleSets.ts, sawt.ts, auth.ts
 /lib/backup/                   createBackup.ts (VACUUM INTO snapshot + storage/ + .env + README.txt, streamed; D172), lastBackup.ts (AppSetting row, file name,
                                 the 7-day reminder text — D173)
-/lib/cleanStart/               cleanStart.ts (the clean start: refusals, plan, DELETE prompt, one transaction, then files; D178), run by /scripts/clean-start.ts (`npm run clean-start`)
+/lib/cleanStart/               cleanStart.ts (the clean start, now also deleting ClientBirLogin, D180: refusals, plan, DELETE prompt, one transaction, then files; D178), run by /scripts/clean-start.ts (`npm run clean-start`)
 /lib/documents/                storage.ts (getStorageRoot — ./storage, or BIR_STORAGE_ROOT in tests only, D177) (naming, SHA-256), computationSheet.ts (+ computationSheetHtml.ts),
                                 filingPackage.ts (planPackageDocuments — the five document kinds, the zip's standard names, and
                                 the email's attachment list, all from one source: D108/D110/D111)
 /lib/sawt/                     keying worksheet assembly and export
-/lib/validation/               Zod schemas, one per form
+/lib/validation/               Zod schemas, one per form (birLogin.ts: ends trimmed only, D180)
 /lib/formatDays.ts (the one source of "N days", D117), periodLabel.ts ("Annual", "Q3", D129), startingFigures.ts, reconciliation.ts, vatThreshold.ts, dates.ts, money.ts, upload.ts, prisma.ts, actor.ts, activityLog.ts, auth.ts, utils.ts
 /components/                   client-details-cards (the client page's two cards, D154), board-column (the Kanban's column and fixed-height cards, D138), dashboard-section + dashboard-tables (D126/D127), filing-summary-strip + status-columns (the tax payable line and the fixed pill/Expand columns, D116), next-action-control, filing-sticky-bar, client-sticky-bar (D104), client-package-step-card (step 16, D101), go-to-step (shared "Go to step"), workflow-group-card,
                                 workflow-step-card (generic), file-group-doc-step-card (self-completing upload steps, one or
@@ -97,7 +98,7 @@ Next.js 15 App Router · TypeScript strict · Prisma + SQLite (`data/app.db`) ·
                                 starting-figures-form, generate-filings-form, payor-*, atc-code-*, tax-rule-set-form, client-form, client-tax-year-form, holiday-form, clickable-row, print-button, nav, status-badge, copy-textarea, ui/
 /prisma/                       schema.prisma, migrations/, seed.ts (reference data), seedScenarios.ts (the eight sample clients, D82),
                                 backfills.ts (idempotent seed-run corrections: D96 step titles, D97 filing status, D106 document dates)
-/tests/                        actions/ backup/ cleanStart/ clients/ filingComputation/ documents/ reconciliation/ sawt/ seed/ support/ tax/ workflow/  (678 tests, 73 files);
+/tests/                        actions/ backup/ cleanStart/ clients/ filingComputation/ documents/ reconciliation/ sawt/ seed/ support/ tax/ workflow/  (690 tests, 75 files);
                                 globalSetup.ts + setupEnv.ts give every run a throwaway seeded database and storage (D177)
 /storage/  /data/              gitignored document vault and SQLite database
 ```
@@ -252,7 +253,7 @@ Centered container ~1100px. Tables with aligned columns. Row text 14px, secondar
   - **Payors (D161):** header "Payors — [name]" with Add payor (primary) and Back to client; the Add form is hidden until Add payor is clicked, opens above the table, and closes on Save or Cancel; the checkbox reads "Active"; the table is centred.
   - **The Starting figures page (D179)** carries the same rule: heading, Back to client and the card only — no grey explanation paragraph under the heading. The heading is two lines, "Starting figures — [name]" then "TY2026", no comma.
 - **A sticky client bar (`components/client-sticky-bar.tsx`, D104)** on the client page and its Income, Form 2307s and Payors pages: appears once the page header scrolls away, beside the menu, with the client's name (a link), TIN and buttons for those three pages. The filing page has its own slim bar (D80); the two never appear together. The Form 2307 register opens on "All periods" (D105).
-- **A left-side menu (`components/nav.tsx`, D58/D140):** Dashboard · Work (Kanban, Clients) · Settings (Tax Rules, ATC, Holidays), the heading linking to the hub. **Page headings match the menu ("Kanban", "Tax Rules", "ATC"); URLs and form field labels ("ATC code") are unchanged.** Icons from `lucide-react` only. **Back to Settings (D166):** Tax Rules, ATC and Holidays each have a bordered Back button at the top right that goes to the Settings hub (beside New on Tax Rules and ATC; beside Add holiday on Holidays). **Holidays (D169):** the add form is hidden until the primary Add holiday button is clicked (as Payors, D161) and opens above the table; Save adds and closes, Cancel closes unsaved; table centred.
+- **A left-side menu (`components/nav.tsx`, D58/D140):** Dashboard · Work (Kanban, Clients) · Settings (Tax Rules, ATC, Holidays, BIR Logins), the heading linking to the hub. **Page headings match the menu ("Kanban", "Tax Rules", "ATC"); URLs and form field labels ("ATC code") are unchanged.** Icons from `lucide-react` only. **Back to Settings (D166):** Tax Rules, ATC, Holidays and BIR Logins (D180) each have a bordered Back button at the top right that goes to the Settings hub (beside New on Tax Rules and ATC; beside Add holiday on Holidays). **Holidays (D169):** the add form is hidden until the primary Add holiday button is clicked (as Payors, D161) and opens above the table; Save adds and closes, Cancel closes unsaved; table centred.
 - **The New/Edit rule set form (D168):** Effective from fills in as January 1 of the taxable year typed (`lib/ruleSetDefaults.ts`) and stays editable — once she changes it, it stops following the year; on Edit the stored date is shown and `updateTaxRuleSet` writes a date only when its Manila calendar day changed. The late-filing surcharge/interest section is gone from the form; the columns stay, Create leaves them empty, Edit never writes them, and no screen reads them (only the self-disabled `lib/tax/lateFilingExposure.ts` does). No grey helper text — format examples are placeholders in the boxes; Cancel is bordered and returns to the list unsaved.
 - **One button size (D170):** every page-header button and every form's submit + Cancel pair uses the shared `Button` default size; only the colour differs. Don't add `size="sm"` to a header or form button; `sm` is for controls inside cards, tables and filter bars.
 - **A bordered button's edge is the `--button-edge` token (D174)**, not the pale `--line`: it is the same size as the purple one, and the darker edge is what makes it read that way.
@@ -262,6 +263,8 @@ Centered container ~1100px. Tables with aligned columns. Row text 14px, secondar
 - **Density is not the goal; being operable is.** **Lead with the work, not the output.**
 
 ## Security
+
+**BIR logins (D180):** each client's eAFS and Alphalist username, password and notes (`ClientBirLogin`, page `/settings/bir-logins`) are **plain text in the database by her explicit decision** — readable in `data/app.db` and every backup zip, shown unmasked. **Never** write a value to `ActivityLog` (note "BIR logins updated for [client]" only; no before/after JSON), a URL or query string, a console log, an error message, the client package email or zip, or any export; Zod trims the ends only and error text never echoes a value. Samples get none; the clean start deletes them.
 
 Will hold real TINs and income data under the Data Privacy Act from November 2026. **There is none in the application today** — the eight sample clients are fictitious (D82). One real client's Q1 figures are reproduced in `tests/tax/realFilingQ1_2026.test.ts` (D42/D49) — amounts and taxpayer type only, no name, TIN, payor or address. Single `.env` password is adequate for localhost and nothing more. **Backup (D172):** Settings → Back up now makes one zip (database snapshot via `VACUUM INTO`, all of `storage/`, `.env`, README.txt); the last time is in `AppSetting` (`lastBackupAt`); the Dashboard shows an amber reminder after 7 days or if never (D173). The time is written the moment the zip has fully streamed — never for a zip that failed or was abandoned, and never held back by a temp-file cleanup error (D176). **There is no restore button — restoring stays manual** (stop the app, unzip, copy `data\app.db`, `storage` and `.env` back, start it; the zip's README.txt spells it out). The zip holds real TINs, income and documents — it is kept private, never emailed or shared. Never commit `data/`, `storage/`, or any `*.local.ts` fixture.
 

@@ -166,7 +166,12 @@ describe("a full run", () => {
     await prisma.activityLog.create({ data: { entityType: "TaxRuleSet", entityId: "x", action: "UPDATE", actorId: user.id } });
     await prisma.appSetting.upsert({ where: { key: "lastBackupAt" }, update: { value: new Date().toISOString() }, create: { key: "lastBackupAt", value: new Date().toISOString() } });
     fs.writeFileSync(path.join(STORAGE, "Engagement Letter - Test.pdf"), "a loose file");
+    // D180 — a client's BIR logins and the audit note about them go with the client.
+    const someClient = await prisma.client.findFirstOrThrow();
+    await prisma.clientBirLogin.create({ data: { clientId: someClient.id, eafsUsername: "fake-user", eafsPassword: "fake-pass" } });
+    await prisma.activityLog.create({ data: { entityType: "ClientBirLogin", entityId: someClient.id, action: "UPDATE", note: "BIR logins updated for X", actorId: user.id } });
     before = await snapshot();
+    expect(before.tables.ClientBirLogin).toBe(1);
     expect(before.tables.Client).toBeGreaterThan(0);
     const lastBackup = await prisma.appSetting.findUniqueOrThrow({ where: { key: "lastBackupAt" } });
 
@@ -190,6 +195,9 @@ describe("a full run", () => {
     expect(await prisma.activityLog.count({ where: { entityType: "TaxRuleSet" } })).toBe(1);
     expect(await prisma.activityLog.count({ where: { entityType: { in: ["Filing", "Document", "WorkflowStep", "QuarterlySales", "StartingFigures", "Form2307"] } } })).toBe(0);
     expect(await prisma.activityLog.count({ where: { entityType: "CleanStart" } })).toBe(1);
+    expect(await prisma.clientBirLogin.count()).toBe(0);
+    expect(await prisma.activityLog.count({ where: { entityType: "ClientBirLogin" } })).toBe(0);
+    expect(run.out).toMatch(/ClientBirLogin\s+1/); // the plan names it
   }, 120_000);
 
   it("prints the plan first and a plain summary at the end", async () => {

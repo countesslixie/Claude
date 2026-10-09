@@ -240,8 +240,28 @@ model Client {
   sawtBatches     SawtBatch[]
   payors          Payor[]
   startingFigures StartingFigures[]
+  birLogin        ClientBirLogin?
 
   @@index([isActive])
+}
+
+// Brief #6j (D180) — one row per client holding her eAFS and Alphalist logins.
+// PLAIN TEXT by her decision (readable in data/app.db and every backup zip).
+// Never logged, never exported, never in a URL. Every field is optional.
+model ClientBirLogin {
+  id       String @id @default(cuid())
+  clientId String @unique
+  client   Client @relation(fields: [clientId], references: [id])
+
+  eafsUsername      String?
+  eafsPassword      String?
+  eafsNotes         String?
+  alphalistUsername String?
+  alphalistPassword String?
+  alphalistNotes    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // Brief #5a — one saved list per client of companies she deals with, since
