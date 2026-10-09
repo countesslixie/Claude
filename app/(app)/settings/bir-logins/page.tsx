@@ -23,8 +23,9 @@ export default async function BirLoginsPage() {
       orusPassword: c.birLogin?.orusPassword ?? "",
     }));
 
+  // D182 — the same container width the Dashboard uses (app/(app)/page.tsx).
   return (
-    <div className="mx-auto max-w-4xl">
+    <div className="mx-auto w-full max-w-[1100px]">
       <div className="mb-4 flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-ink">BIR Logins</h1>
         <BackToSettings />

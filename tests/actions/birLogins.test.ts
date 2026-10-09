@@ -128,6 +128,21 @@ describe("the page", () => {
     expect(table).toContain('title: "ORUS"');
     expect(page).not.toMatch(/notes/i);
   });
+  it("uses the Dashboard's container width and nothing on the table wraps (D182)", () => {
+    const dash = fs.readFileSync(path.join(process.cwd(), "app/(app)/page.tsx"), "utf8");
+    const dashWidth = dash.match(/max-w-\[\d+px\]/)?.[0];
+    expect(dashWidth).toBeTruthy();
+    expect(page).toContain(dashWidth!);
+    const table = fs.readFileSync(path.join(process.cwd(), "components/bir-logins-table.tsx"), "utf8");
+    const css = fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8");
+    const rule = css.slice(css.indexOf("table.data-table.data-table-tight {"), css.indexOf("}", css.indexOf("table.data-table.data-table-tight {")));
+    expect(rule).toContain("white-space: nowrap");
+    expect(table).not.toMatch(/break-all|break-words|overflow-wrap/);
+    expect(table).toContain("data-table-tight");
+    expect(table).toMatch(/overflow-x-auto rounded-lg/); // the card scrolls, not the page
+    // the button column's header matches the Client cell: both span the two header rows
+    expect(table.match(/<th rowSpan=\{2\}/g)).toHaveLength(2);
+  });
   it("the query it runs returns active clients only", async () => {
     const a = await makeClient("Active Zed Page");
     const b = await makeClient("Inactive Zed Page", false);

@@ -37,7 +37,7 @@ const GROUP_EDGE = "border-l border-line";
 
 function Cell({ value, first }: { value: string; first: boolean }) {
   return (
-    <td className={`break-all font-mono text-sm ${first ? GROUP_EDGE : ""}`}>
+    <td className={`font-mono text-xs ${first ? GROUP_EDGE : ""}`}>
       {value || <span className="font-sans text-faint">—</span>}
     </td>
   );
@@ -54,7 +54,7 @@ function RowView({ row, onEdit }: { row: BirLoginRow; onEdit: () => void }) {
       {KINDS.flatMap(({ kind }) =>
         PARTS.map((part) => <Cell key={`${kind}${part}`} value={row[key(kind, part)] as string} first={part === "Username"} />),
       )}
-      <td>
+      <td className={GROUP_EDGE}>
         <Button type="button" variant="secondary" size="sm" onClick={onEdit}>
           Edit
         </Button>
@@ -98,7 +98,7 @@ function RowEdit({ row, onDone }: { row: BirLoginRow; onDone: () => void }) {
                 value={values[k]}
                 onChange={(e) => setValues({ ...values, [k]: e.target.value })}
                 aria-label={`${title} ${part.toLowerCase()} for ${row.name}`}
-                className="h-8 min-w-0 px-2 font-mono text-sm"
+                className="h-8 w-[7.5rem] px-1 font-mono text-xs"
                 autoComplete="off"
                 spellCheck={false}
               />
@@ -107,7 +107,7 @@ function RowEdit({ row, onDone }: { row: BirLoginRow; onDone: () => void }) {
           );
         }),
       )}
-      <td>
+      <td className={GROUP_EDGE}>
         <div className="flex flex-col items-center gap-1">
           <Button type="button" size="sm" onClick={save} disabled={pending}>
             Save
@@ -124,19 +124,17 @@ function RowEdit({ row, onDone }: { row: BirLoginRow; onDone: () => void }) {
 export function BirLoginsTable({ rows }: { rows: BirLoginRow[] }) {
   const [editing, setEditing] = useState<string | null>(null);
   return (
-    <div className="rounded-lg border border-line bg-surface">
+    <div className="overflow-x-auto rounded-lg border border-line bg-surface">
       <table className="data-table data-table-centered data-table-tight">
         <thead>
           <tr>
-            <th rowSpan={2} style={{ width: "16%" }}>
-              Client
-            </th>
+            <th rowSpan={2}>Client</th>
             {KINDS.map(({ kind, title }) => (
               <th key={kind} colSpan={2} className={GROUP_EDGE}>
                 {title}
               </th>
             ))}
-            <th rowSpan={2} style={{ width: "12%" }}></th>
+            <th rowSpan={2} className={GROUP_EDGE}></th>
           </tr>
           <tr>
             {KINDS.flatMap(({ kind }) =>
