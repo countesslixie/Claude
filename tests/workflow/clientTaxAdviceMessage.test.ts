@@ -44,14 +44,15 @@ describe("buildClientTaxAdviceMessage", () => {
         "",
         "Here's the computation for your 1701Q Q3 2026 return:",
         "",
-        "  Gross sales this quarter                  ₱130,000.00",
-        "  Taxable income, year to date              ₱112,000.00",
-        "  Tax due, year to date                     ₱16,800.00",
-        "  Less: tax paid on earlier quarters        ₱3,000.00",
-        "  Less: creditable withholding (Form 2307)  ₱1,700.00",
-        "  Amount payable                            ₱12,100.00",
+        "Gross sales this quarter: ₱130,000.00",
+        "Taxable income, year to date: ₱112,000.00",
+        "Tax due, year to date: ₱16,800.00",
+        "Less: tax paid on earlier quarters: ₱3,000.00",
+        "Less: creditable withholding (Form 2307): ₱1,700.00",
         "",
-        "Due date: November 6, 2026",
+        "Amount payable: ₱12,100.00",
+        "",
+        "Due date for filing: November 6, 2026.",
         "",
         "Please let me know when you plan to make the payment.",
         "",
@@ -79,10 +80,11 @@ describe("buildClientTaxAdviceMessage", () => {
         "",
         "Here's the computation for your 1701Q Q1 2026 return:",
         "",
-        "  Gross sales this quarter                  ₱450,000.00",
-        "  Tax due, year to date                     ₱16,000.00",
-        "  Less: creditable withholding (Form 2307)  ₱22,500.00",
-        "  Overpayment                               ₱6,500.00",
+        "Gross sales this quarter: ₱450,000.00",
+        "Tax due, year to date: ₱16,000.00",
+        "Less: creditable withholding (Form 2307): ₱22,500.00",
+        "",
+        "Overpayment: ₱6,500.00",
         "",
         "There is nothing to pay this quarter. The overpayment will be applied to your next return this year.",
         "",
@@ -103,7 +105,7 @@ describe("buildClientTaxAdviceMessage", () => {
       }),
     );
     expect(message.body).toContain("Here's the computation for your 1701A 2026 return:");
-    expect(message.body).toMatch(/Overpayment\s+₱9,987\.00/);
+    expect(message.body).toContain("\nOverpayment: ₱9,987.00");
     expect(message.body).toContain("I'll get in touch with you about how the overpayment will be applied.");
     expect(message.body).not.toMatch(/refunded to you|Tax Credit Certificate|carried over to next year's return/);
   });
@@ -159,5 +161,23 @@ describe("buildClientTaxAdviceMessage", () => {
       expect(message.body).not.toMatch(/questions/i);
       expect(message.body.endsWith("Thank you!")).toBe(true);
     }
+  });
+
+  it("D189: exactly one blank line above the final line, and none elsewhere in the summary", () => {
+    for (const m of [buildClientTaxAdviceMessage(baseInput()), buildClientTaxAdviceMessage(baseInput({ isOverpayment: true }))]) {
+      const lines = m.body.split("\n");
+      const first = lines.findIndex((l) => /^[^:]+: ₱/.test(l));
+      const last = lines.length - 1 - [...lines].reverse().findIndex((l) => /^[^:]+: ₱/.test(l));
+      const blanks = lines.slice(first, last).filter((l) => l === "");
+      expect(blanks).toHaveLength(1);
+      expect(lines[last - 1]).toBe("");
+      expect(lines[last]).toMatch(/^(Amount payable|Overpayment): ₱/);
+    }
+  });
+
+  it("D187: the payable version's due line reads 'Due date for filing: November 6, 2026.'; overpayment versions carry none", () => {
+    expect(buildClientTaxAdviceMessage(baseInput()).body).toContain("\nDue date for filing: November 6, 2026.\n");
+    expect(buildClientTaxAdviceMessage(baseInput({ isOverpayment: true })).body).not.toMatch(/Due date/);
+    expect(buildClientTaxAdviceMessage(baseInput({ period: "ANNUAL", formType: "F1701A", isOverpayment: true })).body).not.toMatch(/Due date/);
   });
 });

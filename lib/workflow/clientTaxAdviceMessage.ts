@@ -50,13 +50,13 @@ export function buildClientTaxAdviceMessage(input: ClientTaxAdviceMessageInput):
     "",
     `Here's the computation for your ${formLabel} ${periodLabel} return:`,
     "",
-    ...formatSummaryLines(input.summary),
+    ...formatSummaryLines(input.summary, { blankBeforeResult: true }),
   ];
 
   if (!input.isOverpayment) {
     bodyLines.push(
       "",
-      `Due date: ${formatManilaDateLong(input.clientDueDate)}`,
+      `Due date for filing: ${formatManilaDateLong(input.clientDueDate)}.`,
       "",
       // D107 (brief #5s) — no advance offer: her letter requires advance requests by the 10th, long past by the time this goes out.
       "Please let me know when you plan to make the payment.",

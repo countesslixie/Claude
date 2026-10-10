@@ -1332,6 +1332,26 @@ Columns are now Code · Registered name · TIN · Branch · RDO · Status, all c
 
 Step 3's card body starts with a grey box (same style as the item 61 box) headed "Client details", showing TIN (through `formatTin`, D184), Branch code and Birthday side by side, monospace; above the item 55 line. Birthday is MM/DD/YYYY (eBIRForms' order) by the Manila calendar day (`formatManilaDateMDY`) — for this box only; the client page keeps "January 5, 1990". Empty values show a muted "—". No controls; read from the client record at render, not stored on the filing or snapshot; visible in every status including Complete (it changes nothing). Display only: no migration, nothing in /lib/tax/ or the computation changed.
 
+**D186 — The summary figures in steps 4 and 16 paste as an aligned table** *(her decision, "Option A", brief #6q)*
+
+Padding with spaces never lined up in an email app's proportional font. Plain text (the box, the saved text, the plain clipboard part) is now `Label: amount`, one per line. The body's Copy on steps 4 and 16 writes two versions at once (`ClipboardItem` with `text/html` and `text/plain`): the HTML has each run of summary lines as a two-column table — label left, amount right-aligned, no bold, borders or colours, inline styles only — and every other line as a plain line; all values HTML-escaped. If the browser refuses the rich write, plain text is copied with no error. One pure function, `messageToHtml` (beside `buildSummaryLines`), shared by both steps; it works from the text in the box, so edits are copied too. Messages already saved are untouched (no backfill); a Complete filing still has no Copy (D156). Step 12's email is not touched. **Amends D114** (layout).
+
+**D187 — Step 4's due-date line reads "Due date for filing: [date]."** *(her decision, brief #6q)*
+
+Text only. Only the payable version carries a due line; both overpayment versions (quarterly, annual) have none and none was added. `clientPaymentDueDate`, `clientPaymentLeadDays` and the earlier-working-day shift are unchanged. **Amends D51.**
+
+**D188 — No "Rounding to whole pesos" line in steps 4 and 16** *(her decision, knowingly, brief #6q)*
+
+The printed lines may now differ from the final figure by a few centavos, because the form rounds to whole pesos (D49); the final line still shows the form's whole-peso figure, and creditable withholding keeps its centavos. The computation sheet, the filed sheet and the snapshot keep their rounding. Saved messages are left alone. **Supersedes D102's "a rounding line only when needed" and amends D114.**
+
+**D189 — Step 4: one blank line above the final line** *(her decision, brief #6q)*
+
+Above "Amount payable", or "Overpayment" on an overpayment (plain text: a blank line; HTML: one spacer row in the same table). Step 16 has none.
+
+**D190 — Step 16: "Amount paid" instead of "Amount payable"** *(her decision, brief #6q)*
+
+Label only (`buildSummaryLines(sheet, { payableLabel })`); the figure is the frozen sheet's payable, as before. "Overpayment" is unchanged. Step 4 keeps "Amount payable". **Supersedes D102's step 16 label.**
+
 ---
 
-**Documentation reconciled through brief #6p** (decisions through D185) — see the "Last reconciled" line at the top of this file, CURRENT_STATE.md, PROJECT_MASTER.md and CLAUDE.md.
+**Documentation reconciled through brief #6q** (decisions through D190) — see the "Last reconciled" line at the top of this file, CURRENT_STATE.md, PROJECT_MASTER.md and CLAUDE.md.

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { messageToHtml } from "@/lib/workflow/summaryLines";
 
 /**
  * An editable, copyable block of text (rework brief #2 §5: the step 16
@@ -23,18 +24,36 @@ export function CopyTextarea({
   rows = 12,
   readOnly = false,
   hideCopy = false,
+  richCopy = false,
 }: {
   defaultValue: string;
   rows?: number;
   readOnly?: boolean;
   /** D156 — a Complete filing's texts have no Copy button. */
   hideCopy?: boolean;
+  /** D186 — steps 4 and 16: copy text/html (summary as a table) AND text/plain at once. */
+  richCopy?: boolean;
 }) {
   const [value, setValue] = useState(defaultValue);
   const [copied, setCopied] = useState(false);
 
   async function copy() {
     try {
+      if (richCopy && typeof ClipboardItem !== "undefined" && navigator.clipboard.write) {
+        try {
+          await navigator.clipboard.write([
+            new ClipboardItem({
+              "text/html": new Blob([messageToHtml(value)], { type: "text/html" }),
+              "text/plain": new Blob([value], { type: "text/plain" }),
+            }),
+          ]);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+          return;
+        } catch {
+          // The browser refused the rich write — fall back to plain text, no error.
+        }
+      }
       await navigator.clipboard.writeText(value);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);

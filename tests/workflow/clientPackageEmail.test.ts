@@ -6,8 +6,10 @@ import {
   periodPlainName,
   type ClientPackageEmailInput,
 } from "@/lib/workflow/clientPackageEmail";
+import { clientPaymentDueDate } from "@/lib/tax/deadlines";
+import { formatManilaDateLong } from "@/lib/dates";
 import { buildClientTaxAdviceMessage } from "@/lib/workflow/clientTaxAdviceMessage";
-import { formatSummaryLines } from "@/lib/workflow/summaryLines";
+import { formatSummaryLines, messageToHtml } from "@/lib/workflow/summaryLines";
 import type { AnnualFormComputationResult, LegacyFilingComputationResult, QuarterlyFormComputationResult } from "@/lib/tax/types";
 
 /**
@@ -113,7 +115,7 @@ describe("summary lines reconcile to the final figure (D102)", () => {
     expect(lines.at(-1)).toEqual({ kind: "result", label: "Amount payable", amountCents: 25_000_00 });
   });
 
-  it("whole-peso rounding of the credits shows as its own line so the lines still add up", () => {
+  it("D188: no 'Rounding to whole pesos' line even when the whole-peso credits differ from the printed lines; the final line is still the sheet's figure", () => {
     const sheet = quarterly({
       item54TaxDueCents: 40_000_00,
       item56PriorPeriodPaymentsCents: 0,
@@ -125,8 +127,13 @@ describe("summary lines reconcile to the final figure (D102)", () => {
       overpaymentCents: 0,
     });
     const lines = buildSummaryLines(sheet);
-    expect(lines.find((l) => l.label === "Rounding to whole pesos")?.amountCents).toBe(30);
-    expect(signedResultOf(lines)).toBe(resultOf(sheet));
+    expect(lines.some((l) => /Rounding/.test(l.label))).toBe(false);
+    expect(lines.at(-1)).toEqual({ kind: "result", label: "Amount payable", amountCents: 23_353_00 });
+    const text = formatSummaryLines(lines).join("\n");
+    expect(text).not.toMatch(/Rounding/);
+    expect(messageToHtml(text)).not.toMatch(/Rounding/);
+    // creditable withholding keeps its centavos
+    expect(text).toContain("Less: creditable withholding (Form 2307): ₱16,646.70");
   });
 
   it("annual (1701A) reconciles with its own lines and labels", () => {
@@ -253,8 +260,9 @@ describe("step 4 and step 16 print identical summary lines (D114)", () => {
       summary: buildSummaryLines(sheet), isOverpayment: sheet.isOverpayment, clientDueDate: new Date("2026-11-06T00:00:00.000Z"),
     });
     const filed = buildClientPackageEmail(baseInput({ sheet }));
+    // D189/D190: step 4 has a blank line above the final line; step 16 does not. Overpayment keeps its label in both.
+    expect(advice.body).toContain(formatSummaryLines(buildSummaryLines(sheet), { blankBeforeResult: true }).join("\n"));
     const block = formatSummaryLines(buildSummaryLines(sheet)).join("\n");
-    expect(advice.body).toContain(block);
     expect(filed.body).toContain(block);
     expect(block).toContain("Gross sales this quarter");
     expect(block).toContain("Taxable income, year to date");
@@ -273,5 +281,66 @@ describe("step 4 and step 16 print identical summary lines (D114)", () => {
     expect(signedResultOf(lines)).toBe(25_000_00);
     const withOther = buildSummaryLines({ ...sheet, item61OtherCreditsCents: 1_000_00, item62TotalCreditsCents: 36_000_00, item63PayableCents: 24_000_00, taxPayableCents: 24_000_00 });
     expect(withOther.some((l) => l.label === "Less: other credits")).toBe(true);
+  });
+});
+
+describe("steps 4 and 16: layout, label and table (D186, D189, D190)", () => {
+  const payable = () =>
+    quarterly({ item54TaxDueCents: 60_000_00, item62TotalCreditsCents: 35_000_00, item63PayableCents: 25_000_00, taxPayableCents: 25_000_00, isOverpayment: false, overpaymentCents: 0 });
+  const advice = (sheet: ReturnType<typeof quarterly>) =>
+    buildClientTaxAdviceMessage({
+      clientRegisteredName: "Juan Dela Cruz", clientFirstName: "Juan", period: "Q3", taxableYear: 2026, formType: "F1701Q",
+      summary: buildSummaryLines(sheet), isOverpayment: sheet.isOverpayment, clientDueDate: new Date("2026-11-06T00:00:00.000Z"),
+    });
+
+  it("plain text is 'Label: amount' with no padding runs", () => {
+    const text = formatSummaryLines(buildSummaryLines(payable())).join("\n");
+    expect(text).not.toMatch(/ {2,}/);
+    for (const l of text.split("\n")) expect(l).toMatch(/^.+: ₱[\d,]+\.\d{2}$/);
+  });
+
+  it("step 16 ends 'Amount paid' with the same figure step 4 shows as 'Amount payable'; overpayment stays 'Overpayment'; no blank line", () => {
+    const sheet = payable();
+    const filed = buildClientPackageEmail(baseInput({ sheet })).body;
+    expect(filed).toContain("\nAmount paid: ₱25,000.00\n");
+    expect(filed).not.toContain("Amount payable");
+    expect(filed).not.toContain("\n\nAmount paid");
+    expect(advice(sheet).body).toContain("\n\nAmount payable: ₱25,000.00\n");
+    const over = buildClientPackageEmail(baseInput({ sheet: quarterly() })).body;
+    expect(over).toContain("\nOverpayment: ₱8,200.00\n");
+    expect(over).not.toContain("Amount paid");
+  });
+
+  it("html: one row per summary line, amounts in a right-aligned right cell, one spacer row before step 4's final line only", () => {
+    const sheet = payable();
+    const lines = buildSummaryLines(sheet);
+    const h4 = messageToHtml(advice(sheet).body);
+    const h16 = messageToHtml(buildClientPackageEmail(baseInput({ sheet })).body);
+    expect((h4.match(/<table/g) ?? []).length).toBe(1);
+    expect((h4.match(/<tr>/g) ?? []).length).toBe(lines.length + 1);
+    expect((h4.match(/colspan="2"/g) ?? []).length).toBe(1);
+    expect((h16.match(/<tr>/g) ?? []).length).toBe(lines.length);
+    expect(h16).not.toContain("colspan");
+    expect(h4).toContain('<td style="padding:0;text-align:right">₱25,000.00</td>');
+    expect(h4.indexOf("colspan")).toBeLessThan(h4.indexOf("Amount payable"));
+    expect(h4).not.toMatch(/<style|<b>|<strong|border:|color:/);
+  });
+
+  it("html escapes <, & and \" in names and text", () => {
+    const h = messageToHtml('Hi <b>A&B "Q",\n\nGross sales: ₱1.00\nLess: <i>x</i>: ₱2.00');
+    expect(h).toContain("Hi &lt;b&gt;A&amp;B &quot;Q&quot;,");
+    expect(h).toContain("Less: &lt;i&gt;x&lt;/i&gt;");
+    expect(h).not.toContain("<b>");
+    expect(h).not.toContain("<i>");
+  });
+
+  it("D187: the due date in step 4 is exactly what clientPaymentDueDate returns, formatted", () => {
+    const due = clientPaymentDueDate(new Date("2026-11-16T00:00:00.000Z"), 10, []);
+    const body = buildClientTaxAdviceMessage({
+      clientRegisteredName: "Juan Dela Cruz", clientFirstName: "Juan", period: "Q3", taxableYear: 2026, formType: "F1701Q",
+      summary: buildSummaryLines(payable()), isOverpayment: false, clientDueDate: due,
+    }).body;
+    expect(body).toContain(`Due date for filing: ${formatManilaDateLong(due)}.`);
+    expect(body).toContain("Due date for filing: November 6, 2026.");
   });
 });

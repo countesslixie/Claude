@@ -20,21 +20,21 @@ export interface SummaryLine {
 
 /**
  * The email's summary lines from the frozen sheet, in the return's own
- * order. Credits are positive amounts under "Less:" labels; a "Rounding"
- * credit (positive or negative) appears only when the sheet's whole-peso
- * total credits differ from the sum of the printed lines.
+ * order. Credits are positive amounts under "Less:" labels. D188: there is
+ * no "Rounding to whole pesos" line any more — the printed lines may differ
+ * from the final figure by a few centavos (the form rounds, D49); the final
+ * line is still the sheet's own figure.
+ *
+ * D190: `payableLabel` renames the final "Amount payable" line (step 16 says
+ * "Amount paid"); the figure is unchanged, and "Overpayment" is never renamed.
  */
-export function buildSummaryLines(sheet: FilingComputationResult): SummaryLine[] {
+export function buildSummaryLines(sheet: FilingComputationResult, opts?: { payableLabel?: string }): SummaryLine[] {
   const lines: SummaryLine[] = [];
   const figure = (label: string, amountCents: number, always = true) => {
     if (always || amountCents !== 0) lines.push({ kind: "figure", label, amountCents });
   };
   const credit = (label: string, amountCents: number) => {
     if (amountCents !== 0) lines.push({ kind: "credit", label, amountCents });
-  };
-  const rounding = (totalCreditsCents: number) => {
-    const printed = lines.filter((l) => l.kind === "credit").reduce((sum, l) => sum + l.amountCents, 0);
-    credit("Rounding to whole pesos", totalCreditsCents - printed);
   };
 
   if ("item54TaxDueCents" in sheet) {
@@ -46,7 +46,6 @@ export function buildSummaryLines(sheet: FilingComputationResult): SummaryLine[]
     credit("Less: tax paid on earlier quarters", sheet.item56PriorPeriodPaymentsCents);
     credit("Less: creditable withholding (Form 2307)", sheet.item57CwtPriorQuartersCents + sheet.item58CwtThisQuarterCents);
     credit("Less: other credits", sheet.item61OtherCreditsCents);
-    rounding(sheet.item62TotalCreditsCents);
   } else if ("item56TaxDueCents" in sheet) {
     figure("Gross sales for the year", sheet.item47GrossSalesCents);
     figure("Other (non-operating) income for the year", sheet.item52NonOperatingCents, false);
@@ -56,7 +55,6 @@ export function buildSummaryLines(sheet: FilingComputationResult): SummaryLine[]
     credit("Less: tax paid on the quarterly returns", sheet.item58PriorPeriodPaymentsCents);
     credit("Less: creditable withholding (Form 2307)", sheet.item59CwtQ1ToQ3Cents + sheet.item60CwtQ4Cents);
     credit("Less: other credits", sheet.item63OtherCreditsCents);
-    rounding(sheet.item64TotalCreditsCents);
   } else {
     // Legacy shape: Form 1701 (mixed-income annual) and any snapshot frozen before the form-line sheets.
     figure("Gross sales, year to date", sheet.cumulativeGrossSalesCents);
@@ -70,7 +68,7 @@ export function buildSummaryLines(sheet: FilingComputationResult): SummaryLine[]
   lines.push(
     sheet.isOverpayment
       ? { kind: "result", label: "Overpayment", amountCents: sheet.overpaymentCents }
-      : { kind: "result", label: "Amount payable", amountCents: sheet.taxPayableCents },
+      : { kind: "result", label: opts?.payableLabel ?? "Amount payable", amountCents: sheet.taxPayableCents },
   );
   return lines;
 }
@@ -83,8 +81,60 @@ export function signedResultOf(lines: SummaryLine[]): number {
 }
 
 
-/** The lines as plain text, labels padded into a column — the same layout in both messages. */
-export function formatSummaryLines(lines: SummaryLine[]): string[] {
-  const width = Math.max(...lines.map((l) => l.label.length)) + 2;
-  return lines.map((l) => `  ${l.label.padEnd(width)}${centsToPesos(l.amountCents, { withSymbol: true })}`);
+/**
+ * D186 — the lines as plain text, one `Label: amount` per line, no padding
+ * (email apps use a proportional font, so padding never lined up).
+ * D189: `blankBeforeResult` puts one empty line above the final line (step 4).
+ */
+export function formatSummaryLines(lines: SummaryLine[], opts?: { blankBeforeResult?: boolean }): string[] {
+  const out: string[] = [];
+  for (const l of lines) {
+    if (opts?.blankBeforeResult && l.kind === "result") out.push("");
+    out.push(`${l.label}: ${centsToPesos(l.amountCents, { withSymbol: true })}`);
+  }
+  return out;
+}
+
+const escapeHtml = (t: string) =>
+  t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+
+/** A summary line as it appears in the plain text: `Label: ₱1,234.56`. */
+const SUMMARY_LINE = /^(.+?): (₱[\d,]+\.\d{2})$/;
+
+/**
+ * D186 — the rich-copy version of a message body (steps 4 and 16): the same
+ * text, with each run of `Label: amount` lines as a two-column table (label
+ * left, amount right-aligned; no bold, borders or colours; inline styles
+ * only, since email apps drop <style>) and every other line a plain line
+ * with its line breaks kept. A blank line sitting inside a run of summary
+ * lines (step 4's, D189) becomes one empty spacer row of the same table.
+ * It works from the text itself, so whatever she has edited in the box is
+ * what gets copied. Every value is HTML-escaped.
+ */
+export function messageToHtml(text: string): string {
+  const rows = text.split("\n");
+  const out: string[] = [];
+  let i = 0;
+  while (i < rows.length) {
+    if (SUMMARY_LINE.test(rows[i])) {
+      const tr: string[] = [];
+      while (i < rows.length) {
+        const m = SUMMARY_LINE.exec(rows[i]);
+        if (m) {
+          tr.push(
+            `<tr><td style="padding:0 24px 0 0;text-align:left">${escapeHtml(m[1])}</td><td style="padding:0;text-align:right">${escapeHtml(m[2])}</td></tr>`,
+          );
+          i++;
+        } else if (rows[i].trim() === "" && i + 1 < rows.length && SUMMARY_LINE.test(rows[i + 1])) {
+          tr.push(`<tr><td colspan="2" style="padding:0;height:1em">&nbsp;</td></tr>`);
+          i++;
+        } else break;
+      }
+      out.push(`<table style="border-collapse:collapse"><tbody>${tr.join("")}</tbody></table>`);
+    } else {
+      out.push(`<div style="white-space:pre-wrap">${rows[i] === "" ? "<br>" : escapeHtml(rows[i])}</div>`);
+      i++;
+    }
+  }
+  return out.join("");
 }

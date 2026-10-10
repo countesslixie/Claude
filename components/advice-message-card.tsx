@@ -39,7 +39,7 @@ export function AdviceMessageCard({
       <div className="flex flex-col gap-1">
         <p className="text-xs font-medium text-ink-secondary">Message to client</p>
         <p className="text-xs text-faint">Subject: {subject}</p>
-        <CopyTextarea key={body} defaultValue={body} rows={8} readOnly={readOnly} hideCopy={readOnly} />
+        <CopyTextarea richCopy key={body} defaultValue={body} rows={8} readOnly={readOnly} hideCopy={readOnly} />
       </div>
     );
   }
@@ -60,7 +60,7 @@ export function AdviceMessageCard({
       {showMessage && (
         <div className="flex flex-col gap-1">
           <p className="text-xs text-faint">Subject: {subject}</p>
-          <CopyTextarea defaultValue={body} rows={8} readOnly hideCopy={readOnly} />
+          <CopyTextarea richCopy defaultValue={body} rows={8} readOnly hideCopy={readOnly} />
         </div>
       )}
     </div>

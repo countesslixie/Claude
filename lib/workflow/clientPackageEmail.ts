@@ -54,7 +54,8 @@ export function buildClientPackageEmail(input: ClientPackageEmailInput): ClientP
   const returnName = input.period === "ANNUAL" ? `Annual ITR (${form}) for ${input.taxableYear}` : `${form} for ${periodName}`;
   const subject = `${input.clientRegisteredName} — ${form} ${periodName}${input.period === "ANNUAL" ? ` (${input.taxableYear})` : ""}, filed on ${filedDateLabel}`;
 
-  const summary = buildSummaryLines(input.sheet);
+  // D190 — step 16 reads "Amount paid"; same figure as step 4's "Amount payable".
+  const summary = buildSummaryLines(input.sheet, { payableLabel: "Amount paid" });
   const summaryLines = formatSummaryLines(summary);
 
   const bodyLines = [`Hi ${input.clientFirstName},`, "", `Your ${returnName} has been filed.`, ""];

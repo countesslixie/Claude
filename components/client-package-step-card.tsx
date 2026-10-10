@@ -129,7 +129,7 @@ export function ClientPackageStepCard({
             {toLine}
             {line("subject", "Subject", subject)}
           </div>
-          <CopyTextarea key={body} defaultValue={body} rows={14} readOnly={readOnly} hideCopy={readOnly} />
+          <CopyTextarea richCopy key={body} defaultValue={body} rows={14} readOnly={readOnly} hideCopy={readOnly} />
           <div>
             <Button size="sm" disabled={isPending} onClick={() => run(() => markStepDone(stepId))}>
               Mark done
@@ -164,7 +164,7 @@ export function ClientPackageStepCard({
           {show && (
             <div className="flex flex-col gap-1">
               {toLine}
-              <CopyTextarea defaultValue={body} rows={14} readOnly hideCopy={readOnly} />
+              <CopyTextarea richCopy defaultValue={body} rows={14} readOnly hideCopy={readOnly} />
             </div>
           )}
         </div>
