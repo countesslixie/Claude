@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { formatTin } from "@/lib/formatTin";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -329,7 +330,7 @@ export function Receive2307StepCard({
                 {openMore.has(c.id) && (
                   <dl className="mt-1 grid grid-cols-2 gap-1 text-xs text-faint">
                     <div>
-                      <dt className="inline font-medium">TIN:</dt> {c.payorTin || "—"}
+                      <dt className="inline font-medium">TIN:</dt> {formatTin(c.payorTin) || "—"}
                     </div>
                     <div>
                       <dt className="inline font-medium">Address:</dt> {c.payorAddress || "—"}

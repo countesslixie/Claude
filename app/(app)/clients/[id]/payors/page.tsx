@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { formatTin } from "@/lib/formatTin";
 import { ClientStickyBar } from "@/components/client-sticky-bar";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
@@ -57,7 +58,7 @@ export default async function PayorsPage({
               return (
                 <tr key={p.id}>
                   <td>{p.name}</td>
-                  <td className="font-mono text-xs">{p.tin || "—"}</td>
+                  <td className="font-mono text-xs">{formatTin(p.tin) || "—"}</td>
                   <td>{p.address || "—"}</td>
                   <td className="font-mono text-xs">
                     {p.usualAtcCode ? `${p.usualAtcCode}${atc ? ` (${bpsToPercentLabel(atc.rateBps)})` : ""}` : "—"}

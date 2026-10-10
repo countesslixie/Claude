@@ -55,7 +55,7 @@ describe("client page cards (D154)", () => {
 
   it("keeps the TIN and client code in monospace, and stacks the cards on a narrow screen", () => {
     const h = html(client);
-    expect(h).toMatch(/font-mono[^>]*>123456789</);
+    expect(h).toMatch(/font-mono[^>]*>123-456-789</);
     expect(h).toMatch(/font-mono[^>]*>pangilinan-a</);
     expect(h).toContain("grid-cols-1");
     expect(h).toContain("lg:grid-cols-2");

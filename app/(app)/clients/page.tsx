@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { formatTin } from "@/lib/formatTin";
 import { prisma } from "@/lib/prisma";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
@@ -13,6 +14,9 @@ export default async function ClientsPage({
 }) {
   const { status = "active", q = "" } = await searchParams;
 
+  // D183 — a TIN typed with dashes still finds the stored 9 digits.
+  const qDigits = q.replace(/-/g, "");
+
   const clients = await prisma.client.findMany({
     where: {
       isActive: status === "all" ? undefined : status === "active",
@@ -23,6 +27,7 @@ export default async function ClientsPage({
               { tradeName: { contains: q } },
               { code: { contains: q } },
               { tin: { contains: q } },
+              ...(qDigits && qDigits !== q ? [{ tin: { contains: qDigits } }] : []),
             ],
           }
         : {}),
@@ -76,6 +81,7 @@ export default async function ClientsPage({
               <th>Code</th>
               <th>Registered name</th>
               <th>TIN</th>
+              <th>Branch</th>
               <th>RDO</th>
               <th>Status</th>
             </tr>
@@ -90,7 +96,8 @@ export default async function ClientsPage({
                   </Link>
                   {c.tradeName && <span className="ml-1 text-faint">({c.tradeName})</span>}
                 </td>
-                <td className="font-mono text-xs">{c.tin}</td>
+                <td className="font-mono text-xs">{formatTin(c.tin)}</td>
+                <td className="font-mono text-xs">{c.branchCode || <span className="text-faint">—</span>}</td>
                 <td>{c.rdoCode}</td>
                 <td>
                   {c.isActive ? (
@@ -103,7 +110,7 @@ export default async function ClientsPage({
             ))}
             {clients.length === 0 && (
               <tr>
-                <td colSpan={5} className="py-8 text-center text-sm text-faint">
+                <td colSpan={6} className="py-8 text-center text-sm text-faint">
                   No clients found.
                 </td>
               </tr>

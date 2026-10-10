@@ -1320,6 +1320,14 @@ The page is one table in the same look as the ATC and Holidays pages (same card,
 
 Display only; no migration. The page uses the Dashboard's own container (`mx-auto w-full max-w-[1100px]`), so the heading, Back button and table card follow that width. Nothing on the table wraps: client names, usernames, passwords and the header labels each stay on one line, in view and in Edit (`white-space: nowrap`, columns sized to their content, values in the small monospace size, tight side padding). Edit boxes are wide enough for a 15-character value. At 1280px and 1600px the whole table fits (checked with a four-word client name and 15-character values for all three logins); on a window too narrow for it, the table's own card scrolls sideways and nothing is cut off — the page itself never scrolls sideways (the same idea as the Kanban, D141). The header is even: each group label's line spans exactly its two columns, and the blank button column's header spans both header rows like CLIENT, with the same divider treatment. Supersedes D181's "fixed column widths, wrapping" layout; everything else in D180/D181 stands.
 
+**D183 — Clients list gets a Branch column** *(her decision, brief #6o)*
+
+Columns are now Code · Registered name · TIN · Branch · RDO · Status, all centred. Branch shows the client's branch code in monospace like TIN, or a muted "—" when empty. Search, the Active/All/Inactive filter and the name link are unchanged; search also matches a TIN typed with dashes (the dashes are stripped from the search term and tried alongside the original). No migration.
+
+**D184 — TINs are shown with dashes on every screen** *(her decision, brief #6o)*
+
+`formatTin` (`lib/formatTin.ts`): 9 digits → "123-456-789", 12 digits → "123-456-789-000", anything else (blank, odd length, letters, already dashed) exactly as stored. Display only. Applied to: Clients list, client page Registration card, client sticky bar, Payors table, step 2's certificate details (payor TIN), SAWT worksheet page (client and payor TIN). Unchanged on purpose: step 12's eSubmission subject and body (D87, 12 digits, no dashes), saved emails, the SAWT xlsx, zip and file names, the backup, stored documents and the computation sheet HTML. Form inputs, Zod validation and stored values are untouched; nothing in /lib/tax/ changed.
+
 ---
 
-**Documentation reconciled through brief #6m** (a documentation pass only, covering decisions through D182; no new decision) — see the "Last reconciled" line at the top of this file, CURRENT_STATE.md, PROJECT_MASTER.md and CLAUDE.md.
+**Documentation reconciled through brief #6o** (decisions through D184) — see the "Last reconciled" line at the top of this file, CURRENT_STATE.md, PROJECT_MASTER.md and CLAUDE.md.

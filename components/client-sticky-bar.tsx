@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { formatTin } from "@/lib/formatTin";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
@@ -47,7 +48,7 @@ export function ClientStickyBar({
           {name}
         </Link>
         <span className="text-faint">·</span>
-        <span className="flex-shrink-0 font-mono text-xs text-ink-secondary">{tin}</span>
+        <span className="flex-shrink-0 font-mono text-xs text-ink-secondary">{formatTin(tin)}</span>
         <span className="flex-1" />
         <Link href={`/clients/${clientId}/income`}>
           <Button variant="secondary" size="sm">

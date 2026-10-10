@@ -1,4 +1,5 @@
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { formatTin } from "@/lib/formatTin";
 import { formatManilaDateLong } from "@/lib/dates";
 
 /**
@@ -46,7 +47,7 @@ export function ClientDetailsCards({ client }: { client: ClientDetails }) {
         </CardHeader>
         <CardBody>
           <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <Field label="TIN" value={client.tin} mono />
+            <Field label="TIN" value={formatTin(client.tin)} mono />
             <Field label="Branch code" value={client.branchCode} />
             <Field label="RDO code" value={client.rdoCode} />
             <Field label="Trade name" value={client.tradeName} className="sm:col-span-3" />

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { formatTin } from "@/lib/formatTin";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { Button } from "@/components/ui/button";
@@ -91,7 +92,7 @@ export default async function SawtWorksheetPage({
       <div className="rounded-lg border border-line bg-surface p-6">
         <div className="mb-4 border-b border-line pb-3 text-center">
           <p className="text-base font-semibold text-ink">{worksheet.clientName}</p>
-          <p className="text-sm text-ink-secondary">TIN: {worksheet.clientTin}</p>
+          <p className="text-sm text-ink-secondary">TIN: {formatTin(worksheet.clientTin)}</p>
           <p className="mt-1 text-sm font-medium text-ink">
             SAWT Keying Worksheet — TY{worksheet.taxableYear} {worksheet.period}
           </p>
@@ -122,7 +123,7 @@ export default async function SawtWorksheetPage({
               {worksheet.rows.map((row) => (
                 <tr key={row.certificateId}>
                   <td>{row.rowNumber}</td>
-                  <td>{row.payorTin || "—"}</td>
+                  <td>{formatTin(row.payorTin) || "—"}</td>
                   <td>{row.payorName}</td>
                   <td>{row.payorAddress || "—"}</td>
                   <td className="font-mono text-xs">{row.atcCode}</td>

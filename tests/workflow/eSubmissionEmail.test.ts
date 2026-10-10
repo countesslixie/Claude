@@ -45,4 +45,11 @@ describe("buildESubmissionEmail", () => {
     expect(email.rdoMissing).toBe(true);
     expect(email.body).toContain("RDO: \n");
   });
+
+  it("D184 — the subject keeps the undashed 12-digit TIN (screens show dashes, BIR needs digits)", () => {
+    const email = buildESubmissionEmail(base);
+    expect(email.subject).toMatch(/ 123456789000$/);
+    expect(email.subject).not.toContain("-");
+    expect(email.body).toContain("TIN: 123456789000");
+  });
 });
