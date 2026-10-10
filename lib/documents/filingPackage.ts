@@ -19,6 +19,8 @@ export interface PackageDocument {
   zipName: string;
   /** Plain document name for the email, e.g. "Proof of payment" or "Form 2307 (Acme Corp)". */
   label: string;
+  /** D194 — false for the filed return's page 2: the email names "Filed return" once, for both pages. */
+  inEmailList: boolean;
 }
 
 export interface PackageStepInput {
@@ -41,6 +43,7 @@ export interface PackageDocInput {
 /** Plain, client-facing names for the slots a package can hold — the slot's own label is written for the form field, not for the client. */
 const CLIENT_LABEL_BY_SLOT: Record<string, string> = {
   filed_form: "Filed return",
+  filed_form_page2: "Filed return", // D194 — listed once; see PackageDocument.inEmailList
   proof: "Proof of payment",
   trrc: "BIR confirmation (TRRC)",
   acknowledgement: "SAWT acknowledgement email",
@@ -49,6 +52,7 @@ const CLIENT_LABEL_BY_SLOT: Record<string, string> = {
 /** Short document names for the file names inside the zip (D111). */
 const FILE_LABEL_BY_SLOT: Record<string, string> = {
   filed_form: "Filed return",
+  filed_form_page2: "Filed return page 2",
   proof: "Proof of payment",
   trrc: "TRRC",
   acknowledgement: "SAWT acknowledgement",
@@ -82,7 +86,7 @@ export function packageFilePrefix(naming: PackageNaming): string {
 
 /**
  * D108 (brief #5s, her decision) — the client's package holds only: the filed
- * return (step 7), proof of payment (9), the TRRC (10), the SAWT
+ * return (step 7, both pages — D193/D194), proof of payment (9), the TRRC (10), the SAWT
  * acknowledgement email (13) and the Form 2307 scans (2). Everything else —
  * submission screenshot (6), computation sheet (3), alphalist report and DAT
  * (11), SAWT validation email (14) — stays out. A step that doesn't apply
@@ -105,6 +109,10 @@ export function planPackageDocuments(steps: PackageStepInput[], documents: Packa
     for (const doc of documents) if (doc.workflowStepId === step.id) ordered.push({ step, doc });
   }
 
+  // D194 — a filing whose step 7 holds a page 2 sends both pages, named "page 1" / "page 2";
+  // an older filing with the one old file keeps "Filed return".
+  const hasPage2 = ordered.some(({ doc }) => doc.docSlotCode === "filed_form_page2");
+
   const taken = new Set<string>();
   return ordered.map(({ step, doc }) => {
     const slot = step && doc.docSlotCode ? parseDocSlots(step.requiredDocSlots).find((s) => s.slotCode === doc.docSlotCode) : undefined;
@@ -112,16 +120,17 @@ export function planPackageDocuments(steps: PackageStepInput[], documents: Packa
     const label = doc.form2307PayorName
       ? `Form 2307 (${doc.form2307PayorName})`
       : (CLIENT_LABEL_BY_SLOT[slotCode] ?? slot?.label ?? step?.title ?? "Other document");
-    const fileLabel = doc.form2307PayorName
+    let fileLabel = doc.form2307PayorName
       ? `Form 2307 - ${safeFileNamePart(doc.form2307PayorName) || "Payor"}`
       : safeFileNamePart(FILE_LABEL_BY_SLOT[slotCode] ?? slot?.label ?? step?.title ?? "Other document");
+    if (hasPage2 && slotCode === "filed_form") fileLabel = "Filed return page 1";
 
     const ext = extensionOf(doc.originalFilename);
     const stem = `${prefix} - ${fileLabel}`;
     let zipName = `${stem}${ext}`;
     for (let n = 2; taken.has(zipName.toLowerCase()); n++) zipName = `${stem} (${n})${ext}`;
     taken.add(zipName.toLowerCase());
-    return { docId: doc.id, storedPath: doc.storedPath, zipName, label };
+    return { docId: doc.id, storedPath: doc.storedPath, zipName, label, inEmailList: slotCode !== "filed_form_page2" };
   });
 }
 

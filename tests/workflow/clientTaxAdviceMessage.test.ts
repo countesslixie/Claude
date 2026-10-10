@@ -88,6 +88,8 @@ describe("buildClientTaxAdviceMessage", () => {
         "",
         "There is nothing to pay this quarter. The overpayment will be applied to your next return this year.",
         "",
+        "The filed tax return and supporting documents will follow in a separate email.",
+        "",
         "Thank you!",
       ].join("\n"),
     );
@@ -179,5 +181,37 @@ describe("buildClientTaxAdviceMessage", () => {
     expect(buildClientTaxAdviceMessage(baseInput()).body).toContain("\nDue date for filing: November 6, 2026.\n");
     expect(buildClientTaxAdviceMessage(baseInput({ isOverpayment: true })).body).not.toMatch(/Due date/);
     expect(buildClientTaxAdviceMessage(baseInput({ period: "ANNUAL", formType: "F1701A", isOverpayment: true })).body).not.toMatch(/Due date/);
+  });
+
+  // D192 -- nothing payable: no due line, no payment question, the "separate email" line before "Thank you!".
+  const NEW_LINE = "The filed tax return and supporting documents will follow in a separate email.";
+  const noPayable = (m: { body: string }) => {
+    expect(m.body).not.toMatch(/Due date for filing/);
+    expect(m.body).not.toMatch(/Please let me know/);
+    expect(m.body.endsWith(`${NEW_LINE}\n\nThank you!`)).toBe(true);
+  };
+
+  it("D192: exactly ₱0 payable (not an overpayment) has no due line and no payment question, and the new line before Thank you!", () => {
+    const m = buildClientTaxAdviceMessage(
+      baseInput({ isZeroPayable: true, summary: [{ kind: "figure", label: "Tax due, year to date", amountCents: 0 }, { kind: "result", label: "Amount payable", amountCents: 0 }] }),
+    );
+    noPayable(m);
+    expect(m.body).toContain("Amount payable: ₱0.00");
+  });
+
+  it("D192: quarterly and annual overpayments keep their own sentence and gain the new line", () => {
+    const q = buildClientTaxAdviceMessage(baseInput({ isOverpayment: true }));
+    noPayable(q);
+    expect(q.body).toContain("There is nothing to pay this quarter.");
+    const a = buildClientTaxAdviceMessage(baseInput({ period: "ANNUAL", formType: "F1701A", isOverpayment: true, yearEndCreditElection: "REFUND" }));
+    noPayable(a);
+    expect(a.body).toContain("The overpayment will be refunded to you.");
+  });
+
+  it("D192: the payable (more than ₱0) version is unchanged — it has the due line and no new line", () => {
+    const m = buildClientTaxAdviceMessage(baseInput());
+    expect(m.body).not.toContain(NEW_LINE);
+    expect(m.body).toContain("Due date for filing: November 6, 2026.");
+    expect(m.body).toContain("Please let me know when you plan to make the payment.");
   });
 });

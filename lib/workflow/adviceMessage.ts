@@ -57,6 +57,7 @@ export async function buildLiveAdviceMessageForFiling(
     formType: sheet.formType,
     summary: buildSummaryLines(sheet),
     isOverpayment: sheet.isOverpayment,
+    isZeroPayable: !sheet.isOverpayment && sheet.taxPayableCents === 0, // D192
     clientDueDate,
     yearEndCreditElection: clientTaxYear?.yearEndCreditElection,
   });

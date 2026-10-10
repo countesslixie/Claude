@@ -106,4 +106,42 @@ describe("GET /api/filings/[id]/package", () => {
     expect(listed).toEqual(["Filed return"]);
     expect(listed).toHaveLength(zipFilenames.length);
   });
+
+  it("D194: a filing with both pages zips them as page 1 / page 2 and the email lists 'Filed return' once", async () => {
+    const code = `p6r-pkg-${Date.now()}`;
+    const client = await prisma.client.create({
+      data: { code, registeredName: "Two Page Package Client", tin: "888999111", rdoCode: "999", registeredAddress: "N/A", taxpayerType: "PURELY_SELF_EMPLOYED", booksType: "MANUAL", defaultWithholdingRateBps: 500 },
+    });
+    createdClientIds.push(client.id);
+    clientCode = clientCode || code;
+    await generateFilingsForClientYear(client.id, 2026);
+    await markEarlierQuartersFiled(client.id, 2026, "Q2");
+    const filing = await prisma.filing.findUniqueOrThrow({
+      where: { clientId_taxableYear_period: { clientId: client.id, taxableYear: 2026, period: "Q2" } },
+    });
+    await prisma.quarterlySales.create({
+      data: { clientId: client.id, taxableYear: 2026, quarter: "Q2", grossSalesCents: 500_000_00, finalizedAt: new Date() },
+    });
+    const fileReturnStep = await prisma.workflowStep.findFirstOrThrow({ where: { filingId: filing.id, stepCode: "FILE_RETURN" } });
+    await resolvePrepare(fileReturnStep.filingId);
+    await markStepDone(fileReturnStep.id);
+    const step7 = await prisma.workflowStep.findFirstOrThrow({ where: { filingId: filing.id, stepCode: "SAVE_FORM_COPY" } });
+    for (const [slot, name] of [["filed_form", "one.pdf"], ["filed_form_page2", "two.pdf"]]) {
+      const fd = new FormData();
+      fd.set("file", new File([name], name, { type: "application/pdf" }));
+      fd.set("workflowStepId", step7.id);
+      fd.set("docSlotCode", slot);
+      fd.set("documentDate", "2026-08-15");
+      expect((await uploadDocument(fd)).ok).toBe(true);
+    }
+    const response = await GET(new Request(`http://localhost/api/filings/${filing.id}/package`), { params: Promise.resolve({ id: filing.id }) });
+    const zip = await JSZip.loadAsync(await response.arrayBuffer());
+    expect(Object.keys(zip.files)).toEqual([
+      "Two Page Package Client - 1701Q Q2 2026 - Filed return page 1.pdf",
+      "Two Page Package Client - 1701Q Q2 2026 - Filed return page 2.pdf",
+    ]);
+    const email = await buildClientPackageEmailForFiling(filing.id);
+    expect([...email!.body.matchAll(/^ {2}· (.+)$/gm)].map((m) => m[1])).toEqual(["Filed return"]);
+    await rm(path.join(testStorageRoot(), code), { recursive: true, force: true });
+  });
 });

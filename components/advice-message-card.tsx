@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { CopyTextarea } from "@/components/copy-textarea";
 
 /**
@@ -13,6 +14,8 @@ import { CopyTextarea } from "@/components/copy-textarea";
  * the saved text server-side, which flips this back to the live preview.
  */
 export function AdviceMessageCard({
+  clientId,
+  clientEmail,
   isDone,
   savedAtLabel,
   isOverpayment,
@@ -21,6 +24,9 @@ export function AdviceMessageCard({
   body,
   readOnly = false,
 }: {
+  clientId: string;
+  /** D191 — shown above the Subject line, display only (null/blank = the "email missing" line). */
+  clientEmail: string | null;
   isDone: boolean;
   /** Manila-formatted date the message was saved, e.g. "Sep 27, 2026". Only meaningful when isDone. */
   savedAtLabel: string | null;
@@ -34,10 +40,23 @@ export function AdviceMessageCard({
 }) {
   const [showMessage, setShowMessage] = useState(false);
 
+  // D191 — "To:" above "Subject:", same grey style; no Copy, no link. Display only, never saved on the filing.
+  const toLine = clientEmail?.trim() ? (
+    <p className="text-xs text-faint">To: {clientEmail.trim()}</p>
+  ) : (
+    <p className="text-xs text-faint">
+      Client email missing —{" "}
+      <Link href={`/clients/${clientId}/edit`} className="underline hover:text-ink">
+        add it on the client page
+      </Link>
+    </p>
+  );
+
   if (!isDone) {
     return (
       <div className="flex flex-col gap-1">
         <p className="text-xs font-medium text-ink-secondary">Message to client</p>
+        {toLine}
         <p className="text-xs text-faint">Subject: {subject}</p>
         <CopyTextarea richCopy key={body} defaultValue={body} rows={8} readOnly={readOnly} hideCopy={readOnly} />
       </div>
@@ -59,6 +78,7 @@ export function AdviceMessageCard({
       </p>
       {showMessage && (
         <div className="flex flex-col gap-1">
+          {toLine}
           <p className="text-xs text-faint">Subject: {subject}</p>
           <CopyTextarea richCopy defaultValue={body} rows={8} readOnly hideCopy={readOnly} />
         </div>

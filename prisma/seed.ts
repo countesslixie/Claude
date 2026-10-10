@@ -26,7 +26,7 @@
  */
 
 import { PrismaClient } from "@prisma/client";
-import { renameSawtSteps, backfillFilingStatuses, backfillClientDocsDue } from "./backfills";
+import { renameSawtSteps, backfillFilingStatuses, backfillClientDocsDue, addFiledFormPage2Slot, FILED_FORM_SLOTS } from "./backfills";
 
 const prisma = new PrismaClient();
 
@@ -251,9 +251,8 @@ const WORKFLOW_STEP_TEMPLATE: Array<{
     sequence: 7,
     title: "Download and save filed form",
     category: "FILING",
-    requiredDocSlots: [
-      { slotCode: "filed_form", label: "Filed form PDF", required: true, acceptedTypes: ["pdf"] },
-    ],
+    // D193 -- two files, one per downloaded page; Page 1 keeps the old slot code.
+    requiredDocSlots: FILED_FORM_SLOTS,
   },
   {
     stepCode: "MAKE_PAYMENT",
@@ -419,6 +418,7 @@ async function seedWorkflowStepTemplate() {
     data: { title: "Save SAWT validation email" },
   });
   await renameSawtSteps(prisma); // D96 (brief #5q)
+  await addFiledFormPage2Slot(prisma); // D193 (brief #6r)
   await prisma.workflowStep.updateMany({
     where: { stepCode: "EAFS_SUBMIT" },
     data: { requiredDocSlots: "[]", isConditional: true, conditionExpression: "requiresSawt == true" },

@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import { deriveFilingStatus } from "../lib/workflow/status";
 import { clientDocsDueDate } from "../lib/tax/deadlines";
+import { parseDocSlots } from "../lib/workflow/types";
 
 /**
  * Idempotent backfills the seed runs over an existing database (brief #5q).
@@ -66,4 +67,40 @@ export async function backfillClientDocsDue(prisma: PrismaClient): Promise<void>
       await prisma.workflowStep.update({ where: { id: step2.id }, data: { waitingSince: next } });
     }
   }
+}
+
+/**
+ * D193 -- step 7 (SAVE_FORM_COPY) takes two files, "Page 1" and "Page 2" of the
+ * filed form. The 1701Q/1701A are downloaded one page at a time. Page 1 keeps the
+ * existing slot code `filed_form` (so a file already saved stays valid as page 1);
+ * page 2 is the new `filed_form_page2`. One list, used by the seed's template and
+ * by the backfill below.
+ */
+export const FILED_FORM_SLOTS = [
+  { slotCode: "filed_form", label: "Page 1", required: true, acceptedTypes: ["pdf"] },
+  { slotCode: "filed_form_page2", label: "Page 2", required: true, acceptedTypes: ["pdf"] },
+];
+
+/**
+ * D193 -- a WorkflowStep row keeps its own copy of requiredDocSlots (the D66/D90
+ * class of bug), so the template change alone never reaches a filing that
+ * already exists. This adds the Page 2 slot to step 7 rows that are NOT Done, on
+ * filings that are NOT Complete -- and changes nothing but `requiredDocSlots`:
+ * no status, no document, no Done step, no Complete filing. A step 7 already Done
+ * keeps its one file and stays Done. Idempotent: a row that already lists the
+ * Page 2 slot (or has no `filed_form` slot to extend) is left alone.
+ */
+export async function addFiledFormPage2Slot(prisma: PrismaClient): Promise<number> {
+  const steps = await prisma.workflowStep.findMany({
+    where: { stepCode: "SAVE_FORM_COPY", status: { not: "DONE" }, filing: { status: { not: "COMPLETE" } } },
+    select: { id: true, requiredDocSlots: true },
+  });
+  let changed = 0;
+  for (const step of steps) {
+    const slots = parseDocSlots(step.requiredDocSlots);
+    if (!slots.some((s) => s.slotCode === "filed_form") || slots.some((s) => s.slotCode === "filed_form_page2")) continue;
+    await prisma.workflowStep.update({ where: { id: step.id }, data: { requiredDocSlots: JSON.stringify(FILED_FORM_SLOTS) } });
+    changed++;
+  }
+  return changed;
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, type ReactNode } from "react";
 import { StatusBadge, type StatusTone } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -62,6 +62,7 @@ export function FileGroupDocStepCard({
   agingDaysWaiting,
   agingTone,
   readOnly = false,
+  aboveSlots,
 }: {
   stepId: string;
   sequence: number;
@@ -82,6 +83,8 @@ export function FileGroupDocStepCard({
   agingTone: "green" | "amber" | "red" | null;
   /** D153 — the filing is Complete: saved files can be opened, nothing can be uploaded or replaced. */
   readOnly?: boolean;
+  /** D195 — step 11's read-only Form 2307 list: shown above the boxes whenever the step is not NA, locked or not. */
+  aboveSlots?: ReactNode;
 }) {
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
@@ -145,6 +148,8 @@ export function FileGroupDocStepCard({
       </div>
 
       {!isNA && !isUnlocked && <p className="mt-1 text-xs text-faint">{lockedMessage}</p>}
+
+      {!isNA && aboveSlots}
 
       {!isNA &&
         isUnlocked &&

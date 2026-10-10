@@ -19,6 +19,11 @@ export interface ClientTaxAdviceMessageInput {
   summary: SummaryLine[];
   isOverpayment: boolean;
   /**
+   * D192 — the final figure is exactly ₱0 payable (not an overpayment). Nothing is
+   * due, so the message has no due date and no payment question. Optional: unset = false.
+   */
+  isZeroPayable?: boolean;
+  /**
    * Brief #5e §9 — the date shown to the CLIENT: the filing's adjusted BIR
    * due date minus TaxRuleSet.clientPaymentLeadDays calendar days, shifted
    * earlier on a weekend/holiday. Computed by the caller
@@ -53,7 +58,7 @@ export function buildClientTaxAdviceMessage(input: ClientTaxAdviceMessageInput):
     ...formatSummaryLines(input.summary, { blankBeforeResult: true }),
   ];
 
-  if (!input.isOverpayment) {
+  if (!input.isOverpayment && !input.isZeroPayable) {
     bodyLines.push(
       "",
       `Due date for filing: ${formatManilaDateLong(input.clientDueDate)}.`,
@@ -61,7 +66,7 @@ export function buildClientTaxAdviceMessage(input: ClientTaxAdviceMessageInput):
       // D107 (brief #5s) — no advance offer: her letter requires advance requests by the 10th, long past by the time this goes out.
       "Please let me know when you plan to make the payment.",
     );
-  } else {
+  } else if (input.isOverpayment) {
     bodyLines.push("");
     if (input.period !== "ANNUAL") {
       bodyLines.push("There is nothing to pay this quarter. The overpayment will be applied to your next return this year.");
@@ -73,6 +78,11 @@ export function buildClientTaxAdviceMessage(input: ClientTaxAdviceMessageInput):
           : "I'll get in touch with you about how the overpayment will be applied.",
       );
     }
+  }
+
+  // D192 — when nothing is payable (₱0 or an overpayment) the return follows separately.
+  if (input.isOverpayment || input.isZeroPayable) {
+    bodyLines.push("", "The filed tax return and supporting documents will follow in a separate email.");
   }
 
   bodyLines.push("", "Thank you!");

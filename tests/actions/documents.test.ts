@@ -70,6 +70,7 @@ describe("uploadDocument", () => {
     for (const [stepCode, slotCode] of [
       ["SAVE_SUBMISSION_SS", "submission_screenshot"],
       ["SAVE_FORM_COPY", "filed_form"],
+      ["SAVE_FORM_COPY", "filed_form_page2"],
     ] as const) {
       const s = await prisma.workflowStep.findFirstOrThrow({ where: { filingId: filing.id, stepCode } });
       const fd = new FormData();
@@ -129,10 +130,10 @@ describe("uploadDocument", () => {
     expect(duplicateResult.ok).toBe(true); // never blocked
     expect(duplicateResult.duplicateWarning).toContain("proof.pdf");
 
-    // submission_screenshot + filed_form (unlocking File) + proof + the
-    // eafs_confirmation duplicate = 4; both the proof and its duplicate
+    // submission_screenshot + filed_form pages 1 and 2 (unlocking File) + proof + the
+    // eafs_confirmation duplicate = 5; both the proof and its duplicate
     // are still counted, never silently overwritten.
     const totalDocs = await prisma.document.count({ where: { clientId: client.id, deletedAt: null } });
-    expect(totalDocs).toBe(4);
+    expect(totalDocs).toBe(5); // D193: filed form page 1 and page 2
   });
 });

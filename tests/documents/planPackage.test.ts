@@ -109,3 +109,28 @@ describe("packageZipName", () => {
     expect(packageZipName({ registeredName: 'A/B: "C"', formType: "F1701Q", period: "Q1", taxableYear: 2026 })).toBe("AB C - 1701Q Q1 2026.zip");
   });
 });
+
+/** D194 -- step 7's two pages go in the zip under page names; the email lists "Filed return" once. */
+describe("the filed return's two pages (D194)", () => {
+  const slots = JSON.stringify([
+    { slotCode: "filed_form", label: "Page 1", required: true, acceptedTypes: ["pdf"] },
+    { slotCode: "filed_form_page2", label: "Page 2", required: true, acceptedTypes: ["pdf"] },
+  ]);
+  const steps = [{ id: "t7", stepCode: "SAVE_FORM_COPY", sequence: 7, title: "Download and save filed form", requiredDocSlots: slots }];
+  const doc = (id: string, slot: string, name: string) => ({ id, workflowStepId: "t7", docSlotCode: slot, originalFilename: name, storedPath: id });
+
+  it("two pages: 'Filed return page 1' / 'page 2', original extension kept, one 'Filed return' in the email list", () => {
+    const docs = planPackageDocuments(steps, [doc("a", "filed_form", "p1.PDF"), doc("b", "filed_form_page2", "p2.png")], naming);
+    expect(docs.map((d) => d.zipName)).toEqual([
+      "Rosario Garcia - 1701Q Q3 2026 - Filed return page 1.pdf",
+      "Rosario Garcia - 1701Q Q3 2026 - Filed return page 2.png",
+    ]);
+    expect(docs.filter((d) => d.inEmailList).map((d) => d.label)).toEqual(["Filed return"]);
+  });
+
+  it("an older filing with the one old file keeps 'Filed return' and its single email line", () => {
+    const docs = planPackageDocuments(steps, [doc("a", "filed_form", "old.pdf")], naming);
+    expect(docs.map((d) => d.zipName)).toEqual(["Rosario Garcia - 1701Q Q3 2026 - Filed return.pdf"]);
+    expect(docs.filter((d) => d.inEmailList).map((d) => d.label)).toEqual(["Filed return"]);
+  });
+});

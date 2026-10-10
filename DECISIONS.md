@@ -2,7 +2,7 @@
 
 *Append new decisions. Mark superseded ones rather than deleting them.*
 *Dates during the build are approximate — most work happened across August 2026.*
-*Last reconciled: 2026-10-09 — brief #6m (a documentation pass only; no new decision), covering decisions through D182 (brief #6l), on top of briefs #6k (D181), #6j (D180), #6i (D179), #6h (D174–D178), #6g (D170–D173), #6f (D166–D169), #6e (D162–D165), #6d (D155–D161), #6c (D151–D154), #6b (D143–D150) and the 2026-10-02 brief #6a documentation pass (checked D115–D142 against the tree at brief #5z's tip `e761a74`); earlier passes are recorded in the history below.*
+*Last reconciled: 2026-10-10 — brief #6r, covering decisions through D196 (D191–D196: step 4's To line and no-payable wording, step 7's two pages, the package carrying both, step 11's Form 2307 list, step 3's box centred), on top of brief #6m (a documentation pass only; no new decision), covering decisions through D182 (brief #6l), on top of briefs #6k (D181), #6j (D180), #6i (D179), #6h (D174–D178), #6g (D170–D173), #6f (D166–D169), #6e (D162–D165), #6d (D155–D161), #6c (D151–D154), #6b (D143–D150) and the 2026-10-02 brief #6a documentation pass (checked D115–D142 against the tree at brief #5z's tip `e761a74`); earlier passes are recorded in the history below.*
 
 ---
 
@@ -411,6 +411,8 @@ Alongside the payor name, income amount, tax withheld and period covered that we
 
 **D51 — Step 4 (Advise client)** *(2026-09-27, briefs #5d–#5f, her decisions)*
 
+> **Amended (brief #6r): D192 — when the final figure is ₱0 payable or an overpayment, the message drops the due line and the payment question and adds "The filed tax return and supporting documents will follow in a separate email." before "Thank you!"; D191 adds a "To:" line to the card.**
+
 *Controls.* Step 4 is no longer a waiting step — Start and Mark waiting are both gone (`components/workflow-step-card.tsx`'s `controlsMode="markDoneOnly"`); it was never actually something the client responds to in a way worth tracking. Its own Mark done is blocked until step 3 (`PREPARE_RETURN`) is Done, enforced server-side (`lib/workflow/groups.ts`'s `adviseClientBlockReason`, consulted inside `markStepDone` itself). **⚠️ The rest of this sentence is superseded 2026-09-28 by D62 (brief #5i)** — `markGroupDone` is deleted, so there is no group-level path left to bypass in the first place; `markStepDone`'s own check is the only enforcement, which is exactly what made it safe to remove the group action. ~~— the group's own "Mark done" can't bypass it either, since `markGroupDone` calls the same per-step check in ascending sequence order.~~ Step 4 shows no message at all until step 3 is Done.
 
 *The message.* A copyable client message in her own wording, built by a pure function (`lib/workflow/clientTaxAdviceMessage.ts`'s `buildClientTaxAdviceMessage`). It comes in three versions: payable (states the amount and the client due date, asks when she'll pay or whether to advance it), quarterly overpayment (states there's nothing to pay this quarter, applied to the next return), and annual overpayment (names the year-end election — refund, TCC, or carry-over — only if one is actually set; otherwise says she'll be in touch about it). The "If you have any questions…" closing line from #5d's first draft was removed in #5f — her edit.
@@ -580,6 +582,8 @@ She doesn't use eFPS. `WorkflowStepTemplate`'s seed row for `FILE_RETURN` drops 
 *Searched, not guessed:* grepped the whole codebase for "eFPS" — the only other hits are `Client.eFPSEnrolled` (a real, unrelated field: whether the client herself is eFPS-enrolled, in `components/client-form.tsx`, the client detail/edit pages, `lib/validation/client.ts`, `lib/actions/clients.ts`) and `SPEC.md`'s own historical text (banner-noted, body left as history per its own rule). Neither is this step's label, and neither was touched.
 
 **D67 — Steps 6, 7 and 10 unlock once step 5 is Done, show the upload box directly, and complete themselves on upload; step 10 alone keeps Mark waiting** *(2026-09-28, brief #5k, her decisions)*
+
+> **Amended (brief #6r): D193 — step 7 now takes two required files (Page 1 and Page 2), Done only with both; step 6 is unchanged.**
 
 **⚠️ Note (D119, brief #5v), 2026-10-01:** upload boxes have no date field and a saved file's line shows no date; `uploadDocument` records today (Manila). The Replace behaviour here is unchanged.
 
@@ -954,6 +958,8 @@ Her letter requires advance-payment requests by the 10th of the month after the 
 
 **D108 — The client package holds only five kinds of document** *(2026-09-30, brief #5s, her decision; narrows D103's "every document")*
 
+> **Amended (brief #6r): D193/D194 — the filed return is two files (page 1, page 2) on a filing that has both; the email still names "Filed return" once.**
+
 The zip and the email's attachment list — still one source, `planPackageDocuments` — contain only: the filed return (step 7), proof of payment (9), the TRRC (10), the SAWT acknowledgement email (13) and the Form 2307 scans (2). The submission screenshot (6), computation sheet (3), alphalist report and DAT (11) and SAWT validation email (14) stay out. A step that doesn't apply has no document, so it is simply absent — no placeholder. Rosario Garcia's overpayment return lists the filed return and the TRRC; Corazon Mendoza's lists all five kinds.
 
 **D109 — Step 16 unlocks on step 13, not step 14** *(2026-09-30, brief #5s, her decision; amends the package-readiness check of D70/SPEC 7.1)*
@@ -965,6 +971,8 @@ The zip and the email's attachment list — still one source, `planPackageDocume
 The email's "The attached package contains:" list reads "Filed return", "Proof of payment", "BIR confirmation (TRRC)", "SAWT acknowledgement email" and one "Form 2307 ([payor name])" line per certificate — no file names, whatever she uploaded. It is still built from the same list as the zip (`planPackageDocuments`).
 
 **D111 — Files inside the client zip get standard names** *(2026-09-30, brief #5t, her decision; amends D103)*
+
+> **Amended (brief #6r): D194 — the filed return's two pages are named "… - Filed return page 1" and "… page 2"; an older filing keeps "… - Filed return".**
 
 `[Client name] - [Form] [Period] [Year] - [Document].[ext]`, e.g. "Rosario Garcia - 1701Q Q3 2026 - Filed return.pdf", "… - TRRC.pdf", "… - Proof of payment.pdf", "… - SAWT acknowledgement.pdf"; certificates "… - Form 2307 - [Payor].pdf", with " (2)" added for a second one from the same payor. The Annual reads "1701A Annual 2026". The original extension is kept; characters Windows doesn't allow are dropped. **Only the zip copy is renamed** — stored documents keep their names.
 
@@ -1352,6 +1360,30 @@ Above "Amount payable", or "Overpayment" on an overpayment (plain text: a blank 
 
 Label only (`buildSummaryLines(sheet, { payableLabel })`); the figure is the frozen sheet's payable, as before. "Overpayment" is unchanged. Step 4 keeps "Amount payable". **Supersedes D102's step 16 label.**
 
+**D191 — Step 4 shows the client's email address** *(her decision, brief #6r)*
+
+Above the "Subject: …" line on step 4's card, a grey "To: [client email]" line, same style. No Copy button and no link. A client with no email shows the muted "Client email missing — add it on the client page" line (as step 16), never blocking. Display only: nothing new is saved on the filing. Shown wherever the Subject line is shown (the live preview, the saved message when expanded, a Complete filing, which still has no Copy, D156). Reader: `client.email`, read by the filing page only.
+
+**D192 — Step 4 when nothing is payable** *(her decision, brief #6r)*
+
+When the final figure is exactly ₱0 payable, or an overpayment (quarterly or annual): no "Due date for filing: …" line and no "Please let me know when you plan to make the payment." sentence; the line "The filed tax return and supporting documents will follow in a separate email." goes just before "Thank you!". The overpayment versions keep their other sentences (applied to the next return, the year-end election wording). The payable (more than ₱0) version is unchanged; D189's blank line stays; rich copy (D186) carries the new line. Messages already saved stay as they were. Step 16 is untouched. The caller passes `isZeroPayable` (= not an overpayment and `taxPayableCents === 0`); the due-date calculation (`clientPaymentDueDate`) is untouched. **Amends D51 and D187.**
+
+**D193 — Step 7 takes two files: page 1 and page 2 of the filed form** *(her decision, brief #6r)*
+
+The 1701Q and 1701A are downloaded one page at a time. Step 7 has two upload boxes, "Page 1" and "Page 2", both required, working like step 11's two boxes (D86): shown once step 5 is Done, each with its own one-for-one Replace, step 7 Done only when both are saved, removing either returns it to Pending (not Waiting — step 7 is not a BIR wait). Page 1 keeps the slot code `filed_form` (files already saved stay valid as page 1); page 2 is the new `filed_form_page2`. **No schema change** — the slot list lives in `WorkflowStepTemplate.requiredDocSlots` and is copied onto each `WorkflowStep` row. **Existing data:** the seed backfill `addFiledFormPage2Slot` (`prisma/backfills.ts`) rewrites `requiredDocSlots` — and only that column — on step 7 rows whose status is not DONE and whose filing is not COMPLETE; a step 7 already Done stays Done with its one file. Idempotent. The File group header keeps "waiting on filed form" while either page is missing (it reads the step's status); step 16's lock still waits on step 7 Done. **Amends D67 and D86's one-slot wording for step 7.**
+
+**D194 — The client package carries both pages** *(her decision, brief #6r)*
+
+`planPackageDocuments` (one source for the zip and the email list, D108/D110/D111): both files go in the zip as "[Client] - [Form] [Period] [Year] - Filed return page 1.pdf" and "… page 2.pdf" (original extension kept). A filing whose step 7 holds only the one old file keeps "… - Filed return.pdf". The email's attachment list still has one "Filed return" line (`PackageDocument.inEmailList` is false for page 2). **Amends D108 and D111.**
+
+**D195 — Step 11 shows the Form 2307s on this return** *(her decision, brief #6r)*
+
+Above step 11's two upload boxes, a small grey read-only box "Form 2307s on this return": one row per certificate claimed on this filing — Payor · TIN · ATC · Income · Tax withheld, every heading and value centred, TIN through `formatTin` (D184), amounts as the register shows them, ordered by payor name then TIN (the SAWT worksheet's order, D38). No buttons, no links. Shown whenever the step's card body is visible and the step is not NA (locked and Complete included). Display only; `components/form-2307s-on-return.tsx`.
+
+**D196 — Step 3's Client details box is centred** *(her decision, brief #6r)*
+
+The labels and values (TIN, Branch code, Birthday — D185) sit centred in three equal columns. Nothing else about the box changed.
+
 ---
 
-**Documentation reconciled through brief #6q** (decisions through D190) — see the "Last reconciled" line at the top of this file, CURRENT_STATE.md, PROJECT_MASTER.md and CLAUDE.md.
+**Documentation reconciled through brief #6r** (decisions through D196) — see the "Last reconciled" line at the top of this file, CURRENT_STATE.md, PROJECT_MASTER.md and CLAUDE.md.

@@ -32,6 +32,7 @@ const SLOT_CODE_TO_CATEGORY: Record<string, string> = {
   advisory_evidence: "ADVISORY_EVIDENCE",
   submission_screenshot: "SUBMISSION_SCREENSHOT",
   filed_form: "FILED_FORM",
+  filed_form_page2: "FILED_FORM", // D193 -- page 2 of the filed form
   proof: "PAYMENT_CONFIRMATION",
   trrc: "TRRC",
   generated_report: "ALPHALIST_REPORT",

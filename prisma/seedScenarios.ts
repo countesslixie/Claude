@@ -313,7 +313,9 @@ export async function seedScenarios(prisma: PrismaClient, actorId: string): Prom
 
   async function saveFileEvidence(filingId: string, name: string, period: string, filedOn: string) {
     await upload(filingId, "SAVE_SUBMISSION_SS", "submission_screenshot", sampleFile(`Submission screenshot, ${label(name, period)}`, "SAMPLE_submission.pdf"), filedOn);
-    await upload(filingId, "SAVE_FORM_COPY", "filed_form", sampleFile(`Filed form, ${label(name, period)}`, "SAMPLE_filed_form.pdf"), filedOn);
+    await upload(filingId, "SAVE_FORM_COPY", "filed_form", sampleFile(`Filed form page 1, ${label(name, period)}`, "SAMPLE_filed_form_page1.pdf"), filedOn);
+    // D193 -- the filed form is downloaded one page at a time; step 7 needs both.
+    await upload(filingId, "SAVE_FORM_COPY", "filed_form_page2", sampleFile(`Filed form page 2, ${label(name, period)}`, "SAMPLE_filed_form_page2.pdf"), filedOn);
   }
 
   // =========================================================================

@@ -27,6 +27,7 @@ import { WorkflowGroupCard } from "@/components/workflow-group-card";
 import { RecordSalesStepCard } from "@/components/record-sales-step-card";
 import { Receive2307StepCard, type CertificateRow } from "@/components/receive-2307-step-card";
 import { FileGroupDocStepCard } from "@/components/file-group-doc-step-card";
+import { Form2307sOnReturn } from "@/components/form-2307s-on-return";
 import { EmailDatStepCard } from "@/components/email-dat-step-card";
 import { MakePaymentStepCard } from "@/components/make-payment-step-card";
 import { loadFilingOrderContext } from "@/lib/workflow/filingOrderData";
@@ -480,6 +481,8 @@ export default async function FilingDetailPage({
   // showing the saved text only on request.
   const adviseClientExtra = adviceMessage ? (
     <AdviceMessageCard
+      clientId={filing.clientId}
+      clientEmail={filing.client.email}
       isDone={isAdviseClientDone}
       savedAtLabel={filing.adviceMessageSavedAt ? formatManilaDate(filing.adviceMessageSavedAt) : null}
       isOverpayment={sheet.isOverpayment}
@@ -752,6 +755,7 @@ export default async function FilingDetailPage({
                         agingDaysWaiting={step.agingDaysWaiting}
                         agingTone={step.agingTone}
                         readOnly={isComplete}
+                        aboveSlots={step.stepCode === "ALPHALIST_ENTRY" ? <Form2307sOnReturn rows={certificateRows} /> : undefined}
                       />
                     );
                   }

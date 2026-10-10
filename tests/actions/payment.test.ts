@@ -79,6 +79,7 @@ describe("savePayment (D75)", () => {
     for (const [stepCode, slotCode] of [
       ["SAVE_SUBMISSION_SS", "submission_screenshot"],
       ["SAVE_FORM_COPY", "filed_form"],
+      ["SAVE_FORM_COPY", "filed_form_page2"],
     ] as const) {
       const step = await prisma.workflowStep.findFirstOrThrow({ where: { filingId, stepCode } });
       const fd = new FormData();

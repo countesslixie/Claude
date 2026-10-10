@@ -97,6 +97,7 @@ describe("workflow step actions", () => {
     for (const [stepCode, slotCode] of [
       ["SAVE_SUBMISSION_SS", "submission_screenshot"],
       ["SAVE_FORM_COPY", "filed_form"],
+      ["SAVE_FORM_COPY", "filed_form_page2"],
     ] as const) {
       const step = await prisma.workflowStep.findFirstOrThrow({ where: { filingId, stepCode } });
       const fd = new FormData();
@@ -332,7 +333,7 @@ describe("workflow step actions", () => {
     it("the seven blocking steps (6,7,9,10,11,13,14) still require their documents", async () => {
       const blockingSteps: Record<string, number> = {
         SAVE_SUBMISSION_SS: 1,
-        SAVE_FORM_COPY: 1,
+        SAVE_FORM_COPY: 2, // D193: page 1 and page 2
         SAVE_PROOF_PAYMENT: 1,
         RECEIVE_TRRC: 1,
         ALPHALIST_ENTRY: 2,
@@ -910,9 +911,10 @@ describe("workflow step actions", () => {
       await resolvePrepare(fileReturnStep.filingId);
       expect((await markStepDone(fileReturnStep.id)).ok).toBe(true);
 
-      for (const [stepCode, slotCode] of [
-        ["SAVE_SUBMISSION_SS", "submission_screenshot"],
-        ["SAVE_FORM_COPY", "filed_form"],
+      for (const [stepCode, slotCode, doneAfter] of [
+        ["SAVE_SUBMISSION_SS", "submission_screenshot", true],
+        ["SAVE_FORM_COPY", "filed_form", false], // D193 -- page 1 alone leaves step 7 Pending
+        ["SAVE_FORM_COPY", "filed_form_page2", true],
       ] as const) {
         const step = await prisma.workflowStep.findFirstOrThrow({ where: { filingId: filing.id, stepCode } });
         const formData = new FormData();
@@ -924,12 +926,12 @@ describe("workflow step actions", () => {
         expect(result.ok).toBe(true);
 
         const updated = await prisma.workflowStep.findUniqueOrThrow({ where: { id: step.id } });
-        expect(updated.status).toBe("DONE");
-        expect(updated.completedAt).not.toBeNull();
+        expect(updated.status).toBe(doneAfter ? "DONE" : "PENDING");
+        expect(updated.completedAt !== null).toBe(doneAfter);
       }
     });
 
-    it("D67 §4.4: replacing the only file keeps the step Done, with the old file soft-deleted (one-for-one, D46's pattern)", async () => {
+    it("D67 §4.4 (step 6; step 7's two pages are in filedFormPages.test.ts): replacing the only file keeps the step Done, with the old file soft-deleted (one-for-one, D46's pattern)", async () => {
       const { filing } = await makeClientWithQ2Filing("p5k-replace");
       const fileReturnStep = await prisma.workflowStep.findFirstOrThrow({
         where: { filingId: filing.id, stepCode: "FILE_RETURN" },
@@ -938,12 +940,12 @@ describe("workflow step actions", () => {
       await markStepDone(fileReturnStep.id);
 
       const step = await prisma.workflowStep.findFirstOrThrow({
-        where: { filingId: filing.id, stepCode: "SAVE_FORM_COPY" },
+        where: { filingId: filing.id, stepCode: "SAVE_SUBMISSION_SS" },
       });
       const firstUpload = new FormData();
       firstUpload.set("file", new File(["v1"], "form-v1.pdf", { type: "application/pdf" }));
       firstUpload.set("workflowStepId", step.id);
-      firstUpload.set("docSlotCode", "filed_form");
+      firstUpload.set("docSlotCode", "submission_screenshot");
       firstUpload.set("documentDate", "2026-08-15");
       const firstResult = await uploadDocument(firstUpload);
       expect(firstResult.ok).toBe(true);
@@ -951,7 +953,7 @@ describe("workflow step actions", () => {
       const replaceUpload = new FormData();
       replaceUpload.set("file", new File(["v2"], "form-v2.pdf", { type: "application/pdf" }));
       replaceUpload.set("workflowStepId", step.id);
-      replaceUpload.set("docSlotCode", "filed_form");
+      replaceUpload.set("docSlotCode", "submission_screenshot");
       replaceUpload.set("documentDate", "2026-08-16");
       const replaceResult = await uploadDocument(replaceUpload);
       expect(replaceResult.ok).toBe(true);
@@ -967,7 +969,7 @@ describe("workflow step actions", () => {
       expect(oldDoc.deletedAt).not.toBeNull();
     });
 
-    it("D67 §4.4: removing the only file reverts the step to PENDING", async () => {
+    it("D67 §4.4 (step 6): removing the only file reverts the step to PENDING", async () => {
       const { filing } = await makeClientWithQ2Filing("p5k-remove-reverts");
       const fileReturnStep = await prisma.workflowStep.findFirstOrThrow({
         where: { filingId: filing.id, stepCode: "FILE_RETURN" },
@@ -976,12 +978,12 @@ describe("workflow step actions", () => {
       await markStepDone(fileReturnStep.id);
 
       const step = await prisma.workflowStep.findFirstOrThrow({
-        where: { filingId: filing.id, stepCode: "SAVE_FORM_COPY" },
+        where: { filingId: filing.id, stepCode: "SAVE_SUBMISSION_SS" },
       });
       const upload = new FormData();
       upload.set("file", new File(["v1"], "form.pdf", { type: "application/pdf" }));
       upload.set("workflowStepId", step.id);
-      upload.set("docSlotCode", "filed_form");
+      upload.set("docSlotCode", "submission_screenshot");
       upload.set("documentDate", "2026-08-15");
       const uploadResult = await uploadDocument(upload);
       expect((await prisma.workflowStep.findUniqueOrThrow({ where: { id: step.id } })).status).toBe("DONE");
