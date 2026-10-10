@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { CopyTextarea } from "@/components/copy-textarea";
+import { CopyRow } from "@/components/copy-row";
 
 /**
  * Brief #5e §3 — step 4's message card. While not yet Done, it's a live
@@ -40,9 +41,10 @@ export function AdviceMessageCard({
 }) {
   const [showMessage, setShowMessage] = useState(false);
 
-  // D191 — "To:" above "Subject:", same grey style; no Copy, no link. Display only, never saved on the filing.
+  // D191/D198 — the same To and Subject rows as step 16, each with Copy (none on a Complete filing, D156).
+  // A client with no email gets the muted missing line instead, with no Copy.
   const toLine = clientEmail?.trim() ? (
-    <p className="text-xs text-faint">To: {clientEmail.trim()}</p>
+    <CopyRow label="To" value={clientEmail.trim()} readOnly={readOnly} />
   ) : (
     <p className="text-xs text-faint">
       Client email missing —{" "}
@@ -51,13 +53,14 @@ export function AdviceMessageCard({
       </Link>
     </p>
   );
+  const subjectLine = <CopyRow label="Subject" value={subject} readOnly={readOnly} />;
 
   if (!isDone) {
     return (
       <div className="flex flex-col gap-1">
         <p className="text-xs font-medium text-ink-secondary">Message to client</p>
         {toLine}
-        <p className="text-xs text-faint">Subject: {subject}</p>
+        {subjectLine}
         <CopyTextarea richCopy key={body} defaultValue={body} rows={8} readOnly={readOnly} hideCopy={readOnly} />
       </div>
     );
@@ -79,7 +82,7 @@ export function AdviceMessageCard({
       {showMessage && (
         <div className="flex flex-col gap-1">
           {toLine}
-          <p className="text-xs text-faint">Subject: {subject}</p>
+          {subjectLine}
           <CopyTextarea richCopy defaultValue={body} rows={8} readOnly hideCopy={readOnly} />
         </div>
       )}

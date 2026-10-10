@@ -900,25 +900,6 @@ export default async function FilingDetailPage({
           </div>
         </CardBody>
       </Card>
-
-      {/* D115 — what the subtitle's "(details)" used to open; nothing else on this page shows these dates. */}
-      <details className="mb-3 text-xs text-ink-secondary">
-        <summary className="cursor-pointer underline">Filing details</summary>
-        <div className="mt-1 flex flex-col gap-1">
-          <p>
-            Due date {formatManilaDate(filing.adjustedDueDate)}
-            {filing.statutoryDueDate.getTime() !== filing.adjustedDueDate.getTime() &&
-              ` (statutory due date ${formatManilaDate(filing.statutoryDueDate)}, shifted for weekend/holiday)`}
-            .
-          </p>
-          {(filing.certificatesExpectedBy || filing.internalFilingTarget) && (
-            <p>
-              Working calendar — documents due from client {formatManilaDate(filing.certificatesExpectedBy)}, filing
-              target {formatManilaDate(filing.internalFilingTarget)} (practice targets, not the statutory deadline).
-            </p>
-          )}
-        </div>
-      </details>
     </div>
   );
 }

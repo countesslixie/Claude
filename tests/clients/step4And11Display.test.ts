@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { AdviceMessageCard } from "@/components/advice-message-card";
@@ -14,35 +15,58 @@ const advice = (over: Record<string, unknown> = {}) =>
     amountLabel: "₱1.00", subject: "Subject line", body: "Body text", ...over,
   });
 
-describe("D191 — step 4's To line", () => {
-  it("shows 'To: [email]' above 'Subject:', with no link or button of its own", () => {
+const copies = (h: string) => (h.match(/>Copy</g) ?? []).length;
+
+describe("D191/D198 — step 4's To and Subject rows, each with Copy (the same rows as step 16)", () => {
+  it("shows To and Subject rows, each with its own Copy, plus the body's Copy; To sits above Subject", () => {
     const h = advice();
-    expect(h).toContain("To: sample.client@example.com");
-    expect(h.indexOf("To: ")).toBeLessThan(h.indexOf("Subject: "));
+    expect(h).toContain("sample.client@example.com");
+    expect(h.indexOf(">To<")).toBeLessThan(h.indexOf(">Subject<"));
+    expect(h).toContain("Subject line");
+    expect(copies(h)).toBe(3);
     expect(h).not.toContain("mailto:");
-    expect(h).not.toMatch(/<a [^>]*>[^<]*sample\.client/);
-    expect(h.match(/Copy/g)?.length).toBe(1); // only the message body's own Copy
   });
-  it("a client with no email shows the muted missing line, linking to the client page", () => {
+  it("a client with no email shows the muted missing line, linking to the client page, and no Copy on To", () => {
     const h = advice({ clientEmail: null });
     expect(h).toContain("Client email missing");
     expect(h).toContain("/clients/c1/edit");
-    expect(h).not.toContain("To: ");
+    expect(h).not.toContain(">To<");
+    expect(copies(h)).toBe(2); // Subject + body
   });
-  it("also shows on a saved (Done) message when it is expanded — and a Complete filing has no Copy", () => {
-    const h = render(AdviceMessageCard, {
+  it("a Complete filing has no Copy anywhere, saved or not — as step 16", () => {
+    expect(copies(advice({ readOnly: true }))).toBe(0);
+    const saved = render(AdviceMessageCard, {
       clientId: "c1", clientEmail: "sample.client@example.com", isDone: true, savedAtLabel: "Oct 1, 2026", isOverpayment: false,
       amountLabel: "₱1.00", subject: "S", body: "B", readOnly: true,
     });
-    expect(h).not.toContain("Copy");
+    expect(copies(saved)).toBe(0);
+  });
+  it("step 16 and step 4 use the one shared row component", () => {
+    for (const f of ["components/client-package-step-card.tsx", "components/advice-message-card.tsx"]) {
+      expect(readFileSync(f, "utf8")).toContain("CopyRow");
+    }
   });
 });
 
-describe("D196 — step 3's Client details box is centred", () => {
-  it("labels and values sit in equal centred columns", () => {
+describe("D197 — step 3's Client details box: content-sized items, each value centred under its label", () => {
+  it("items sit side by side from the left (wrapping flex, ~40px gap), each item centred; no equal-width grid", () => {
     const h = render(ClientDetailsBox, { tin: "123456789", branchCode: "000", birthDate: new Date("1990-01-04T16:00:00.000Z") });
-    expect(h).toMatch(/<dl class="[^"]*\bgrid-cols-3\b[^"]*\btext-center\b/);
+    expect(h).toMatch(/<dl class="[^"]*\bflex\b[^"]*\bflex-wrap\b[^"]*\bgap-x-10\b/);
+    expect(h).not.toContain("grid-cols-3");
+    expect((h.match(/<div class="text-center">/g) ?? []).length).toBe(3);
     expect(h).toContain("123-456-789");
+  });
+});
+
+describe("D199 — the filing page's \"Filing details\" disclosure is gone", () => {
+  const src = readFileSync("app/(app)/clients/[id]/filings/[filingId]/page.tsx", "utf8");
+  it("renders neither the disclosure nor the working-calendar line", () => {
+    expect(src).not.toContain("Filing details");
+    expect(src).not.toContain("Working calendar");
+    expect(src).not.toContain("<details");
+  });
+  it("the header's due date is still shown", () => {
+    expect(src).toContain("- due {formatManilaDateLong(filing.adjustedDueDate)}");
   });
 });
 

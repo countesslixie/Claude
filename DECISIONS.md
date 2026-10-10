@@ -2,7 +2,7 @@
 
 *Append new decisions. Mark superseded ones rather than deleting them.*
 *Dates during the build are approximate — most work happened across August 2026.*
-*Last reconciled: 2026-10-10 — brief #6r, covering decisions through D196 (D191–D196: step 4's To line and no-payable wording, step 7's two pages, the package carrying both, step 11's Form 2307 list, step 3's box centred), on top of brief #6m (a documentation pass only; no new decision), covering decisions through D182 (brief #6l), on top of briefs #6k (D181), #6j (D180), #6i (D179), #6h (D174–D178), #6g (D170–D173), #6f (D166–D169), #6e (D162–D165), #6d (D155–D161), #6c (D151–D154), #6b (D143–D150) and the 2026-10-02 brief #6a documentation pass (checked D115–D142 against the tree at brief #5z's tip `e761a74`); earlier passes are recorded in the history below.*
+*Last reconciled: 2026-10-10 — brief #6s (D197–D199: step 3's box compact, Copy on step 4's To and Subject, "Filing details" removed), on top of brief #6r, covering decisions through D196 (D191–D196: step 4's To line and no-payable wording, step 7's two pages, the package carrying both, step 11's Form 2307 list, step 3's box centred), on top of brief #6m (a documentation pass only; no new decision), covering decisions through D182 (brief #6l), on top of briefs #6k (D181), #6j (D180), #6i (D179), #6h (D174–D178), #6g (D170–D173), #6f (D166–D169), #6e (D162–D165), #6d (D155–D161), #6c (D151–D154), #6b (D143–D150) and the 2026-10-02 brief #6a documentation pass (checked D115–D142 against the tree at brief #5z's tip `e761a74`); earlier passes are recorded in the history below.*
 
 ---
 
@@ -1362,6 +1362,8 @@ Label only (`buildSummaryLines(sheet, { payableLabel })`); the figure is the fro
 
 **D191 — Step 4 shows the client's email address** *(her decision, brief #6r)*
 
+> **Amended (brief #6s): D198 — To and Subject are now rows like step 16's, each with Copy (none on a Complete filing, none on the missing-email line).**
+
 Above the "Subject: …" line on step 4's card, a grey "To: [client email]" line, same style. No Copy button and no link. A client with no email shows the muted "Client email missing — add it on the client page" line (as step 16), never blocking. Display only: nothing new is saved on the filing. Shown wherever the Subject line is shown (the live preview, the saved message when expanded, a Complete filing, which still has no Copy, D156). Reader: `client.email`, read by the filing page only.
 
 **D192 — Step 4 when nothing is payable** *(her decision, brief #6r)*
@@ -1382,8 +1384,22 @@ Above step 11's two upload boxes, a small grey read-only box "Form 2307s on this
 
 **D196 — Step 3's Client details box is centred** *(her decision, brief #6r)*
 
+> **Amended (brief #6s): D197 — the items sit together from the left, content-sized, each value centred under its label; no equal-width columns.**
+
 The labels and values (TIN, Branch code, Birthday — D185) sit centred in three equal columns. Nothing else about the box changed.
+
+**D197 — Step 3's Client details box: close together, each value centred under its label** *(her decision, brief #6s; amends D196)*
+
+D196's three equal columns left big gaps. Now the three items (TIN, Branch code, Birthday) sit side by side from the left, sized to their content with about 40px between them, and within each item the label and value are centred on each other. The box stays full width and wraps on a narrow window.
+
+**D198 — Step 4's To and Subject rows match step 16's, each with Copy** *(her decision, brief #6s; amends D191's "no Copy")*
+
+The same two rows as step 16 — muted label, value, Copy at the right — through one shared component (`components/copy-row.tsx`, now used by both cards). No email: the muted "Client email missing" line, no Copy. The body's rich Copy (D186) is unchanged. A Complete filing has no Copy anywhere (D156).
+
+**D199 — The "Filing details" section is removed from the foot of the filing page** *(her decision, brief #6s; supersedes D115/D144's disclosure and D158's working-calendar line there)*
+
+It held exactly two lines: the due date with the statutory-date note, and "Working calendar — documents due from client …, filing target …". Removed from the page only. The due date still shows in the header and slim bar; `certificatesExpectedBy` and `internalFilingTarget` stay in the data and the code, and step 16's "send required documents by" date is unchanged.
 
 ---
 
-**Documentation reconciled through brief #6r** (decisions through D196) — see the "Last reconciled" line at the top of this file, CURRENT_STATE.md, PROJECT_MASTER.md and CLAUDE.md.
+**Documentation reconciled through brief #6s** (decisions through D199) — see the "Last reconciled" line at the top of this file, CURRENT_STATE.md, PROJECT_MASTER.md and CLAUDE.md.

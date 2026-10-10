@@ -5,6 +5,7 @@ import Link from "next/link";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { CopyTextarea } from "@/components/copy-textarea";
+import { CopyRow } from "@/components/copy-row";
 import { markStepDone, unskipStep } from "@/lib/actions/workflowSteps";
 import { stepStatusLabel } from "@/lib/workflow/status";
 import type { WorkflowStepStatus } from "@/lib/workflow/types";
@@ -58,21 +59,10 @@ export function ClientPackageStepCard({
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
   const [show, setShow] = useState(false);
-  const [copied, setCopied] = useState<string | null>(null);
 
   const isDone = status === "DONE";
   const isSkipped = status === "SKIPPED";
   const isNA = status === "NA";
-
-  async function copy(key: string, text: string) {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(key);
-      setTimeout(() => setCopied(null), 2000);
-    } catch {
-      setCopied(null);
-    }
-  }
 
   function run(action: () => Promise<{ ok: boolean; error?: string }>) {
     setMessage(null);
@@ -82,20 +72,8 @@ export function ClientPackageStepCard({
     });
   }
 
-  const line = (key: string, label: string, value: string) => (
-    <div className="flex items-center gap-2 text-xs">
-      <span className="w-14 flex-shrink-0 text-faint">{label}</span>
-      <span className="min-w-0 flex-1 break-all text-ink">{value}</span>
-      {!readOnly && (
-        <button type="button" onClick={() => copy(key, value)} className="flex-shrink-0 text-faint underline hover:text-ink">
-          {copied === key ? "Copied" : "Copy"}
-        </button>
-      )}
-    </div>
-  );
-
   const toLine = to ? (
-    line("to", "To", to)
+    <CopyRow label="To" value={to} readOnly={readOnly} />
   ) : (
     <p className="text-xs text-faint">
       Client email missing —{" "}
@@ -127,7 +105,7 @@ export function ClientPackageStepCard({
           </div>
           <div className="flex flex-col gap-1">
             {toLine}
-            {line("subject", "Subject", subject)}
+            <CopyRow label="Subject" value={subject} readOnly={readOnly} />
           </div>
           <CopyTextarea richCopy key={body} defaultValue={body} rows={14} readOnly={readOnly} hideCopy={readOnly} />
           <div>
