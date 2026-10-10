@@ -37,6 +37,7 @@ import { ComputationSheetPanel } from "@/components/computation-sheet-panel";
 import { OtherCreditsForm } from "@/components/other-credits-form";
 import { centsToPesos } from "@/lib/money";
 import { formatManilaDate, formatManilaDateLong, toManilaDateInputValue } from "@/lib/dates";
+import { ClientDetailsBox } from "@/components/client-details-box";
 import { formLabel } from "@/lib/workflow/eSubmissionEmail";
 import { FilingSummaryStrip } from "@/components/filing-summary-strip";
 import { deriveStepAging, BIR_WAIT_SHORT_NAME } from "@/lib/workflow/aging";
@@ -449,6 +450,7 @@ export default async function FilingDetailPage({
   // then reads the result.
   const prepareReturnExtra = (
     <div className="flex flex-col gap-2">
+      <ClientDetailsBox tin={filing.client.tin} branchCode={filing.client.branchCode} birthDate={filing.client.birthDate} />
       {(sheet.formType === "F1701Q" || sheet.formType === "F1701A") && (
         <p className="text-xs text-ink-secondary">
           Prior year&apos;s excess credit (item 55):{" "}

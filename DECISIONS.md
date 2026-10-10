@@ -1328,6 +1328,10 @@ Columns are now Code · Registered name · TIN · Branch · RDO · Status, all c
 
 `formatTin` (`lib/formatTin.ts`): 9 digits → "123-456-789", 12 digits → "123-456-789-000", anything else (blank, odd length, letters, already dashed) exactly as stored. Display only. Applied to: Clients list, client page Registration card, client sticky bar, Payors table, step 2's certificate details (payor TIN), SAWT worksheet page (client and payor TIN). Unchanged on purpose: step 12's eSubmission subject and body (D87, 12 digits, no dashes), saved emails, the SAWT xlsx, zip and file names, the backup, stored documents and the computation sheet HTML. Form inputs, Zod validation and stored values are untouched; nothing in /lib/tax/ changed.
 
+**D185 — Step 3 shows a "Client details" box** *(her decision, brief #6p)*
+
+Step 3's card body starts with a grey box (same style as the item 61 box) headed "Client details", showing TIN (through `formatTin`, D184), Branch code and Birthday side by side, monospace; above the item 55 line. Birthday is MM/DD/YYYY (eBIRForms' order) by the Manila calendar day (`formatManilaDateMDY`) — for this box only; the client page keeps "January 5, 1990". Empty values show a muted "—". No controls; read from the client record at render, not stored on the filing or snapshot; visible in every status including Complete (it changes nothing). Display only: no migration, nothing in /lib/tax/ or the computation changed.
+
 ---
 
-**Documentation reconciled through brief #6o** (decisions through D184) — see the "Last reconciled" line at the top of this file, CURRENT_STATE.md, PROJECT_MASTER.md and CLAUDE.md.
+**Documentation reconciled through brief #6p** (decisions through D185) — see the "Last reconciled" line at the top of this file, CURRENT_STATE.md, PROJECT_MASTER.md and CLAUDE.md.

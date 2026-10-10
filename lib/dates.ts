@@ -45,6 +45,16 @@ export function formatManilaDateLong(value: Date | string | null | undefined): s
   return dt.isValid ? dt.toFormat("MMMM d, yyyy") : "—";
 }
 
+/** D185 — a stored Date as the Manila calendar day "MM/DD/YYYY" (eBIRForms' order); "—" when empty. Step 3's Client details box only. */
+export function formatManilaDateMDY(value: Date | string | null | undefined): string {
+  if (!value) return "—";
+  const dt =
+    typeof value === "string"
+      ? DateTime.fromISO(value, { zone: "utc" }).setZone(MANILA_ZONE)
+      : DateTime.fromJSDate(value, { zone: "utc" }).setZone(MANILA_ZONE);
+  return dt.isValid ? dt.toFormat("MM/dd/yyyy") : "—";
+}
+
 /**
  * The Asia/Manila calendar day a stored instant falls on, as "yyyy-MM-dd"
  * -- for comparing two dates by calendar day rather than raw instant. Two
