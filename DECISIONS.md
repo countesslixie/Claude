@@ -2,7 +2,7 @@
 
 *Append new decisions. Mark superseded ones rather than deleting them.*
 *Dates during the build are approximate — most work happened across August 2026.*
-*Last reconciled: 2026-10-10 — brief #6s (D197–D199: step 3's box compact, Copy on step 4's To and Subject, "Filing details" removed), on top of brief #6r, covering decisions through D196 (D191–D196: step 4's To line and no-payable wording, step 7's two pages, the package carrying both, step 11's Form 2307 list, step 3's box centred), on top of brief #6m (a documentation pass only; no new decision), covering decisions through D182 (brief #6l), on top of briefs #6k (D181), #6j (D180), #6i (D179), #6h (D174–D178), #6g (D170–D173), #6f (D166–D169), #6e (D162–D165), #6d (D155–D161), #6c (D151–D154), #6b (D143–D150) and the 2026-10-02 brief #6a documentation pass (checked D115–D142 against the tree at brief #5z's tip `e761a74`); earlier passes are recorded in the history below.*
+*Last reconciled: 2026-10-10 — through brief #6s (decisions through D199: D197–D199 step 3's box compact, Copy on step 4's To and Subject, "Filing details" removed; D191–D196 step 4's To line and no-payable wording, step 7's two pages, the package carrying both, step 11's Form 2307 list, step 3's box centred; D186–D190 steps 4 and 16's figures paste as a table; D185 step 3's Client details box; D183–D184 the Clients list's Branch column and dashed TINs), with the documentation pass of brief #6t (no new decision) checking the history against the tree. Earlier passes: brief #6m (documentation only; through D182, brief #6l), then briefs #6k (D181), #6j (D180), #6i (D179), #6h (D174–D178), #6g (D170–D173), #6f (D166–D169), #6e (D162–D165), #6d (D155–D161), #6c (D151–D154), #6b (D143–D150) and the 2026-10-02 brief #6a documentation pass (checked D115–D142 against the tree at brief #5z's tip `e761a74`); earlier passes are recorded in the history below.*
 
 ---
 
@@ -412,6 +412,8 @@ Alongside the payor name, income amount, tax withheld and period covered that we
 **D51 — Step 4 (Advise client)** *(2026-09-27, briefs #5d–#5f, her decisions)*
 
 > **Amended (brief #6r): D192 — when the final figure is ₱0 payable or an overpayment, the message drops the due line and the payment question and adds "The filed tax return and supporting documents will follow in a separate email." before "Thank you!"; D191 adds a "To:" line to the card.**
+
+> **Amended (brief #6q): D187 — the payable version's due line reads "Due date for filing: [date]."; D186/D189 — the summary lines paste as a table and step 4 has one blank line above the final line.**
 
 *Controls.* Step 4 is no longer a waiting step — Start and Mark waiting are both gone (`components/workflow-step-card.tsx`'s `controlsMode="markDoneOnly"`); it was never actually something the client responds to in a way worth tracking. Its own Mark done is blocked until step 3 (`PREPARE_RETURN`) is Done, enforced server-side (`lib/workflow/groups.ts`'s `adviseClientBlockReason`, consulted inside `markStepDone` itself). **⚠️ The rest of this sentence is superseded 2026-09-28 by D62 (brief #5i)** — `markGroupDone` is deleted, so there is no group-level path left to bypass in the first place; `markStepDone`'s own check is the only enforcement, which is exactly what made it safe to remove the group action. ~~— the group's own "Mark done" can't bypass it either, since `markGroupDone` calls the same per-step check in ascending sequence order.~~ Step 4 shows no message at all until step 3 is Done.
 
@@ -848,6 +850,8 @@ Steps 11, 12, 13 and 15 are locked ("Available once Pay is done.") until File (5
 
 **D86 — Step 11 has two direct upload boxes and completes when both files are present** *(2026-09-29, brief #5o §4)*
 
+> **Amended (brief #6r): D193 — step 7 now also has two required files, "Page 1" and "Page 2", working like step 11's two boxes.**
+
 Generated report and DAT file, shown directly, no Attach link (D67's pattern). No Start, Mark done or Skip — all refused server-side. `recomputeFileGroupDocStepStatus` now requires **every** required slot to have a file (this is the first two-slot step on that machinery), so removing either file returns the step to Pending; Replace works per file. `FileGroupDocStepCard` takes a list of slots.
 
 **D87 — Step 12 shows the eSubmission email draft and saves it when marked Done** *(2026-09-29, brief #5o §4)*
@@ -932,6 +936,8 @@ No Start, no Skip (and no skip-reason box); `skipStep` and `markStepInProgress` 
 
 **D102 — Step 16's email: a summary that adds up, an attachments list that matches the zip, right names, To/Subject/Body** *(2026-09-30, brief #5r, her decisions)*
 
+> **Amended/superseded (brief #6q): D188 removes the rounding line; D190 — step 16's last line reads "Amount paid"; D186 — the figures paste as a table.**
+
 *Three errors on Rosario Garcia's Q3:* the summary left out tax paid on earlier quarters (item 56), so ₱26,800 − ₱25,000 did not give ₱8,200; it put one quarter's gross next to a year-to-date tax due; it listed "Form 2307 certificates" for a client with none; and "Next filing: 1701Q for ANNUAL" named the wrong form and a raw code. *Now:* the summary is built from the filing's frozen sheet (`getFilingSheet`, D83), following the return's own lines: gross sales this quarter, taxable income and tax due *year to date*, then each credit as a "Less:" line (excess credit from last year, tax paid on earlier quarters, creditable withholding, other credits — zero lines left out), a "Rounding to whole pesos" line only when the form's whole-peso total differs from the printed lines, and Tax payable or Overpayment last. The Annual (1701A) uses its own lines; Form 1701 and pre-#5d snapshots use the older shape. Tests check that the printed lines reconcile to the final figure for payable, overpayment, rounding, annual and legacy cases. The "attached" list is the package's own document list (`lib/documents/filingPackage.ts`, also what the zip is built from), labelled in plain words ("Filed return", "Proof of payment", "Form 2307 — [payor]"). The next-filing line uses the right form and a plain period ("Annual ITR (1701A)", "Q3 2026"). To / Subject / Body each have a Copy; a client with no email shows one muted line, "Client email missing — add it on the client page", which never blocks (`lib/workflow/clientPackageEmail.ts`, `clientPackageEmailData.ts`).
 
 *⛔ The Feb 15 documents date below was superseded the same day by D106 (her engagement letter's 20th-of-the-month rule, for every period); brief #5r was built from an earlier copy of the brief that still had Feb 15.* *Her documents date for the Annual (D4: a setting, not a literal).* When the next filing is the Annual, the line ends "Please send required documents by Feb 15, 2027." New `TaxRuleSet.annualDocsDueMonthDay` (default `02-15`, the year after the taxable year), editable on the tax rule set screen beside the eSubmission address; migration `20260930090000_brief_5r_client_package_email_and_docs_deadline`. It is **not** D14's Mar 31 (`internalFilingTarget`, her own *filing* target), which is untouched. No weekend/holiday shifting: the app's one client-facing date rule (D53/brief #5e's payment lead time) exists to land a *payment* before a due date, which does not apply to a date on which she receives documents. The quarterly next-filing line is unchanged in structure ("Next filing: 1701Q for Q3 2026, due Nov 16, 2026."). **⛔ Every "Next filing" line now also ends "Please send required documents by [date]." for every period, from D106's 20th-of-the-month rule (Jan 20 for the Annual), and the summary's last line reads "Amount payable", not "Tax payable" (D114).**
@@ -986,6 +992,8 @@ From steps 7, 9, 10 and 13 — skipping any that are NA, skipped or saved — in
 
 **D114 — Step 4 and step 16 share one summary builder** *(2026-09-30, brief #5t, her decision; amends D51/D102/D107)*
 
+> **Amended (brief #6q): D186 (layout), D188 (rounding line removed), D189 (step 4's blank line) and D190 (step 16's "Amount paid") — the two messages are no longer identical in the blank line and the final label.**
+
 `buildSummaryLines` (`lib/workflow/summaryLines.ts`) is the one source of the year-to-date lines both messages print: Gross sales this quarter · Taxable income, year to date · Tax due, year to date · Less: tax paid on earlier quarters · Less: creditable withholding (Form 2307) · Less: other credits (only when non-zero) · Amount payable (or Overpayment). Step 4 used to show this quarter's sales beside the year-to-date tax due. **Step 16's last line was "Tax payable" and is now "Amount payable"**, so the two messages print identical lines. Step 4's greeting, due-date line, payment sentence and "Thank you!" are unchanged; messages already saved are left alone.
 
 **Also (brief #5t):** the "Download period package" link at the top of the filing page's Workflow card is removed — it duplicated step 16's Download package. Its route (`/api/filings/[id]/package`) stays, because step 16's own button uses it. Her own archive comes from the planned archive browse view. Screen text: the tax rule set form now takes and shows rates as percentages (8.00%, still stored as basis points), and no longer mentions "bps", "step 12's" or "As given by the bookkeeper"; the seed's sample-client notes no longer carry D-numbers (D105 continued).
@@ -993,6 +1001,8 @@ From steps 7, 9, 10 and 13 — skipping any that are NA, skipped or saved — in
 **D115 — Filing page header** *(2026-10-01, brief #5v, her decision)*
 
 **⚠️ Superseded in part by D123 (brief #5w), 2026-10-01:** the subtitle uses full month names ("1701Q - due November 16, 2026"), not "Nov."; `formatManilaDateDotted` is removed.
+
+**⚠️ Superseded in part by D199 (brief #6s), 2026-10-10:** the "Filing details" disclosure at the bottom of the page is removed; it held the statutory-date line and D106's working-calendar line.
 
 No status pill beside the title (it stays on the tax payable line). The subtitle reads "1701Q - due Nov. 16, 2026" in normal muted text (`formatManilaDateDotted`, this line only: "Sep.", "Nov.", but "May"). The "(details)" link is gone; its two paragraphs (statutory due date when shifted, documents due from client and filing target) appeared nowhere else on the page, so they live under a small "Filing details" link at the bottom. The card heading is "Steps".
 
@@ -1178,6 +1188,8 @@ Engaged since, Active and Notes stay at the bottom of the New/Edit client form e
 
 **D153 — A Complete filing is read-only for good** *(brief #6c, her decision)*
 
+> **Amended (brief #6s): D199 — its "Still works … Filing details" item is gone; the section no longer exists.**
+
 Once a filing's status is Complete (every step resolved — the green pill), nothing on the filing page can change it. **No Unlock, no Reopen, not even hidden.**
 
 *Left out of the page (not greyed) on a Complete filing:* Undo skip (step 2 and step 16), Skip, Mark done, Choose File / Upload and Replace on steps 6, 7, 9, 10, 11, 13, 14, Remove, Replace scan / Attach scan, Add certificate, the "All certificates received" tick, the payment's Edit, item 61's Edit, the "documents not yet attached" note's Dismiss, step 1's "Go to income entry", and the computation sheet's "Record quarterly sales" link. *Still works:* opening a saved document by file name, Show/Hide on the computation sheet and on the saved advice/e-mail texts, group Collapse/Expand, "Show N not applicable", Back to client, the sticky bar, "Filing details". (The client package zip's "Download package" button is only offered before step 16 is Done, so it was never on a Complete filing; nothing added.)
@@ -1338,6 +1350,8 @@ Columns are now Code · Registered name · TIN · Branch · RDO · Status, all c
 
 **D185 — Step 3 shows a "Client details" box** *(her decision, brief #6p)*
 
+> **Amended: D196 (brief #6r) centred the box in three equal columns; D197 (brief #6s) replaced that with content-sized items from the left, each value centred under its label.**
+
 Step 3's card body starts with a grey box (same style as the item 61 box) headed "Client details", showing TIN (through `formatTin`, D184), Branch code and Birthday side by side, monospace; above the item 55 line. Birthday is MM/DD/YYYY (eBIRForms' order) by the Manila calendar day (`formatManilaDateMDY`) — for this box only; the client page keeps "January 5, 1990". Empty values show a muted "—". No controls; read from the client record at render, not stored on the filing or snapshot; visible in every status including Complete (it changes nothing). Display only: no migration, nothing in /lib/tax/ or the computation changed.
 
 **D186 — The summary figures in steps 4 and 16 paste as an aligned table** *(her decision, "Option A", brief #6q)*
@@ -1345,6 +1359,8 @@ Step 3's card body starts with a grey box (same style as the item 61 box) headed
 Padding with spaces never lined up in an email app's proportional font. Plain text (the box, the saved text, the plain clipboard part) is now `Label: amount`, one per line. The body's Copy on steps 4 and 16 writes two versions at once (`ClipboardItem` with `text/html` and `text/plain`): the HTML has each run of summary lines as a two-column table — label left, amount right-aligned, no bold, borders or colours, inline styles only — and every other line as a plain line; all values HTML-escaped. If the browser refuses the rich write, plain text is copied with no error. One pure function, `messageToHtml` (beside `buildSummaryLines`), shared by both steps; it works from the text in the box, so edits are copied too. Messages already saved are untouched (no backfill); a Complete filing still has no Copy (D156). Step 12's email is not touched. **Amends D114** (layout).
 
 **D187 — Step 4's due-date line reads "Due date for filing: [date]."** *(her decision, brief #6q)*
+
+> **Amended (brief #6r): D192 — when nothing is payable (exactly ₱0 or an overpayment) there is no due line at all.**
 
 Text only. Only the payable version carries a due line; both overpayment versions (quarterly, annual) have none and none was added. `clientPaymentDueDate`, `clientPaymentLeadDays` and the earlier-working-day shift are unchanged. **Amends D51.**
 
@@ -1396,10 +1412,10 @@ D196's three equal columns left big gaps. Now the three items (TIN, Branch code,
 
 The same two rows as step 16 — muted label, value, Copy at the right — through one shared component (`components/copy-row.tsx`, now used by both cards). No email: the muted "Client email missing" line, no Copy. The body's rich Copy (D186) is unchanged. A Complete filing has no Copy anywhere (D156).
 
-**D199 — The "Filing details" section is removed from the foot of the filing page** *(her decision, brief #6s; supersedes D115/D144's disclosure and D158's working-calendar line there)*
+**D199 — The "Filing details" section is removed from the foot of the filing page** *(her decision, brief #6s; supersedes D115's "Filing details" disclosure, which held D106's working-calendar line)*
 
 It held exactly two lines: the due date with the statutory-date note, and "Working calendar — documents due from client …, filing target …". Removed from the page only. The due date still shows in the header and slim bar; `certificatesExpectedBy` and `internalFilingTarget` stay in the data and the code, and step 16's "send required documents by" date is unchanged.
 
 ---
 
-**Documentation reconciled through brief #6s** (decisions through D199) — see the "Last reconciled" line at the top of this file, CURRENT_STATE.md, PROJECT_MASTER.md and CLAUDE.md.
+**Documentation reconciled through brief #6s** (decisions through D199; checked again in the brief #6t documentation pass) — see the "Last reconciled" line at the top of this file, CURRENT_STATE.md, PROJECT_MASTER.md and CLAUDE.md.
