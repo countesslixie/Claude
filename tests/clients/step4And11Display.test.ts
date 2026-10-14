@@ -94,15 +94,71 @@ describe("D195 — Form 2307s on this return (step 11)", () => {
   const card = (status: string, extra: Record<string, unknown> = {}) =>
     render(FileGroupDocStepCard, {
       stepId: "s", sequence: 11, title: "Alphalist data entry + validation", status, isUnlocked: true, lockedMessage: "",
-      slots: [{ slotCode: "generated_report", label: "Generated report", documents: [] }],
+      slots: [{ slotCode: "validation_2026-07", label: "July 2026", documents: [] }],
       waitingOnLabel: null, agingDaysWaiting: null, agingTone: null,
       aboveSlots: createElement(Form2307sOnReturn, { rows: certs }), ...extra,
     });
   it("sits above the upload boxes; shown when locked and when Complete; absent when the step is NA", () => {
     const open = card("PENDING");
-    expect(open.indexOf("Form 2307s on this return")).toBeLessThan(open.indexOf("Generated report"));
+    expect(open.indexOf("Form 2307s on this return")).toBeLessThan(open.indexOf("July 2026"));
     expect(card("PENDING", { isUnlocked: false, lockedMessage: "Available once step 8 is done." })).toContain("Form 2307s on this return");
     expect(card("DONE", { readOnly: true })).toContain("Form 2307s on this return");
     expect(card("NA")).not.toContain("Form 2307s on this return");
+  });
+});
+
+describe("D200/D201 — step 11's monthly boxes and short payor names", () => {
+  const long = "A".repeat(25);
+  const rowFor = (payorName: string) => [{ id: "x", payorName, payorTin: "111222333", atcCode: "WI010", incomePaymentCents: 100, taxWithheldCents: 5 }];
+
+  it("a name of exactly 25 characters is unchanged; 26 or more is cut at 25, trimmed, with an ellipsis; the full name is the hover title", async () => {
+    const { shortPayorName } = await import("@/components/form-2307s-on-return");
+    expect(shortPayorName(long)).toBe(long);
+    expect(shortPayorName(long + "B")).toBe(long + "…");
+    expect(shortPayorName("Sampaguita Trading Corporation of Pasig")).toBe("Sampaguita Trading Corpor…");
+    // the 25th character is a space: trailing space trimmed before the ellipsis
+    expect(shortPayorName("Twenty Four Characters x" + " " + "tail")).toBe("Twenty Four Characters x…");
+    const h = render(Form2307sOnReturn, { rows: rowFor("Sampaguita Trading Corporation of Pasig") });
+    expect(h).toContain('title="Sampaguita Trading Corporation of Pasig"');
+    expect(h).toContain("Sampaguita Trading Corpor…");
+    expect(h).not.toContain(">Sampaguita Trading Corporation of Pasig<");
+    expect(render(Form2307sOnReturn, { rows: rowFor(long) })).toContain(`>${long}<`);
+  });
+
+  const monthly = (over: Record<string, unknown> = {}) =>
+    render(FileGroupDocStepCard, {
+      stepId: "s", sequence: 11, title: "Alphalist data entry + validation", status: "PENDING", isUnlocked: true, lockedMessage: "",
+      slots: [
+        { slotCode: "validation_2026-07", label: "July 2026", documents: [] },
+        { slotCode: "validation_2026-09", label: "September 2026", documents: [] },
+      ],
+      waitingOnLabel: null, agingDaysWaiting: null, agingTone: null,
+      slotsAcross: 3, belowSlotsNote: "Done once every month shown is saved.", ...over,
+    });
+  it("shows one labelled box per month, side by side, with the muted line and no DAT wording", () => {
+    const h = monthly();
+    expect(h).toContain("July 2026");
+    expect(h).toContain("September 2026");
+    expect(h).not.toContain("August 2026");
+    expect(h).toContain("sm:grid-cols-3");
+    expect(h).toContain("Done once every month shown is saved.");
+    expect(h.replace(/<script>[\s\S]*<\/script>/, "")).not.toMatch(/\bDAT\b|report/i);
+    expect((h.match(/type="file"/g) ?? []).length).toBe(2);
+  });
+  it("a single month still shows its label", () => {
+    expect(monthly({ slots: [{ slotCode: "validation_2026-07", label: "July 2026", documents: [] }] })).toContain("July 2026");
+  });
+  it("earlier uploads: listed with Open and Remove while the step is open; read-only with no Remove once Done or Complete; no boxes or note for an older Done step", () => {
+    const earlier = [{ id: "d1", originalFilename: "old-report.pdf", label: "Alphalist report" }];
+    const open = monthly({ earlierUploads: earlier });
+    expect(open).toContain("Earlier uploads");
+    expect(open).toContain("/api/documents/d1/download");
+    expect(open).toContain(">Remove<");
+    expect(monthly({ earlierUploads: earlier, readOnly: true })).not.toContain(">Remove<");
+    const legacyDone = monthly({ status: "DONE", slots: [], earlierUploads: earlier });
+    expect(legacyDone).toContain("old-report.pdf");
+    expect(legacyDone).not.toContain(">Remove<");
+    expect(legacyDone).not.toContain("Done once every month");
+    expect(legacyDone).not.toContain('type="file"');
   });
 });

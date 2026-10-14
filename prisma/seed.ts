@@ -289,10 +289,8 @@ const WORKFLOW_STEP_TEMPLATE: Array<{
     category: "SAWT",
     isConditional: true,
     conditionExpression: "requiresSawt == true",
-    requiredDocSlots: [
-      { slotCode: "generated_report", label: "Generated report", required: true, acceptedTypes: ["pdf", "xlsx"] },
-      { slotCode: "dat_file", label: "DAT file", required: true, acceptedTypes: ["dat"] },
-    ],
+    // D200 — no fixed slots: one validation file per month the Form 2307s touch (lib/workflow/validationMonths.ts).
+    requiredDocSlots: [],
   },
   {
     // No slot (D27) — the DAT file itself is already captured at step 11;

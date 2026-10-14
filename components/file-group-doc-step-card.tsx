@@ -4,7 +4,7 @@ import { useState, useTransition, type ReactNode } from "react";
 import { StatusBadge, type StatusTone } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { uploadDocument } from "@/lib/actions/documents";
+import { uploadDocument, deleteDocument } from "@/lib/actions/documents";
 import { birWaitTone } from "@/lib/workflow/aging";
 import { stepStatusLabel } from "@/lib/workflow/status";
 import { fileTooLargeMessage } from "@/lib/upload";
@@ -63,6 +63,9 @@ export function FileGroupDocStepCard({
   agingTone,
   readOnly = false,
   aboveSlots,
+  slotsAcross,
+  belowSlotsNote,
+  earlierUploads,
 }: {
   stepId: string;
   sequence: number;
@@ -73,9 +76,9 @@ export function FileGroupDocStepCard({
   /** e.g. "Available once step 5 is done." — shown in place of any controls while locked. */
   lockedMessage: string;
   /**
-   * One entry per required document. Steps 6, 7, 9, 10, 13, 14 have one; step 11
-   * (D86) has two — the generated report and the DAT file — and is Done only when
-   * BOTH have a file (lib/actions/workflowSteps.ts's recomputeFileGroupDocStepStatus).
+   * One entry per required document. Steps 6, 9, 10, 13, 14 have one; step 7 has two pages; step 11
+   * (D200) has one per month its Form 2307s touch and is Done only when EVERY month has a file
+   * (lib/actions/workflowSteps.ts's recomputeFileGroupDocStepStatus).
    */
   slots: { slotCode: string; label: string; documents: FileGroupDoc[] }[];
   waitingOnLabel: string | null;
@@ -85,6 +88,12 @@ export function FileGroupDocStepCard({
   readOnly?: boolean;
   /** D195 — step 11's read-only Form 2307 list: shown above the boxes whenever the step is not NA, locked or not. */
   aboveSlots?: ReactNode;
+  /** D200 — step 11's monthly boxes sit side by side, this many across on a wide window. */
+  slotsAcross?: 3;
+  /** D200 — one muted line under the boxes. */
+  belowSlotsNote?: string;
+  /** D200 — files uploaded under the old report/DAT boxes: listed with Open; Remove only while the step is open and the filing is not Complete. */
+  earlierUploads?: { id: string; originalFilename: string; label: string }[];
 }) {
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
@@ -151,14 +160,14 @@ export function FileGroupDocStepCard({
 
       {!isNA && aboveSlots}
 
-      {!isNA &&
-        isUnlocked &&
-        slots.map((slot) => {
+      {!isNA && isUnlocked && (
+      <div className={slotsAcross ? "grid grid-cols-1 gap-x-2 sm:grid-cols-3" : undefined}>
+      {slots.map((slot) => {
           const hasFile = slot.documents.length > 0;
           const showForm = !readOnly && (!hasFile || replacing === slot.slotCode);
           return (
-            <div key={slot.slotCode} className={slots.length > 1 ? "mt-2 rounded border border-line bg-background p-2" : "mt-2"}>
-              {slots.length > 1 && <p className="text-xs font-medium text-ink-secondary">{slot.label}</p>}
+            <div key={slot.slotCode} className={slots.length > 1 || slotsAcross ? "mt-2 rounded border border-line bg-background p-2" : "mt-2"}>
+              {(slots.length > 1 || slotsAcross) && <p className="text-xs font-medium text-ink-secondary">{slot.label}</p>}
               {hasFile && (
                 <ul className="flex flex-col gap-0.5">
                   {slot.documents.map((d) => (
@@ -171,7 +180,7 @@ export function FileGroupDocStepCard({
                 </ul>
               )}
               {showForm ? (
-                <form action={(fd) => handleUpload(slot.slotCode, fd)} className="mt-1 flex items-center gap-1.5">
+                <form action={(fd) => handleUpload(slot.slotCode, fd)} className="mt-1 flex flex-wrap items-center gap-1.5">
                   <p className="sr-only">{slot.label}</p>
                   <Input type="file" name="file" required className="h-8 text-xs" />
                   <Button type="submit" size="sm" variant="secondary" disabled={isPending}>
@@ -199,6 +208,40 @@ export function FileGroupDocStepCard({
             </div>
           );
         })}
+      </div>
+      )}
+
+      {!isNA && isUnlocked && slots.length > 0 && belowSlotsNote && <p className="mt-2 text-xs text-faint">{belowSlotsNote}</p>}
+
+      {!isNA && earlierUploads && earlierUploads.length > 0 && (
+        <div className="mt-2">
+          <p className="text-xs text-faint">Earlier uploads</p>
+          <ul className="flex flex-col gap-0.5">
+            {earlierUploads.map((d) => (
+              <li key={d.id} className="text-xs">
+                <span className="text-faint">{d.label}: </span>
+                <a href={`/api/documents/${d.id}/download`} className="text-ink-secondary underline hover:text-ink">
+                  {d.originalFilename}
+                </a>
+                {!readOnly && !isDone && (
+                  <button
+                    type="button"
+                    disabled={isPending}
+                    onClick={() =>
+                      startTransition(async () => {
+                        await deleteDocument(d.id, "Removed an earlier upload.");
+                      })
+                    }
+                    className="ml-2 text-faint underline hover:text-ink-secondary"
+                  >
+                    Remove
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {message && <p className="mt-2 rounded bg-amber-tint px-2 py-1 text-xs text-amber">{message}</p>}
     </div>

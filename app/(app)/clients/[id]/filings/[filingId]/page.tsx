@@ -67,6 +67,14 @@ import { ownSalesQuarterOf, periodToSingleQuarterCovered, quarterNumberDateRange
 import { changedItems } from "@/lib/tax/amendment";
 import { formatDays } from "@/lib/formatDays";
 import { isFilingComplete } from "@/lib/workflow/filingLock";
+import {
+  isLegacyDoneStep11,
+  isLegacyStep11SlotCode,
+  LEGACY_STEP11_SLOT_LABELS,
+  validationMonthsForFiling,
+  validationSlotDefs,
+} from "@/lib/workflow/validationMonths";
+import { manilaCalendarDay } from "@/lib/dates";
 import type { FilingComputationResult } from "@/lib/tax/types";
 
 // D175 — always rendered fresh from the database, never prerendered at build time.
@@ -188,6 +196,13 @@ export default async function FilingDetailPage({
 
   const ruleSetForEmail = await prisma.taxRuleSet.findUnique({ where: { taxableYear: filing.taxableYear } });
 
+  // D200 — step 11's boxes are one per month the certificates touch; the slots stored on the row (report + DAT, from before) are not read.
+  const validationMonths = validationMonthsForFiling({
+    period: filing.period,
+    taxableYear: filing.taxableYear,
+    certificates: certificates.map((c) => ({ periodFromDay: manilaCalendarDay(c.periodFrom), periodToDay: manilaCalendarDay(c.periodTo) })),
+  }).months;
+
   const now = new Date();
   const allSteps: StepCardData[] = filing.workflowSteps.map((s) => {
     const aging = deriveStepAging({
@@ -209,7 +224,12 @@ export default async function FilingDetailPage({
       isWaitingState: s.isWaitingState,
       waitingOnLabel: s.waitingOnLabel,
       skippedReason: s.skippedReason,
-      requiredDocSlots: parseDocSlots(s.requiredDocSlots),
+      requiredDocSlots:
+        s.stepCode === "ALPHALIST_ENTRY"
+          ? isLegacyDoneStep11(s.status, s.documents)
+            ? []
+            : validationSlotDefs(validationMonths)
+          : parseDocSlots(s.requiredDocSlots),
       documents: s.documents.map((d) => ({
         id: d.id,
         docSlotCode: d.docSlotCode,
@@ -329,7 +349,7 @@ export default async function FilingDetailPage({
           stepCode: s.stepCode,
           title: s.title,
           status: s.status,
-          requiredDocSlots: parseDocSlots(s.requiredDocSlots) as DocSlotDef[],
+          requiredDocSlots: (allSteps.find((x) => x.id === s.id)?.requiredDocSlots ?? parseDocSlots(s.requiredDocSlots)) as DocSlotDef[],
         })),
         documentsByStepCode,
       );
@@ -756,6 +776,19 @@ export default async function FilingDetailPage({
                         agingTone={step.agingTone}
                         readOnly={isComplete}
                         aboveSlots={step.stepCode === "ALPHALIST_ENTRY" ? <Form2307sOnReturn rows={certificateRows} /> : undefined}
+                        slotsAcross={step.stepCode === "ALPHALIST_ENTRY" ? 3 : undefined}
+                        belowSlotsNote={step.stepCode === "ALPHALIST_ENTRY" ? "Done once every month shown is saved." : undefined}
+                        earlierUploads={
+                          step.stepCode === "ALPHALIST_ENTRY"
+                            ? step.documents
+                                .filter((d) => isLegacyStep11SlotCode(d.docSlotCode))
+                                .map((d) => ({
+                                  id: d.id,
+                                  originalFilename: d.originalFilename,
+                                  label: LEGACY_STEP11_SLOT_LABELS[d.docSlotCode ?? ""] ?? "Earlier upload",
+                                }))
+                            : undefined
+                        }
                       />
                     );
                   }

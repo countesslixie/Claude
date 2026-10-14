@@ -114,16 +114,14 @@ export function EmailDatStepCard({
               </Link>
             </p>
           )}
-          <p className="text-xs text-ink-secondary">
-            Attach:{" "}
-            {datFile ? (
+          {datFile && (
+            <p className="text-xs text-ink-secondary">
+              Attach:{" "}
               <a href={`/api/documents/${datFile.id}/download`} className="underline hover:text-ink">
                 {datFile.filename}
               </a>
-            ) : (
-              <span className="text-faint">the DAT file saved on step 11</span>
-            )}
-          </p>
+            </p>
+          )}
           <div>
             <Button size="sm" disabled={isPending} onClick={markDone}>
               Mark done

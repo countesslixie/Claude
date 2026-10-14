@@ -65,6 +65,7 @@ describe("end-to-end: driving a filing from step 1 to step 16", () => {
       data: {
         clientId: client.id,
         taxableYear: 2026,
+        claimedOnFilingId: filing.id, // D200: step 11's months come from the certificates claimed on the filing
         payorName: "E2E Payor",
         payorTin: "333444555",
         periodFrom: new Date("2026-04-01T00:00:00.000Z"),
@@ -84,7 +85,11 @@ describe("end-to-end: driving a filing from step 1 to step 16", () => {
     expect(steps.every((s) => s.status !== "NA")).toBe(true); // requiresSawt true -> nothing auto-NA'd
 
     for (const step of steps) {
-      const slots = parseDocSlots(step.requiredDocSlots);
+      // D200 -- step 11's boxes are the months the certificate (Apr 1 - Jun 30, Q2) touches, not stored slots.
+      const slots =
+        step.stepCode === "ALPHALIST_ENTRY"
+          ? ["2026-04", "2026-05", "2026-06"].map((m) => ({ slotCode: `validation_${m}` }))
+          : parseDocSlots(step.requiredDocSlots);
       for (const slot of slots) {
         const formData = new FormData();
         formData.set("file", new File([`${step.stepCode}-${slot.slotCode}-contents`], `${slot.slotCode}.pdf`, { type: "application/pdf" }));
@@ -92,7 +97,7 @@ describe("end-to-end: driving a filing from step 1 to step 16", () => {
         formData.set("docSlotCode", slot.slotCode);
         formData.set("documentDate", "2026-08-15");
         const uploadResult = await uploadDocument(formData);
-        expect(uploadResult.ok).toBe(true);
+        expect(uploadResult.ok, `${step.stepCode}/${slot.slotCode}: ${uploadResult.error}`).toBe(true);
       }
 
       // Steps 6, 7, 9, 10, 11, 13, 14 complete themselves once their file(s) are in

@@ -88,44 +88,63 @@ describe("the eAFS group", () => {
     });
   }
   const EAFS = ["ALPHALIST_ENTRY", "EMAIL_DAT", "SAWT_ACK", "EAFS_SUBMIT"];
+  /** D200 — the fixture certificate runs Jul 1 - Sep 30, so step 11 wants July, August and September. */
+  const MONTHS = ["validation_2026-07", "validation_2026-08", "validation_2026-09"];
+  async function uploadAllMonths(filingId: string) {
+    for (const m of MONTHS) await upload(filingId, "ALPHALIST_ENTRY", m);
+  }
 
   it("is locked on the server until File and Pay are Done — uploads and Mark done both refused", async () => {
     const { filing } = await setup();
-    const early = await upload(filing.id, "ALPHALIST_ENTRY", "generated_report");
+    const early = await upload(filing.id, "ALPHALIST_ENTRY", "validation_2026-07");
     expect(early.ok).toBe(false);
     expect(early.error).toMatch(/Available once Pay is done/);
     expect((await markStepDone((await step(filing.id, "EAFS_SUBMIT")).id)).error).toBe("Available once Pay is done.");
     expect((await markStepDone((await step(filing.id, "EMAIL_DAT")).id)).ok).toBe(false);
 
     await prisma.workflowStep.updateMany({ where: { filingId: filing.id, stepCode: { in: ["FILE_RETURN", "SAVE_SUBMISSION_SS", "SAVE_FORM_COPY"] } }, data: { status: "DONE" } });
-    expect((await upload(filing.id, "ALPHALIST_ENTRY", "generated_report")).ok).toBe(false); // Pay still open
+    expect((await upload(filing.id, "ALPHALIST_ENTRY", "validation_2026-07")).ok).toBe(false); // Pay still open
     await prisma.workflowStep.updateMany({ where: { filingId: filing.id, stepCode: { in: ["MAKE_PAYMENT", "SAVE_PROOF_PAYMENT"] } }, data: { status: "DONE" } });
-    expect((await upload(filing.id, "ALPHALIST_ENTRY", "generated_report")).ok).toBe(true);
+    expect((await upload(filing.id, "ALPHALIST_ENTRY", "validation_2026-07")).ok).toBe(true);
   });
 
   it("Pay counts as Done when it's 'nothing to pay' (steps 8 and 9 NA)", async () => {
     const { filing } = await setup();
     await prisma.workflowStep.updateMany({ where: { filingId: filing.id, stepCode: { in: ["FILE_RETURN", "SAVE_SUBMISSION_SS", "SAVE_FORM_COPY"] } }, data: { status: "DONE" } });
     await prisma.workflowStep.updateMany({ where: { filingId: filing.id, stepCode: { in: ["MAKE_PAYMENT", "SAVE_PROOF_PAYMENT"] } }, data: { status: "NA" } });
-    expect((await upload(filing.id, "ALPHALIST_ENTRY", "dat_file", "x.dat")).ok).toBe(true);
+    expect((await upload(filing.id, "ALPHALIST_ENTRY", "validation_2026-07", "x.pdf")).ok).toBe(true);
   });
 
-  it("step 11 needs BOTH files; replacing works per file; removing either returns it to Pending", async () => {
+  it("step 11 needs a file for EVERY month shown; replacing works per month; removing one reopens it (D200)", async () => {
     const { filing } = await setup();
     await openGate(filing.id);
-    expect((await upload(filing.id, "ALPHALIST_ENTRY", "generated_report")).ok).toBe(true);
+    expect((await upload(filing.id, "ALPHALIST_ENTRY", MONTHS[0])).ok).toBe(true);
+    expect((await upload(filing.id, "ALPHALIST_ENTRY", MONTHS[1])).ok).toBe(true);
     expect(await status(filing.id, "ALPHALIST_ENTRY")).not.toBe("DONE");
-    expect((await upload(filing.id, "ALPHALIST_ENTRY", "dat_file", "batch.dat")).ok).toBe(true);
+    expect((await upload(filing.id, "ALPHALIST_ENTRY", MONTHS[2], "sep.pdf")).ok).toBe(true);
     expect(await status(filing.id, "ALPHALIST_ENTRY")).toBe("DONE");
 
-    // Replace one file: still Done, one live document for that slot
-    expect((await upload(filing.id, "ALPHALIST_ENTRY", "dat_file", "batch2.dat")).ok).toBe(true);
-    const live = await prisma.document.findMany({ where: { filingId: filing.id, docSlotCode: "dat_file", deletedAt: null } });
+    // Replace one month's file: still Done, one live document for that month, the old one soft-deleted
+    expect((await upload(filing.id, "ALPHALIST_ENTRY", MONTHS[2], "sep2.pdf")).ok).toBe(true);
+    const live = await prisma.document.findMany({ where: { filingId: filing.id, docSlotCode: MONTHS[2], deletedAt: null } });
     expect(live).toHaveLength(1);
+    expect(await prisma.document.count({ where: { filingId: filing.id, docSlotCode: MONTHS[2], deletedAt: { not: null } } })).toBe(1);
     expect(await status(filing.id, "ALPHALIST_ENTRY")).toBe("DONE");
 
     await deleteDocument(live[0].id, "wrong file");
     expect(await status(filing.id, "ALPHALIST_ENTRY")).toBe("PENDING");
+    // the upload records the day automatically and keeps the alphalist category
+    const kept = await prisma.document.findFirstOrThrow({ where: { filingId: filing.id, docSlotCode: MONTHS[0], deletedAt: null } });
+    expect(kept.category).toBe("ALPHALIST_REPORT");
+  });
+
+  it("step 11 takes no file for a month the return doesn't need, nor the old report/DAT boxes (D200)", async () => {
+    const { filing } = await setup();
+    await openGate(filing.id);
+    expect((await upload(filing.id, "ALPHALIST_ENTRY", "validation_2026-10")).ok).toBe(false);
+    expect((await upload(filing.id, "ALPHALIST_ENTRY", "validation_2026-06")).ok).toBe(false);
+    expect((await upload(filing.id, "ALPHALIST_ENTRY", "dat_file", "batch.dat")).ok).toBe(false);
+    expect((await upload(filing.id, "ALPHALIST_ENTRY", "generated_report")).ok).toBe(false);
   });
 
   it("step 12: Mark done only, locked until 11 is Done, saves the exact draft, then 13 waits on BIR at that moment", async () => {
@@ -133,8 +152,7 @@ describe("the eAFS group", () => {
     await openGate(filing.id);
     const email = await step(filing.id, "EMAIL_DAT");
     expect((await markStepDone(email.id)).error).toBe("Available once step 11 is done.");
-    await upload(filing.id, "ALPHALIST_ENTRY", "generated_report");
-    await upload(filing.id, "ALPHALIST_ENTRY", "dat_file", "batch.dat");
+    await uploadAllMonths(filing.id);
     expect((await markStepDone(email.id)).ok).toBe(true);
 
     const saved = await prisma.filing.findUniqueOrThrow({ where: { id: filing.id } });
@@ -153,8 +171,7 @@ describe("the eAFS group", () => {
   it("the 12 -> 13 -> 14 chain end to end; removing 13's only file returns it to waiting from step 12's completedAt", async () => {
     const { filing } = await setup();
     await openGate(filing.id);
-    await upload(filing.id, "ALPHALIST_ENTRY", "generated_report");
-    await upload(filing.id, "ALPHALIST_ENTRY", "dat_file", "batch.dat");
+    await uploadAllMonths(filing.id);
     await markStepDone((await step(filing.id, "EMAIL_DAT")).id);
     expect(await status(filing.id, "SAWT_VALIDATION")).toBe("PENDING"); // locked until 13 is Done
     expect((await upload(filing.id, "SAWT_VALIDATION", "validation_email")).ok).toBe(false);
@@ -223,7 +240,7 @@ describe("the eAFS group", () => {
   it("an NA eAFS step takes no upload and no Mark done", async () => {
     const { filing } = await setup(false);
     await openGate(filing.id);
-    expect((await upload(filing.id, "ALPHALIST_ENTRY", "generated_report")).ok).toBe(false);
+    expect((await upload(filing.id, "ALPHALIST_ENTRY", "validation_2026-07")).ok).toBe(false);
     expect((await markStepDone((await step(filing.id, "EAFS_SUBMIT")).id)).ok).toBe(false);
   });
 

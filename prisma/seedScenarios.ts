@@ -582,9 +582,11 @@ export async function seedScenarios(prisma: PrismaClient, actorId: string): Prom
     await payTaxPayable(filing, dateStr(9), "BDO Online");
     await upload(filing.id, "SAVE_PROOF_PAYMENT", "proof", sampleFile(`Proof of payment, ${label(name, "Q3")}`, "SAMPLE_proof.pdf"), dateStr(9));
     // eAFS group: steps 11, 12, 13, 15 — all of hers.
-    await upload(filing.id, "ALPHALIST_ENTRY", "generated_report", sampleFile(`Alphalist report, ${label(name, "Q3")}`, "SAMPLE_alphalist.pdf"), dateStr(8));
-    await upload(filing.id, "ALPHALIST_ENTRY", "dat_file", sampleFile(`DAT file, ${label(name, "Q3")}`, "SAMPLE_alphalist.dat", "text"), dateStr(8));
-    // step 11 completed itself once BOTH files were in (D86); step 12 is Mark done (saves the email draft, D87)
+    // D200 — one validation file per month the certificate (Jul 1 - Sep 30) touches.
+    for (const [slot, monthName] of [["validation_2026-07", "July"], ["validation_2026-08", "August"], ["validation_2026-09", "September"]]) {
+      await upload(filing.id, "ALPHALIST_ENTRY", slot, sampleFile(`Validation file ${monthName} 2026, ${label(name, "Q3")}`, `SAMPLE_validation_${monthName}.pdf`), dateStr(8));
+    }
+    // step 11 completed itself once every month had its file (D200); step 12 is Mark done (saves the email draft, D87)
     // and starts step 13's wait (D88); uploading the acknowledgement completes 13 and starts step 14's wait (D71).
     await done(filing.id, "EMAIL_DAT");
     await upload(filing.id, "SAWT_ACK", "acknowledgement", sampleFile(`Acknowledgement email, ${label(name, "Q3")}`, "SAMPLE_ack.pdf"), dateStr(6));

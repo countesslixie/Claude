@@ -4,6 +4,7 @@ import type { WorkflowStepStatus } from "./types";
 import { centsToPesos } from "@/lib/money";
 import { BIR_WAIT_SHORT_NAME } from "./aging";
 import { formatDays } from "@/lib/formatDays";
+import { isValidationSlotCode } from "./validationMonths";
 
 /**
  * Brief #4a — the sixteen steps wrapped in groups. This changes nothing
@@ -675,7 +676,12 @@ export function summarizeGroup(group: WorkflowGroupDef, steps: GroupStepInput[])
   const missingLabels: string[] = [];
   for (const s of groupSteps) {
     if (isResolved(s.status)) continue;
-    missingLabels.push(...missingRequiredSlots(s.requiredDocSlots ?? [], s.documents ?? []).map((slot) => slot.label));
+    missingLabels.push(
+      // D200 — step 11's missing files are named by month: "validation for August 2026".
+      ...missingRequiredSlots(s.requiredDocSlots ?? [], s.documents ?? []).map((slot) =>
+        isValidationSlotCode(slot.slotCode) ? `validation for ${slot.label}` : slot.label,
+      ),
+    );
   }
   const docSlotBlockReason =
     missingLabels.length > 0

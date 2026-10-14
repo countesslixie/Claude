@@ -5,7 +5,7 @@ import { centsToPesos } from "@/lib/money";
  * D195 — step 11's read-only "Form 2307s on this return" box: one row per
  * certificate claimed on this filing, so she can see what she is keying into
  * the alphalist while she uploads. Display only — no buttons, no links, nothing
- * stored. Every heading and value is centred. TIN through formatTin (D184).
+ * stored. Long payor names are shortened here only (D201). Every heading and value is centred. TIN through formatTin (D184).
  */
 export interface Form2307ListRow {
   id: string;
@@ -19,6 +19,12 @@ export interface Form2307ListRow {
 /** Payor name, then TIN — the SAWT keying worksheet's order (D38). */
 export function sortForm2307List<T extends { payorName: string; payorTin: string | null }>(rows: T[]): T[] {
   return [...rows].sort((a, b) => a.payorName.localeCompare(b.payorName) || (a.payorTin ?? "").localeCompare(b.payorTin ?? ""));
+}
+
+/** D201 — on this box only: a payor name over 25 characters shows its first 25 (trailing space trimmed) and "…"; the full name rides in the title. */
+export const PAYOR_NAME_SHORT_LIMIT = 25;
+export function shortPayorName(name: string): string {
+  return name.length > PAYOR_NAME_SHORT_LIMIT ? `${name.slice(0, PAYOR_NAME_SHORT_LIMIT).trimEnd()}…` : name;
 }
 
 export function Form2307sOnReturn({ rows }: { rows: Form2307ListRow[] }) {
@@ -42,7 +48,7 @@ export function Form2307sOnReturn({ rows }: { rows: Form2307ListRow[] }) {
           <tbody>
             {sorted.map((c) => (
               <tr key={c.id} className="text-ink">
-                <td className="px-2 py-1 text-center">{c.payorName}</td>
+                <td className="px-2 py-1 text-center" title={c.payorName}>{shortPayorName(c.payorName)}</td>
                 <td className="px-2 py-1 text-center font-mono">{formatTin(c.payorTin) || "—"}</td>
                 <td className="px-2 py-1 text-center">{c.atcCode}</td>
                 <td className="px-2 py-1 text-center tabular-nums">{centsToPesos(c.incomePaymentCents, { withSymbol: true })}</td>

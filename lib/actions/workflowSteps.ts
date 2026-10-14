@@ -8,6 +8,8 @@ import { deriveFilingStatus } from "@/lib/workflow/status";
 import { ensureComputationSheetSaved } from "@/lib/documents/computationSheet";
 import { missingRequiredSlots, checkSendClientPackageReadiness } from "@/lib/workflow/docSlots";
 import { parseDocSlots } from "@/lib/workflow/types";
+import { isLegacyDoneStep11, validationSlotDefs } from "@/lib/workflow/validationMonths";
+import { loadValidationMonths } from "@/lib/workflow/validationMonthsData";
 import {
   prepareGroupBlockReason,
   prepareFinishedBlockReason,
@@ -593,11 +595,18 @@ export async function recomputeFileGroupDocStepStatus(stepId: string): Promise<v
   if (!step) return;
   if (isFilingComplete(step.filing)) return; // D153 — nothing re-derives a Complete filing's steps
 
-  // D86 — a step with more than one required slot (step 11: generated report
-  // AND DAT file) is complete only when EVERY required slot has a file.
+  // D86 — a step with more than one required slot is complete only when EVERY required slot has a file.
   // Single-slot steps behave exactly as before.
-  const hasDoc =
+  let hasDoc =
     step.documents.length > 0 && missingRequiredSlots(parseDocSlots(step.requiredDocSlots), step.documents).length === 0;
+  // D200 — step 11 is Done when every month its Form 2307s touch has a file; the stored slots
+  // (report + DAT, from before) are not read. An older step 11 completed with report + DAT
+  // and no monthly file stays Done (its files are read-only).
+  if (step.stepCode === "ALPHALIST_ENTRY") {
+    if (isLegacyDoneStep11(step.status, step.documents)) return;
+    const { months } = await loadValidationMonths(step.filingId);
+    hasDoc = months.length > 0 && missingRequiredSlots(validationSlotDefs(months), step.documents).length === 0;
+  }
   const actorId = await getActorId();
 
   if (hasDoc && step.status !== "DONE") {

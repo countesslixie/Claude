@@ -336,7 +336,7 @@ describe("workflow step actions", () => {
         SAVE_FORM_COPY: 2, // D193: page 1 and page 2
         SAVE_PROOF_PAYMENT: 1,
         RECEIVE_TRRC: 1,
-        ALPHALIST_ENTRY: 2,
+        ALPHALIST_ENTRY: 0, // D200: no fixed slots -- one validation file per month the Form 2307s touch (tests/actions/step11Months.test.ts)
         SAWT_ACK: 1,
         SAWT_VALIDATION: 1,
       };

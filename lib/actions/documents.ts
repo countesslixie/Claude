@@ -16,6 +16,8 @@ import {
   stepLockReason,
 } from "@/lib/workflow/groups";
 import { MAX_UPLOAD_BYTES } from "@/lib/upload";
+import { isLegacyDoneStep11, isValidationSlotCode, validationSlotCode } from "@/lib/workflow/validationMonths";
+import { loadValidationMonths } from "@/lib/workflow/validationMonthsData";
 
 export type UploadDocumentResult = {
   ok: boolean;
@@ -35,7 +37,7 @@ const SLOT_CODE_TO_CATEGORY: Record<string, string> = {
   filed_form_page2: "FILED_FORM", // D193 -- page 2 of the filed form
   proof: "PAYMENT_CONFIRMATION",
   trrc: "TRRC",
-  generated_report: "ALPHALIST_REPORT",
+  generated_report: "ALPHALIST_REPORT", // older step 11 uploads (before D200)
   dat_file: "DAT_FILE",
   sent_email: "SENT_EMAIL_EVIDENCE",
   acknowledgement: "ACKNOWLEDGEMENT",
@@ -118,6 +120,18 @@ export async function saveDocumentForStep(params: {
     if (lock) return { ok: false, error: `Can't attach this document yet. ${lock}` };
   }
 
+  // D200 — step 11 takes one file per month its Form 2307s touch; the old report/DAT slots take no new file.
+  if (step.stepCode === "ALPHALIST_ENTRY") {
+    const { months } = await loadValidationMonths(filing.id);
+    if (!isValidationSlotCode(params.docSlotCode) || !months.some((m) => validationSlotCode(m) === params.docSlotCode)) {
+      return { ok: false, error: "That month isn't one of the months this return needs a validation file for." };
+    }
+    const existing = await prisma.document.findMany({ where: { workflowStepId: step.id, deletedAt: null }, select: { docSlotCode: true } });
+    if (isLegacyDoneStep11(step.status, existing)) {
+      return { ok: false, error: "This step was completed with the earlier report and DAT file, so it takes no new upload." };
+    }
+  }
+
   const buffer = Buffer.from(await params.file.arrayBuffer());
   const sha256 = computeSha256(buffer);
 
@@ -159,7 +173,7 @@ export async function saveDocumentForStep(params: {
       workflowStepId: step.id,
       docSlotCode: params.docSlotCode,
       form2307Id: params.form2307Id ?? null,
-      category: (SLOT_CODE_TO_CATEGORY[params.docSlotCode] ?? "OTHER") as never,
+      category: (SLOT_CODE_TO_CATEGORY[params.docSlotCode] ?? (isValidationSlotCode(params.docSlotCode) ? "ALPHALIST_REPORT" : "OTHER")) as never, // D200: a monthly validation file keeps the existing alphalist category (no new enum value, no migration)
       originalFilename: params.file.name,
       storedPath: relativePath,
       mimeType: params.file.type || "application/octet-stream",
