@@ -1426,6 +1426,18 @@ The DAT box and the single report box are gone. Step 11 shows one upload box for
 
 On the "Form 2307s on this return" box only (D195), a payor name longer than 25 characters shows its first 25 characters (trailing space trimmed) followed by "…"; hovering shows the full name. Exactly 25 characters is unchanged. Step 2, the Form 2307 register, the Payors page, emails, the zip, the SAWT worksheet and the stored name keep the full name.
 
+**D202 — The filing page's header shows the client's TIN** *(her decision, brief #6v)*
+
+The subtitle reads "TIN 123-456-789-000 · 1701Q - due November 16, 2026". "TIN" is in the normal muted subtitle colour; the number goes through `formatTin` (D184), in monospace and the primary text colour, as the client page shows it. No Copy link. A client with no TIN stored gets no TIN part and the subtitle reads as before. Title, Back to client and the rest are unchanged.
+
+**D203 — The slim bar shows the TIN and no longer shows Next** *(her decision, brief #6v; amends D80)*
+
+The "Next: …" text is gone from the slim bar. In its place, after the client and period, " · TIN 123-456-789-000" (same styling, dashed, no Copy; none stored → no TIN part). "Go to step" is exactly as before — it still goes to the step Next points to, and with nothing to go to the bar shows "Complete" when everything is resolved and no link while only a BIR wait is left. The client page's own sticky bar (D104) is unchanged.
+
+**D204 — The Next box at the top of the filing page has no buttons** *(her decision, brief #6v; partly supersedes D77)*
+
+Every step button is gone from the box (Mark done, Start, and anything else it could show). It keeps its text ("Next: Step 15 of 16 — Complete and submit eAFS", "Next: waiting on BIR — TRRC, 3 days", the filing-order note with its Open link, the all-resolved line) and one "Go to checklist" link. D77's rule that the banner may only offer a subset of its card's controls is replaced by "offers none"; the per-step modes (`nextActionModeForStepCode`) and `NextActionControl` were removed with it. Every step's own card keeps its controls and the server-side locks are unchanged. `nextActionForFiling`, the dashboard and the Kanban are unchanged. No migration, no backfill.
+
 ---
 
-**Documentation reconciled through brief #6u** (decisions through D201; brief #6t was the previous documentation pass) — see the "Last reconciled" line at the top of this file, CURRENT_STATE.md, PROJECT_MASTER.md and CLAUDE.md.
+**Documentation reconciled through brief #6v** (decisions through D204) — see the "Last reconciled" line at the top of this file, CURRENT_STATE.md, PROJECT_MASTER.md and CLAUDE.md.

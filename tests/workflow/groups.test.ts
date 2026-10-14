@@ -7,7 +7,6 @@ import {
   summarizeGroup,
   prepareGroupBlockReason,
   payGroupBlockReason,
-  nextActionModeForStepCode,
   groupCounterLabel,
   nothingToPayLabel,
   type GroupStepInput,
@@ -518,35 +517,6 @@ describe("prepareGroupBlockReason (brief #4b)", () => {
         { stepCode: "RECEIVE_2307", status: "SKIPPED" },
       ]),
     ).toBeNull();
-  });
-});
-
-describe("nextActionModeForStepCode (D77)", () => {
-  it("self-completing/needs-fields steps get 'goToStep'", () => {
-    for (const code of [
-      "RECORD_SALES",
-      "RECEIVE_2307",
-      "SAVE_SUBMISSION_SS",
-      "SAVE_FORM_COPY",
-      "MAKE_PAYMENT",
-      "SAVE_PROOF_PAYMENT",
-      "RECEIVE_TRRC",
-      "SAWT_VALIDATION",
-    ]) {
-      expect(nextActionModeForStepCode(code)).toBe("goToStep");
-    }
-  });
-
-  it("markDoneOnly steps (3, 4, 5) keep the Mark done button, no Start", () => {
-    for (const code of ["PREPARE_RETURN", "ADVISE_CLIENT", "FILE_RETURN"]) {
-      expect(nextActionModeForStepCode(code)).toBe("markDoneOnly");
-    }
-  });
-
-  it("D86-D89, D101 (briefs #5o, #5r): 11 and 13 are go-to-step (self-completing); 12, 15 and 16 are Mark done only", () => {
-    for (const code of ["ALPHALIST_ENTRY", "SAWT_ACK"]) expect(nextActionModeForStepCode(code)).toBe("goToStep");
-    for (const code of ["EMAIL_DAT", "EAFS_SUBMIT"]) expect(nextActionModeForStepCode(code)).toBe("markDoneOnly");
-    expect(nextActionModeForStepCode("SEND_CLIENT_PACKAGE")).toBe("markDoneOnly");
   });
 });
 

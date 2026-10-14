@@ -66,7 +66,7 @@ describe("D199 — the filing page's \"Filing details\" disclosure is gone", () 
     expect(src).not.toContain("<details");
   });
   it("the header's due date is still shown", () => {
-    expect(src).toContain("- due {formatManilaDateLong(filing.adjustedDueDate)}");
+    expect(src).toContain("- due ${formatManilaDateLong(filing.adjustedDueDate)}"); // D202: passed to FilingSubtitle
   });
 });
 

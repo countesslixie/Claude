@@ -32,7 +32,8 @@ import { EmailDatStepCard } from "@/components/email-dat-step-card";
 import { MakePaymentStepCard } from "@/components/make-payment-step-card";
 import { loadFilingOrderContext } from "@/lib/workflow/filingOrderData";
 import { filingOrderBlockReason, firstUnfiledEarlierPeriod } from "@/lib/workflow/filingOrder";
-import { NextActionControl } from "@/components/next-action-control";
+import { FilingNextBox } from "@/components/filing-next-box";
+import { FilingSubtitle } from "@/components/filing-tin";
 import { FilingStickyBar } from "@/components/filing-sticky-bar";
 import { ComputationSheetPanel } from "@/components/computation-sheet-panel";
 import { OtherCreditsForm } from "@/components/other-credits-form";
@@ -51,7 +52,6 @@ import {
   summarizeGroup,
   prepareGroupBlockReason,
   adviseClientBlockReason,
-  nextActionModeForStepCode,
   nextActionForFiling,
   stepLockReason,
   nothingToPayLabel,
@@ -523,17 +523,16 @@ export default async function FilingDetailPage({
       <FilingStickyBar
         headerId="filing-page-header"
         title={`${filing.client.registeredName} — TY${filing.taxableYear} ${periodLabel(filing.period)}`}
-        next={nextStep ? { stepCode: nextStep.stepCode, sequence: nextStep.sequence, title: nextStep.title } : null}
-        waitingText={birWaitText}
+        goToStepCode={nextStep?.stepCode ?? null}
+        isComplete={!nextStep && !birWaitText}
+        tin={filing.client.tin}
       />
       <div id="filing-page-header" className="mb-2 flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-ink">
             {filing.client.registeredName} — TY{filing.taxableYear} {periodLabel(filing.period)}
           </h1>
-          <p className="mt-0.5 text-sm text-ink-secondary">
-            {formLabel(filing.formType)} - due {formatManilaDateLong(filing.adjustedDueDate)}
-          </p>
+          <FilingSubtitle tin={filing.client.tin} text={`${formLabel(filing.formType)} - due ${formatManilaDateLong(filing.adjustedDueDate)}`} />
         </div>
         <Link href={`/clients/${id}`}>
           <Button variant="secondary">
@@ -543,48 +542,17 @@ export default async function FilingDetailPage({
       </div>
 
       {/* §4.2 — the page's primary job. If the bookkeeper reads only one thing here, this is it. */}
-      <Card className="mb-3 border-line bg-background">
-        <CardBody className="py-3">
-          {nextStep ? (
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm font-medium text-ink">
-                Next: Step {nextStep.sequence} of {allSteps.length} — {nextStep.title}
-                {nextStep.stepCode === "FILE_RETURN" && filingOrderReason && (
-                  <span className="ml-2 font-normal text-faint">
-                    {filingOrderReason}
-                    {earlierUnfiledFilingId && (
-                      <>
-                        {" "}
-                        <Link
-                          href={`/clients/${filing.clientId}/filings/${earlierUnfiledFilingId}`}
-                          className="underline"
-                        >
-                          Open {earlierUnfiledPeriod === "ANNUAL" ? "Annual" : earlierUnfiledPeriod}
-                        </Link>
-                      </>
-                    )}
-                  </span>
-                )}
-              </p>
-              <NextActionControl
-                stepId={nextStep.id}
-                stepCode={nextStep.stepCode}
-                status={nextStep.status}
-                requiredDocSlots={nextStep.requiredDocSlots}
-                documents={nextStep.documents}
-                dependencyBlockedReason={DEPENDENCY_REASON_BY_STEP_CODE[nextStep.stepCode] ?? null}
-                mode={nextActionModeForStepCode(nextStep.stepCode)}
-              />
-            </div>
-          ) : birWaitText ? (
-            <p className="text-sm font-medium text-ink">Next: {birWaitText}</p>
-          ) : (
-            <p className="text-sm font-medium text-green">
-              All 16 steps resolved — nothing left to do on this filing.
-            </p>
-          )}
-        </CardBody>
-      </Card>
+      <FilingNextBox
+        next={nextStep ? { sequence: nextStep.sequence, title: nextStep.title, stepCode: nextStep.stepCode } : null}
+        stepCount={allSteps.length}
+        birWaitText={birWaitText}
+        filingOrderReason={filingOrderReason}
+        earlierUnfiled={
+          earlierUnfiledFilingId
+            ? { href: `/clients/${filing.clientId}/filings/${earlierUnfiledFilingId}`, label: earlierUnfiledPeriod === "ANNUAL" ? "Annual" : String(earlierUnfiledPeriod) }
+            : null
+        }
+      />
 
       {/* §4.2 — compact summary strip: one row, no explanatory prose. */}
       <FilingSummaryStrip

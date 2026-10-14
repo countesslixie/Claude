@@ -191,55 +191,7 @@ export const NO_START_NO_SKIP_STEP_CODES: readonly string[] = [
   "SEND_CLIENT_PACKAGE",
 ];
 
-/**
- * D77 (brief #5m §4, her decision) — components/next-action-control.tsx
- * must never offer a control the step's own card doesn't have. Three
- * shapes, covering all sixteen steps:
- *   - "goToStep": the step completes from its own content (self-completing
- *     — 1, 2, 6, 7, 9, 10, 14) or needs fields filled in first (8, Make
- *     payment) — none of these have a bare "Mark done" a banner click
- *     could meaningfully trigger, so the banner offers a single "Go to
- *     step" link instead, which expands the right group and scrolls to
- *     the card.
- *   - "markDoneOnly": the step's only control, full stop, is Mark done
- *     (3, 4, 5, 12, 15, 16 — controlsMode="markDoneOnly" on their WorkflowStepCard).
- *     The banner may keep a Mark done button, gated by the same
- *     server-side checks the card's own button uses.
- *   - "full" (the default, every other step: 11 and 13 are self-completing, so this is now empty in practice): the step's
- *     own card genuinely offers both Start and Mark done (plus Skip/doc
- *     upload, which the banner never offered anyway) — the banner's
- *     existing Start+Mark done pair is a real subset of the card's own
- *     controls, so no change is needed there.
- */
-export type NextActionMode = "goToStep" | "markDoneOnly" | "full";
-
-const NEXT_ACTION_GO_TO_STEP: readonly string[] = [
-  "RECORD_SALES",
-  "RECEIVE_2307",
-  "SAVE_SUBMISSION_SS",
-  "SAVE_FORM_COPY",
-  "MAKE_PAYMENT",
-  "SAVE_PROOF_PAYMENT",
-  "RECEIVE_TRRC",
-  "SAWT_VALIDATION",
-  "ALPHALIST_ENTRY",
-  "SAWT_ACK",
-];
-
-const NEXT_ACTION_MARK_DONE_ONLY: readonly string[] = [
-  "PREPARE_RETURN",
-  "ADVISE_CLIENT",
-  "FILE_RETURN",
-  "EMAIL_DAT",
-  "EAFS_SUBMIT",
-  "SEND_CLIENT_PACKAGE",
-];
-
-export function nextActionModeForStepCode(stepCode: string): NextActionMode {
-  if (NEXT_ACTION_GO_TO_STEP.includes(stepCode)) return "goToStep";
-  if (NEXT_ACTION_MARK_DONE_ONLY.includes(stepCode)) return "markDoneOnly";
-  return "full";
-}
+// D204 (brief #6v) — the filing page's Next box no longer carries step buttons, so D77's per-step "mode" (goToStep / markDoneOnly / full) is gone; each step's own card keeps its own controls.
 
 /**
  * Brief #5i §3 — the fixed step-code -> global step number (1-16) lookup,
